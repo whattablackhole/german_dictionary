@@ -1,0 +1,21 @@
+<header class="app-header">
+  <span class="app-title">German Dictionary</span>
+  <nav class="app-nav">
+    <a
+      routerLink="/review"
+      routerLinkActive="active"
+      [routerLinkActiveOptions]="{ exact: true }"
+    >
+      Review
+    </a>
+    <a routerLink="/game" routerLinkActive="active">Gender Game</a>
+    <a routerLink="/exercise" routerLinkActive="active">Translation Exercise</a>
+    <a routerLink="/practice-word" routerLinkActive="active">Word Practice</a>
+    <a routerLink="/manage" routerLinkActive="active">Manage Word Collection</a>
+    <a routerLink="/settings" routerLinkActive="active">Settings</a>
+  </nav>
+</header>
+
+<main class="app-main">
+  <router-outlet />
+</main>

@@ -1,0 +1,461 @@
+import { Injectable } from '@angular/core';
+import { environment } from '../../environments/environment';
+import { Gender, DifficultyLevel, PartOfSpeech } from '../models/word';
+
+export interface AiSuggestion {
+  translationEn: string;
+  translationRu: string;
+  partOfSpeech: PartOfSpeech;
+  gender: Gender | null;
+  level: DifficultyLevel;
+}
+
+export interface TranslationError {
+  errorId: number;
+  startIndex: number;
+  endIndex: number;
+  explanation: string;
+}
+
+export interface TranslationResult {
+  correct: boolean;
+  score: number;
+  errors: TranslationError[];
+  feedback: string;
+}
+
+export interface GeneratedSentence {
+  german: string;
+  translationEn: string;
+  translationRu: string;
+  level: DifficultyLevel;
+  domain: string;
+}
+
+export interface GeneratedWordExercise {
+  fullSentence: string;
+  targetWord: string;
+  wordHint: string;
+  /** Character ranges in fullSentence that should be blanked (e.g., [{start:4, end:8}]) */
+  blankRanges: { start: number; end: number }[];
+  /** Whether the blanked part is preceded by an article (der/die/das) */
+  hasArticle: boolean;
+  level: DifficultyLevel;
+  domain: string;
+  grammarTopics: string[];
+}
+
+const API_KEY_STORAGE = 'german-dictionary-openrouter-key';
+
+@Injectable({ providedIn: 'root' })
+export class AiService {
+  getApiKey(): string {
+    return localStorage.getItem(API_KEY_STORAGE) || environment.openRouterApiKey;
+  }
+
+  hasApiKey(): boolean {
+    return this.getApiKey().trim().length > 0;
+  }
+
+  setApiKey(key: string): void {
+    localStorage.setItem(API_KEY_STORAGE, key.trim());
+  }
+
+  async analyzeWord(german: string): Promise<AiSuggestion> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error(
+        'No API key set. Add your OpenRouter API key in the AI Assistant field above.'
+      );
+    }
+
+    const prompt = `You are a German language expert. Given a German word or phrase, respond with JSON only (no markdown) using exactly these fields:
+- "translationEn": the English translation
+- "translationRu": the Russian translation
+- "partOfSpeech": the part of speech, exactly one of "noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection", "numeral" or "phrase"
+- "gender": the grammatical gender, exactly one of "der", "die" or "das", OR null if the word is NOT a noun
+- "level": the CEFR difficulty level of the word, exactly one of "A1", "A2", "B1", "B2" or "C1"
+
+Rules:
+- For nouns: gender is required. If the noun is plural-only, gender is "die". For compound nouns, use the gender of the last component.
+- For any non-noun (verb, adjective, adverb, etc.): gender MUST be null.
+- For verb infinitives (e.g. "gehen", "essen"), partOfSpeech is "verb".
+- For adjectives (e.g. "schnell", "schön"), partOfSpeech is "adjective".
+- Capitalize translations properly (nouns in English are lowercase, but proper names are capitalized).
+- Common everyday words are typically A1-A2, less common words are B1-B2, specialized/formal words are C1.
+- If the input is not a recognizable German word, still provide your best guess for all fields.
+
+Word: "${german}"`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error(
+          'API key rejected. Check your OpenRouter key at openrouter.ai/keys.'
+        );
+      }
+      if (response.status === 402) {
+        throw new Error(
+          'OpenRouter account has insufficient credits. Add credits at openrouter.ai.'
+        );
+      }
+      if (response.status === 429) {
+        throw new Error('Rate limit reached. Try again in a moment.');
+      }
+      throw new Error(`AI request failed (HTTP ${response.status})`);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: {
+      translationEn?: string;
+      translationRu?: string;
+      partOfSpeech?: string;
+      gender?: string | null;
+      level?: string;
+    };
+    try {
+      parsed = JSON.parse(jsonText) as {
+        translationEn?: string;
+        translationRu?: string;
+        partOfSpeech?: string;
+        gender?: string | null;
+        level?: string;
+      };
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const translationEn = parsed.translationEn?.trim() ?? '';
+    const translationRu = parsed.translationRu?.trim() ?? '';
+    const rawPart = (parsed.partOfSpeech ?? '').trim().toLowerCase() as PartOfSpeech;
+    const genderRaw = parsed.gender ? String(parsed.gender).trim() : '';
+    const level = (parsed.level ?? '').trim().toUpperCase() as DifficultyLevel;
+
+    if (!translationEn || !translationRu) {
+      throw new Error('AI could not classify this word. Try another word.');
+    }
+
+    const validParts: PartOfSpeech[] = [
+      'noun', 'verb', 'adjective', 'adverb', 'pronoun',
+      'preposition', 'conjunction', 'interjection', 'numeral', 'phrase',
+    ];
+    const partOfSpeech = validParts.includes(rawPart) ? rawPart : 'noun';
+
+    const validGender = ['der', 'die', 'das'];
+    const isNoun = partOfSpeech === 'noun';
+    const gender: Gender | null =
+      isNoun && validGender.includes(genderRaw)
+        ? (genderRaw as Gender)
+        : null;
+
+    const validLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
+    const finalLevel = validLevels.includes(level) ? level : 'A1';
+
+    return { translationEn, translationRu, partOfSpeech, gender, level: finalLevel };
+  }
+
+  async generateSentences(
+    level: DifficultyLevel,
+    knownWords: string[],
+    count: number,
+    domain?: string,
+    grammarTopics?: string[]
+  ): Promise<GeneratedSentence[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const wordsList = knownWords.length > 0 ? knownWords.join(', ') : 'common German words';
+    const domainInstruction = domain
+      ? `All sentences must be about the theme: "${domain}".`
+      : 'Vary the domains across sentences.';
+    const grammarInstruction =
+      grammarTopics && grammarTopics.length > 0
+        ? `Each sentence must demonstrate at least one of these grammar topics: ${grammarTopics.join(', ')}.`
+        : '';
+
+    const prompt = `You are a German language teacher. Generate ${count} German sentences at CEFR level ${level}.
+Respond with JSON only (no markdown) as an array of objects with exactly these fields:
+- "german": the German sentence
+- "translationEn": the English translation
+- "translationRu": the Russian translation
+- "level": "${level}"
+- "domain": the topic domain (e.g. "Family", "Travel", "Food", "Work", "Nature", "Education", "Technology")
+- "grammarTopics": array of strings listing which grammar topics this sentence demonstrates
+
+Rules:
+- Prioritize using words from this list: ${wordsList}
+- Each sentence should include as many of these words as possible.
+- Only use words NOT in the list if absolutely necessary for the sentence to make sense.
+- Sentences should be realistic and natural for ${level} level.
+- Keep sentences concise (5-15 words).
+- ${domainInstruction}
+- ${grammarInstruction}
+
+Generate exactly ${count} sentences.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: GeneratedSentence[] | { sentences: GeneratedSentence[] };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const sentences = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { sentences: GeneratedSentence[] }).sentences ?? [];
+
+    if (!Array.isArray(sentences) || sentences.length === 0) {
+      throw new Error('AI could not generate sentences. Try again.');
+    }
+
+    return sentences.map((s) => ({
+      ...s,
+      level: level,
+    }));
+  }
+
+  async generateWordExercises(
+    level: DifficultyLevel,
+    targetWords: { german: string; translationEn: string; translationRu: string }[],
+    count: number,
+    domain?: string,
+    grammarTopics?: string[],
+    avoidSentences?: string[]
+  ): Promise<GeneratedWordExercise[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const wordsJson = JSON.stringify(targetWords);
+    const domainInstruction = domain
+      ? `All sentences must be about the theme: "${domain}".`
+      : 'Vary the domains across sentences.';
+    const grammarInstruction =
+      grammarTopics && grammarTopics.length > 0
+        ? `Each sentence must demonstrate at least one of these grammar topics: ${grammarTopics.join(', ')}.`
+        : '';
+    const avoidInstruction = avoidSentences && avoidSentences.length > 0
+      ? `\n- Do NOT generate any of these exact sentences: ${avoidSentences.join('; ')}. Create different sentences using the same words.`
+      : '';
+
+    const prompt = `You are a German language teacher. Generate ${count} German cloze (fill-in-the-blank) exercises at CEFR level ${level}.
+Respond with JSON only (no markdown) as an array of objects with exactly these fields:
+- "fullSentence": the complete German sentence without blanks
+- "targetWord": the German word(s) the student must type (WITHOUT the article for nouns, e.g. "Hund"; for separable verbs the full verb form, e.g. "abholen")
+- "wordHint": the English translation of the target word (for the student to know what word to fill in)
+- "blankRanges": array of { "start": number, "end": number } character index ranges (inclusive start, exclusive end) in fullSentence that must be blanked out. For a noun: blank ONLY the noun, NOT the article. For a separable verb like "abholen" in "Ich hole dich ab": two ranges needed — one for "hole" and one for "ab". The indices are character positions in the fullSentence string.
+- "hasArticle": boolean — true ONLY if there is a German article (der/die/das, or declined form like dem/den/ein/eine) immediately before the blanked noun in the sentence
+- "level": "${level}"
+- "domain": the topic domain (e.g. "Family", "Travel", "Food", "Work", "Nature", "Education", "Technology")
+- "grammarTopics": array of strings listing which grammar topics this sentence demonstrates
+
+Rules:
+- Each exercise must target exactly one word from this list: ${wordsJson}
+- For nouns: blankRanges covers ONLY the noun, never the article. hasArticle is true if an article precedes it.
+- For separable verbs: blankRanges covers BOTH parts (the conjugated part and the separable prefix). hasArticle is always false.
+- For other verbs/adjectives/adverbs: blankRanges covers the single word. hasArticle is always false.
+- Important: two blankRanges does NOT automatically mean gender+noun. hasArticle explicitly tells us whether an article is present before the noun.
+- The wordHint must be the English translation of the target word.
+- Sentences should be realistic and natural for ${level} level.
+- Keep sentences concise (5-15 words).
+- Vary the sentence structures and topics — do not repeat the same sentence pattern.
+- ${domainInstruction}
+- ${grammarInstruction}
+- Do NOT add any hints about gender or word endings.
+- ${avoidInstruction}
+
+Generate exactly ${count} exercises.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: GeneratedWordExercise[] | { exercises: GeneratedWordExercise[] };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const exercises = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { exercises: GeneratedWordExercise[] }).exercises ?? [];
+
+    if (!Array.isArray(exercises) || exercises.length === 0) {
+      throw new Error('AI could not generate exercises. Try again.');
+    }
+
+    return exercises.map((e) => ({
+      ...e,
+      level: level,
+      grammarTopics: e.grammarTopics ?? [],
+    }));
+  }
+
+  async verifyTranslation(
+    userInput: string,
+    correctGerman: string
+  ): Promise<TranslationResult> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const prompt = `You are a German language teacher. Compare the student's translation with the correct German sentence.
+Respond with JSON only (no markdown) using exactly these fields:
+- "correct": boolean (true if the translation is essentially correct)
+- "score": number (0-100, how accurate the translation is)
+- "errors": array of error objects, each with:
+  - "errorId": number (sequential starting from 1)
+  - "startIndex": number (character index in the student's input where the error starts)
+  - "endIndex": number (character index in the student's input where the error ends)
+  - "explanation": string (explanation of the error in English)
+- "feedback": string (overall encouraging feedback in English)
+
+Rules:
+- Minor spelling mistakes that don't change meaning should reduce score but not count as errors.
+- Wrong articles, wrong verb conjugations, wrong word order are errors.
+- Missing words are errors (point to the position where the word should be).
+- If the student's input is empty or completely wrong, set correct to false and score to 0.
+
+Correct sentence: "${correctGerman}"
+Student's translation: "${userInput}"`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: {
+      correct?: boolean;
+      score?: number;
+      errors?: TranslationError[];
+      feedback?: string;
+    };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    return {
+      correct: parsed.correct ?? false,
+      score: parsed.score ?? 0,
+      errors: parsed.errors ?? [],
+      feedback: parsed.feedback ?? '',
+    };
+  }
+
+  private handleError(response: Response): never {
+    if (response.status === 401) {
+      throw new Error(
+        'API key rejected. Check your OpenRouter key at openrouter.ai/keys.'
+      );
+    }
+    if (response.status === 402) {
+      throw new Error(
+        'OpenRouter account has insufficient credits. Add credits at openrouter.ai.'
+      );
+    }
+    if (response.status === 429) {
+      throw new Error('Rate limit reached. Try again in a moment.');
+    }
+    throw new Error(`AI request failed (HTTP ${response.status})`);
+  }
+}

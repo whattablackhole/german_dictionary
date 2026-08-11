@@ -1,0 +1,250 @@
+<div class="manage-container">
+  <h1 class="page-title">Manage Words</h1>
+  <p class="page-subtitle">Add, edit, and delete German words</p>
+
+  <div class="form-card ai-card">
+    <h2 class="form-title">AI Assistant</h2>
+  <p class="ai-description">
+      Let DeepSeek (via OpenRouter) translate, classify the part of speech, and
+      detect the gender of nouns for you. Get an API key at
+      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">
+        openrouter.ai/keys
+      </a>.
+    </p>
+    <div class="ai-key-row">
+      <mat-form-field appearance="outline" class="ai-key-field">
+        <mat-label>OpenRouter API key</mat-label>
+        <input
+          matInput
+          type="password"
+          [(ngModel)]="apiKeyInput"
+          placeholder="sk-or-v1-..."
+        />
+      </mat-form-field>
+      <button mat-stroked-button (click)="saveApiKey()">Save key</button>
+      @if (apiKeySaved()) {
+        <span class="ai-key-saved">
+          <mat-icon>check_circle</mat-icon>
+          Key saved
+        </span>
+      }
+    </div>
+  </div>
+
+  <div class="form-card">
+    <h2 class="form-title">
+      {{ editingId() ? 'Edit Word' : 'Add New Word' }}
+    </h2>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="form-field">
+        <mat-label>German word</mat-label>
+        <input
+          matInput
+          [(ngModel)]="germanInput"
+          placeholder="e.g. Hund"
+          (keydown.enter)="save()"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="form-field">
+        <mat-label>Type</mat-label>
+        <mat-select [(ngModel)]="partOfSpeechInput">
+          @for (pos of partsOfSpeech; track pos.key) {
+            <mat-option [value]="pos.key">{{ pos.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      @if (isNoun()) {
+        <mat-form-field appearance="outline" class="form-field gender-field">
+          <mat-label>Article</mat-label>
+          <mat-select [(ngModel)]="genderInput">
+            @for (gender of genders; track gender) {
+              <mat-option [value]="gender">{{ gender }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
+
+      <mat-form-field appearance="outline" class="form-field">
+        <mat-label>English translation</mat-label>
+        <input
+          matInput
+          [(ngModel)]="translationEnInput"
+          placeholder="e.g. dog"
+          (keydown.enter)="save()"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="form-field">
+        <mat-label>Russian translation</mat-label>
+        <input
+          matInput
+          [(ngModel)]="translationRuInput"
+          placeholder="e.g. собака"
+          (keydown.enter)="save()"
+        />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="form-field level-field">
+        <mat-label>Level</mat-label>
+        <mat-select [(ngModel)]="levelInput">
+          @for (level of levels; track level) {
+            <mat-option [value]="level">{{ level }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <div class="form-actions form-actions-between">
+      <div class="ai-suggest">
+        <button
+          mat-stroked-button
+          color="primary"
+          (click)="suggestWithAi()"
+          [disabled]="aiLoading() || !germanInput().trim() || editingId() !== null"
+        >
+          @if (aiLoading()) {
+            <mat-spinner diameter="18" />
+            Analyzing...
+          } @else {
+            <ng-container>
+              <mat-icon>auto_awesome</mat-icon>
+              AI Suggest
+            </ng-container>
+          }
+        </button>
+      </div>
+
+      <div class="form-actions">
+        @if (editingId()) {
+          <button mat-stroked-button (click)="cancelEdit()">Cancel</button>
+        }
+        <button
+          mat-flat-button
+          color="primary"
+          (click)="save()"
+          [disabled]="
+            !germanInput().trim() ||
+            !translationEnInput().trim() ||
+            !translationRuInput().trim()
+          "
+        >
+          {{ editingId() ? 'Save Changes' : 'Add Word' }}
+        </button>
+      </div>
+    </div>
+
+    @if (aiLoading()) {
+      <div class="ai-status-row">
+        <mat-spinner diameter="18" />
+        <span>Asking AI for translation and gender...</span>
+      </div>
+    }
+
+    @if (aiError()) {
+      <div class="ai-error">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ aiError() }}</span>
+      </div>
+    }
+
+    @if (suggestion(); as s) {
+      <div class="ai-suggestion-card">
+        <div class="ai-suggestion-header">
+          <mat-icon>auto_awesome</mat-icon>
+          <span>AI suggestion for <strong>{{ germanInput() }}</strong></span>
+        </div>
+        <div class="ai-suggestion-body">
+          <div class="ai-suggestion-item">
+            <span class="ai-suggestion-label">English</span>
+            <span class="ai-suggestion-translation">{{ s.translationEn }}</span>
+          </div>
+          <div class="ai-suggestion-item">
+            <span class="ai-suggestion-label">Russian</span>
+            <span class="ai-suggestion-translation">{{ s.translationRu }}</span>
+          </div>
+          <div class="ai-suggestion-item">
+            <span class="ai-suggestion-label">Type</span>
+            <span class="ai-suggestion-level">{{ getPosLabel(s.partOfSpeech) }}</span>
+          </div>
+          @if (s.gender) {
+            <div class="ai-suggestion-item">
+              <span class="ai-suggestion-label">Article</span>
+              <span
+                class="ai-suggestion-gender"
+                [class.der]="s.gender === 'der'"
+                [class.die]="s.gender === 'die'"
+                [class.das]="s.gender === 'das'"
+              >
+                {{ s.gender }}
+              </span>
+            </div>
+          }
+          <div class="ai-suggestion-item">
+            <span class="ai-suggestion-label">Level</span>
+            <span class="ai-suggestion-level">{{ s.level }}</span>
+          </div>
+        </div>
+        <div class="ai-suggestion-actions">
+          <button mat-flat-button color="primary" (click)="acceptSuggestion()">
+            Use this suggestion
+          </button>
+          <button mat-stroked-button (click)="clearSuggestion()">Dismiss</button>
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="word-list-card">
+    <h2 class="form-title">Word List ({{ words().length }})</h2>
+
+    @if (words().length === 0) {
+      <p class="empty-state">No words yet. Add your first word above!</p>
+    } @else {
+      <div class="word-table">
+        <div class="word-table-header">
+          <span>Type</span>
+          <span>Article</span>
+          <span>German</span>
+          <span>Translation</span>
+          <span>Level</span>
+          <span>Added</span>
+          <span class="actions-header">Actions</span>
+        </div>
+
+        @for (word of words(); track word.id) {
+          <div class="word-table-row" [class.editing]="isEditing(word.id)">
+            <span class="pos-cell">{{ getPosLabel(word.partOfSpeech) }}</span>
+            <span class="article-cell" [class.der]="word.gender === 'der'" [class.die]="word.gender === 'die'" [class.das]="word.gender === 'das'">
+              {{ word.gender ?? '—' }}
+            </span>
+            <span class="german-cell" [class.der]="word.gender === 'der'" [class.die]="word.gender === 'die'" [class.das]="word.gender === 'das'">{{ word.german }}</span>
+            <span class="translation-cell">{{ getTranslation(word) }}</span>
+            <span class="level-cell">{{ word.level }}</span>
+            <span class="date-cell">{{ formatDate(word.createdAt) }}</span>
+            <span class="actions-cell">
+              <button
+                mat-icon-button
+                color="primary"
+                aria-label="Edit word"
+                (click)="startEdit(word)"
+              >
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                color="warn"
+                aria-label="Delete word"
+                (click)="deleteWord(word.id)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

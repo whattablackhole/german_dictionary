@@ -1,0 +1,112 @@
+<div class="game-container">
+  <h1 class="page-title">Gender Game</h1>
+  <p class="page-subtitle">Choose the correct article for each word</p>
+
+  @if (!gameStarted()) {
+    <div class="start-screen">
+      <div class="filter-bar">
+        <mat-form-field appearance="outline" class="date-field">
+          <mat-label>From date</mat-label>
+          <input
+            matInput
+            [matDatepicker]="fromPicker"
+            [value]="fromDate()"
+            (dateChange)="fromDate.set($event.value)"
+          />
+          <mat-datepicker-toggle matIconSuffix [for]="fromPicker" />
+          <mat-datepicker #fromPicker />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="date-field">
+          <mat-label>To date</mat-label>
+          <input
+            matInput
+            [matDatepicker]="toPicker"
+            [value]="toDate()"
+            (dateChange)="toDate.set($event.value)"
+          />
+          <mat-datepicker-toggle matIconSuffix [for]="toPicker" />
+          <mat-datepicker #toPicker />
+        </mat-form-field>
+
+        @if (filterActive()) {
+          <button mat-stroked-button (click)="clearFilter()">Clear</button>
+        }
+      </div>
+
+      <p class="start-info">
+        {{ availableWords() }} words ready to play
+      </p>
+      <button class="start-button" (click)="startGame()">Start Game</button>
+    </div>
+  } @else if (gameFinished()) {
+    <div class="results-screen">
+      <h2 class="results-title">Game Over!</h2>
+      <div class="score-display">
+        <span class="score-number">{{ score() }}</span>
+        <span class="score-total">/ {{ totalWords() }}</span>
+      </div>
+      <p class="score-label">
+        {{ score() === totalWords() ? 'Perfect! 🎉' : 'correct answers' }}
+      </p>
+      <button class="start-button" (click)="restart()">Play Again</button>
+    </div>
+  } @else {
+    <div class="game-screen">
+      <div class="progress">
+        <span>Word {{ currentNumber() }} of {{ totalWords() }}</span>
+        <span>Score: {{ score() }}</span>
+      </div>
+
+      <div class="word-card">
+        <span class="word-german">{{ currentWord()?.german }}</span>
+        <span class="word-translation">
+          {{ currentWord() ? getTranslation(currentWord()!) : '' }}
+        </span>
+        <button
+          class="speak-button"
+          aria-label="Pronounce word"
+          (click)="speakCurrentWord()"
+        >
+          <mat-icon>volume_up</mat-icon>
+        </button>
+      </div>
+
+      <div class="gender-buttons">
+        @for (gender of genders; track gender.key) {
+          <button
+            class="gender-button"
+            [style.--gender-color]="gender.color"
+            [class.selected]="selectedGender() === gender.key"
+            [class.correct]="selectedGender() !== null && gender.key === currentWord()?.gender"
+            [class.wrong]="selectedGender() === gender.key && gender.key !== currentWord()?.gender"
+            [disabled]="selectedGender() !== null"
+            (click)="selectGender(gender.key)"
+          >
+            {{ gender.key }}
+          </button>
+        }
+      </div>
+
+      @if (selectedGender() !== null) {
+        <div
+          class="feedback"
+          [class.feedback-correct]="selectedGender() === currentWord()?.gender"
+          [class.feedback-wrong]="selectedGender() !== currentWord()?.gender"
+        >
+          @if (selectedGender() === currentWord()?.gender) {
+            <span>Correct! ✓</span>
+          } @else {
+            <span>
+              Wrong! The correct article is
+              <strong>{{ currentWord()?.gender }}</strong>
+            </span>
+          }
+          <button class="next-button" (click)="nextWord()">
+            {{ currentNumber() >= totalWords() ? 'See Results' : 'Next Word' }}
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

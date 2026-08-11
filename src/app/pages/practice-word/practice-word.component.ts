@@ -1,0 +1,504 @@
+import { Component, computed, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { CommonModule } from '@angular/common';
+import { WordService } from '../../services/word.service';
+import { SettingsService } from '../../services/settings.service';
+import { DomainService } from '../../services/domain.service';
+import { GrammarTopicService } from '../../services/grammar-topic.service';
+import { PartOfSpeechService, PartOfSpeechInfo } from '../../services/part-of-speech.service';
+import { WordExerciseService } from '../../services/word-exercise.service';
+import { SpeechService } from '../../services/speech.service';
+import { AiService, GeneratedWordExercise } from '../../services/ai.service';
+import { TranslationService } from '../../services/translation.service';
+import { DifficultyLevel, PartOfSpeech, Word } from '../../models/word';
+import { WordExercise, BlankRange } from '../../models/word-exercise';
+
+interface PracticeSession {
+  exercise: WordExercise;
+  userInput: string;
+  correct: boolean | null;
+}
+
+@Component({
+  selector: 'app-practice-word',
+  imports: [
+    FormsModule,
+    MatIconModule,
+    MatButtonModule,
+    MatChipsModule,
+    MatProgressSpinnerModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatAutocompleteModule,
+    CommonModule,
+  ],
+  templateUrl: './practice-word.component.html',
+  styleUrl: './practice-word.component.scss',
+})
+export class PracticeWordComponent {
+  readonly allLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
+
+  readonly selectedLevels = signal<DifficultyLevel[]>([]);
+  readonly currentIndex = signal(0);
+  readonly session = signal<PracticeSession[]>([]);
+  readonly userInput = signal('');
+  readonly loading = signal(false);
+  readonly generating = signal(false);
+  readonly result = signal<boolean | null>(null);
+  readonly translation = signal<string | null>(null);
+  readonly translationLoading = signal(false);
+  readonly masteryFeedback = signal<number | null>(null);
+  readonly practiceStarted = signal(false);
+  readonly practiceFinished = signal(false);
+  readonly reviewMastered = signal(false);
+
+  // Domain selection
+  readonly domainInput = signal('');
+  readonly selectedDomain = signal<string | null>(null);
+
+  readonly filteredDomains = computed(() => {
+    const query = this.domainInput();
+    if (!query.trim()) {
+      return this.domainService.getAllDomains();
+    }
+    return this.domainService.searchDomains(query);
+  });
+
+  // Parts of speech
+  readonly allPartsOfSpeech: PartOfSpeechInfo[];
+  readonly selectedPartsOfSpeech = signal<PartOfSpeech[]>([]);
+
+  // Grammar topics
+  readonly selectedGrammarTopics = signal<string[]>([]);
+  readonly grammarSearchInput = signal('');
+
+  readonly filteredGrammarTopics = computed(() => {
+    const query = this.grammarSearchInput();
+    if (!query.trim()) {
+      return this.grammarTopicService.getAllTopics();
+    }
+    return this.grammarTopicService.searchTopics(query);
+  });
+
+  readonly currentExercise = computed(() => {
+    const s = this.session();
+    const i = this.currentIndex();
+    return i < s.length ? s[i] : null;
+  });
+
+  readonly currentNumber = computed(() => this.currentIndex() + 1);
+  readonly totalExercises = computed(() => this.session().length);
+  readonly correctCount = computed(
+    () => this.session().filter((s) => s.correct === true).length
+  );
+
+  readonly availableInProgress = computed(() => {
+    const words = this.wordService.getWords();
+    return this.wordExerciseService.getInProgressExercises(
+      this.selectedLevels().length > 0 ? this.selectedLevels() : this.allLevels,
+      this.selectedDomain() ?? undefined,
+      words
+    );
+  });
+
+  readonly availableNew = computed(() =>
+    this.wordExerciseService.getNewExercises(
+      this.selectedLevels().length > 0 ? this.selectedLevels() : this.allLevels,
+      this.selectedDomain() ?? undefined
+    )
+  );
+
+  readonly masteredWordCount = computed(() => {
+    const words = this.wordService.getWords();
+    const mastered = this.wordExerciseService.getMasteredExercises(
+      this.selectedLevels().length > 0 ? this.selectedLevels() : this.allLevels,
+      this.selectedDomain() ?? undefined,
+      words
+    );
+    // Count unique words, not individual sentences
+    return new Set(mastered.map((e) => e.wordId)).size;
+  });
+
+  readonly masteredWordList = computed(() => {
+    const words = this.wordService.getWords();
+    const mastered = this.wordExerciseService.getMasteredExercises(
+      this.selectedLevels().length > 0 ? this.selectedLevels() : this.allLevels,
+      this.selectedDomain() ?? undefined,
+      words
+    );
+    const wordIds = new Set(mastered.map((e) => e.wordId));
+    return words.filter((w) => wordIds.has(w.id));
+  });
+
+  constructor(
+    private readonly wordService: WordService,
+    private readonly settingsService: SettingsService,
+    private readonly domainService: DomainService,
+    private readonly grammarTopicService: GrammarTopicService,
+    private readonly posService: PartOfSpeechService,
+    private readonly wordExerciseService: WordExerciseService,
+    private readonly speechService: SpeechService,
+    private readonly aiService: AiService,
+    private readonly translationService: TranslationService
+  ) {
+    this.allPartsOfSpeech = this.posService.getAll();
+  }
+
+  toggleLevel(level: DifficultyLevel): void {
+    this.selectedLevels.update((levels) =>
+      levels.includes(level)
+        ? levels.filter((l) => l !== level)
+        : [...levels, level]
+    );
+  }
+
+  selectDomain(domain: string): void {
+    this.selectedDomain.set(domain);
+    this.domainInput.set(domain);
+  }
+
+  clearDomain(): void {
+    this.selectedDomain.set(null);
+    this.domainInput.set('');
+  }
+
+  onDomainInputBlur(): void {
+    const input = this.domainInput().trim();
+    if (input && !this.selectedDomain()) {
+      this.domainService.addCustomDomain(input);
+      this.selectedDomain.set(input);
+    }
+  }
+
+  togglePartOfSpeech(pos: PartOfSpeech): void {
+    this.selectedPartsOfSpeech.update((parts) =>
+      parts.includes(pos)
+        ? parts.filter((p) => p !== pos)
+        : [...parts, pos]
+    );
+  }
+
+  toggleGrammarTopic(topic: string): void {
+    this.selectedGrammarTopics.update((topics) =>
+      topics.includes(topic)
+        ? topics.filter((t) => t !== topic)
+        : [...topics, topic]
+    );
+  }
+
+  clearGrammarTopics(): void {
+    this.selectedGrammarTopics.set([]);
+  }
+
+  getHint(exercise: WordExercise): string {
+    return this.settingsService.translationLanguage() === 'ru'
+      ? exercise.wordHint
+      : exercise.wordHint;
+  }
+
+  /**
+   * Returns the blank ranges to actually blank out, considering the article setting.
+   * - Show article ON: blank only the noun/verb ranges from AI (article stays visible)
+   * - Show article OFF: extend the first range back to include the preceding article
+   */
+  private getBlankRanges(exercise: WordExercise): BlankRange[] {
+    const ranges = exercise.blankRanges.map((r) => ({ ...r }));
+    if (!this.settingsService.showArticleInPractice() && exercise.hasArticle) {
+      const first = ranges[0];
+      const before = exercise.fullSentence.slice(0, first.start);
+      const match = before.match(
+        /\b(der|die|das|den|dem|ein|eine|einen|einem|einer)\s+$/i
+      );
+      if (match) {
+        ranges[0] = {
+          start: first.start - match[0].length,
+          end: first.end,
+        };
+      }
+    }
+    return ranges;
+  }
+
+  /** Build the sentence with blanks from fullSentence + blankRanges */
+  buildBlankSentence(exercise: WordExercise): string {
+    const ranges = this.getBlankRanges(exercise);
+    const sorted = [...ranges].sort((a, b) => b.start - a.start);
+    let result = exercise.fullSentence;
+    for (const range of sorted) {
+      result = result.slice(0, range.start) + '___' + result.slice(range.end);
+    }
+    return result;
+  }
+
+  /** Build the filled sentence with the user's answer / expected answer */
+  buildFilledSentence(exercise: WordExercise, answer: string): string {
+    const ranges = this.getBlankRanges(exercise);
+    const sorted = [...ranges].sort((a, b) => b.start - a.start);
+    let result = exercise.fullSentence;
+    for (const range of sorted) {
+      result = result.slice(0, range.start) + answer + result.slice(range.end);
+    }
+    // Capitalize first letter
+    return result.charAt(0).toUpperCase() + result.slice(1);
+  }
+
+  /** Build the expected answer (what the user must type, matching the visible blank) */
+  expectedAnswer(exercise: WordExercise): string {
+    const ranges = this.getBlankRanges(exercise);
+    const parts = ranges.map((r) => exercise.fullSentence.slice(r.start, r.end));
+    return parts.join(' ');
+  }
+
+  async startPractice(): Promise<void> {
+    const levels =
+      this.selectedLevels().length > 0
+        ? this.selectedLevels()
+        : this.allLevels;
+    const domain = this.selectedDomain() ?? undefined;
+
+    // 1. Collect in-progress exercises (sessionCount > 0, mastery < 100)
+    const words = this.wordService.getWords();
+    const inProgress = this.wordExerciseService.getInProgressExercises(levels, domain, words);
+    const shuffledInProgress = this.shuffleArray(inProgress).slice(0, 5);
+
+    // 2. Collect new exercises (sessionCount === 0), up to 5
+    const newExercises = this.wordExerciseService.getNewExercises(levels, domain);
+    const shuffledNew = this.shuffleArray(newExercises).slice(0, 5);
+
+    // 3. If we don't have enough exercises total, generate more
+    let exercises = [...shuffledInProgress, ...shuffledNew];
+
+    if (exercises.length < 3) {
+      await this.generateExercises(levels, domain);
+      // After generation, recheck
+      const freshNew = this.wordExerciseService.getNewExercises(levels, domain);
+      const freshShuffled = this.shuffleArray(freshNew).slice(0, 10 - exercises.length);
+      exercises = [...exercises, ...freshShuffled];
+    }
+
+    if (exercises.length === 0) {
+      return;
+    }
+
+    this.reviewMastered.set(false);
+    this.masteryFeedback.set(null);
+    this.session.set(
+      exercises.map((e) => ({ exercise: e, userInput: '', correct: null }))
+    );
+    this.currentIndex.set(0);
+    this.userInput.set('');
+    this.result.set(null);
+    this.practiceStarted.set(true);
+    this.practiceFinished.set(false);
+  }
+
+  async startReviewMastered(): Promise<void> {
+    const levels =
+      this.selectedLevels().length > 0
+        ? this.selectedLevels()
+        : this.allLevels;
+    const domain = this.selectedDomain() ?? undefined;
+    const words = this.wordService.getWords();
+
+    const mastered = this.wordExerciseService.getMasteredExercises(levels, domain, words);
+    if (mastered.length === 0) {
+      return;
+    }
+
+    this.reviewMastered.set(true);
+    this.masteryFeedback.set(null);
+    this.session.set(
+      mastered.map((e) => ({ exercise: e, userInput: '', correct: null }))
+    );
+    this.currentIndex.set(0);
+    this.userInput.set('');
+    this.result.set(null);
+    this.practiceStarted.set(true);
+    this.practiceFinished.set(false);
+  }
+
+  private shuffleArray<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
+  private async generateExercises(
+    levels: DifficultyLevel[],
+    domain?: string
+  ): Promise<void> {
+    this.generating.set(true);
+    try {
+      const words = this.wordService.getWords();
+      const { wordIdsToExclude, allSentences } =
+        this.wordExerciseService.getGenerationContext(words);
+
+      const selectedWords = this.wordService.selectWordsForPractice(
+        levels,
+        50,
+        this.selectedPartsOfSpeech()
+      );
+
+      // Filter out mastered words
+      const filteredWords = selectedWords.filter(
+        (w) => !wordIdsToExclude.has(w.id)
+      );
+
+      if (filteredWords.length === 0) {
+        console.warn('All words are mastered. Add new words first.');
+        return;
+      }
+
+      const targetWords = filteredWords.map((w: Word) => ({
+        german: w.german,
+        translationEn: w.translationEn,
+        translationRu: w.translationRu,
+      }));
+
+      // Collect ALL existing sentences for these words to avoid repeats
+      const avoidSentences: string[] = [];
+      for (const word of filteredWords) {
+        const existing = allSentences.get(word.id);
+        if (existing) {
+          avoidSentences.push(...existing);
+        }
+      }
+
+      const level = levels[0] ?? 'A1';
+      const generated: GeneratedWordExercise[] =
+        await this.aiService.generateWordExercises(
+          level,
+          targetWords,
+          10,
+          domain,
+          this.selectedGrammarTopics(),
+          avoidSentences.length > 0 ? avoidSentences : undefined
+        );
+
+      // Map AI output to WordExercise objects
+      const exercises = generated.map((g) => {
+        const matchedWord = filteredWords.find((w) =>
+          g.targetWord.toLowerCase() === w.german.toLowerCase()
+        );
+        return {
+          wordId: matchedWord?.id ?? '',
+          fullSentence: g.fullSentence,
+          targetWord: g.targetWord,
+          wordHint: g.wordHint,
+          blankRanges: g.blankRanges as BlankRange[],
+          hasArticle: g.hasArticle,
+          level: g.level,
+          domain: g.domain,
+          grammarTopics: g.grammarTopics,
+          sessionCount: 0,
+        };
+      });
+
+      this.wordExerciseService.addExercises(exercises);
+    } catch (err) {
+      console.error('Failed to generate exercises:', err);
+    } finally {
+      this.generating.set(false);
+    }
+  }
+
+  checkAnswer(): void {
+    const exercise = this.currentExercise();
+    if (!exercise || !this.userInput().trim()) {
+      return;
+    }
+
+    const userAnswer = this.userInput().trim().toLowerCase();
+    const correctAnswer = this.expectedAnswer(exercise.exercise).toLowerCase();
+
+    const correct = userAnswer === correctAnswer;
+    this.result.set(correct);
+
+    this.session.update((s) =>
+      s.map((item, i) =>
+        i === this.currentIndex() ? { ...item, correct } : item
+      )
+    );
+
+    // Record attempt
+    this.wordExerciseService.recordAttempt(exercise.exercise.id);
+
+    // Auto-play the full sentence
+    const fullSentence = this.buildFilledSentence(exercise.exercise, this.expectedAnswer(exercise.exercise));
+    this.speechService.speak(fullSentence);
+
+    // Translate the sentence via LibreTranslate (non-blocking)
+    this.translateSentence(fullSentence);
+  }
+
+  adjustMastery(delta: number): void {
+    const exercise = this.currentExercise();
+    if (!exercise) {
+      return;
+    }
+    const word = this.wordService
+      .getWords()
+      .find((w) => w.id === exercise.exercise.wordId);
+    if (word) {
+      const newMastery =
+        delta === 100 ? 100 : Math.max(0, Math.min(100, word.mastery + delta));
+      this.wordService.updateMastery(word.id, newMastery);
+    }
+    // Show visual feedback until user moves to next word
+    this.masteryFeedback.set(delta);
+  }
+
+  private async translateSentence(sentence: string): Promise<void> {
+    this.translationLoading.set(true);
+    try {
+      const result = await this.translationService.translateSentence(sentence);
+      this.translation.set(result);
+    } catch {
+      // LibreTranslate not running — silently ignore
+      this.translation.set(null);
+    } finally {
+      this.translationLoading.set(false);
+    }
+  }
+
+  speakWord(): void {
+    const exercise = this.currentExercise();
+    if (exercise) {
+      const fullSentence = this.buildFilledSentence(exercise.exercise, this.expectedAnswer(exercise.exercise));
+      this.speechService.speak(fullSentence);
+    }
+  }
+
+  nextExercise(): void {
+    // Clear mastery feedback for the current word
+    this.masteryFeedback.set(null);
+    if (this.currentIndex() + 1 >= this.session().length) {
+      this.practiceFinished.set(true);
+      return;
+    }
+    this.currentIndex.update((i) => i + 1);
+    this.userInput.set('');
+    this.result.set(null);
+    this.translation.set(null);
+  }
+
+  restart(): void {
+    this.practiceStarted.set(false);
+    this.practiceFinished.set(false);
+    this.reviewMastered.set(false);
+    this.session.set([]);
+    this.currentIndex.set(0);
+    this.userInput.set('');
+    this.result.set(null);
+  }
+}

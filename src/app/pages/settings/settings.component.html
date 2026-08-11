@@ -1,0 +1,27 @@
+<div class="settings-container">
+  <h1 class="page-title">Settings</h1>
+  <p class="page-subtitle">Customize your learning experience</p>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Translation Language</h2>
+    <mat-radio-group
+      [value]="settingsService.translationLanguage()"
+      (change)="setLanguage($event.value)"
+      class="language-options"
+    >
+      @for (lang of languages; track lang.key) {
+        <mat-radio-button [value]="lang.key">{{ lang.label }}</mat-radio-button>
+      }
+    </mat-radio-group>
+  </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Word Practice</h2>
+    <mat-slide-toggle
+      [checked]="settingsService.showArticleInPractice()"
+      (toggleChange)="toggleShowArticle(!settingsService.showArticleInPractice())"
+    >
+      Show article (der/die/das) in sentence — when off, the blank includes the article
+    </mat-slide-toggle>
+  </mat-card>
+</div>

@@ -1,0 +1,320 @@
+<div class="practice-container">
+  <h1 class="page-title">{{ reviewMastered() ? 'Review Mastered Words' : 'Word Practice' }}</h1>
+  <p class="page-subtitle">{{ reviewMastered() ? 'Reviewing words you already know' : 'Fill in the missing German word in each sentence' }}</p>
+
+  @if (!practiceStarted()) {
+    <div class="start-layout">
+      <div class="main-column">
+        <div class="settings-section">
+          <h2 class="section-title">Select Difficulty</h2>
+          <mat-chip-set class="level-chips" aria-label="Difficulty levels">
+            @for (level of allLevels; track level) {
+              <button
+                mat-chip
+                [class.selected]="selectedLevels().includes(level)"
+                (click)="toggleLevel(level)"
+              >
+                {{ level }}
+              </button>
+            }
+          </mat-chip-set>
+        </div>
+
+        <div class="settings-section">
+          <h2 class="section-title">Parts of Speech</h2>
+          <mat-chip-set class="level-chips" aria-label="Parts of speech">
+            @for (pos of allPartsOfSpeech; track pos.key) {
+              <button
+                mat-chip
+                [class.selected]="selectedPartsOfSpeech().includes(pos.key)"
+                (click)="togglePartOfSpeech(pos.key)"
+              >
+                {{ pos.label }}
+              </button>
+            }
+          </mat-chip-set>
+        </div>
+
+        <div class="settings-section">
+          <h2 class="section-title">Select Theme</h2>
+          <mat-form-field appearance="outline" class="domain-field">
+            <mat-label>Search or type a theme</mat-label>
+            <input
+              matInput
+              [matAutocomplete]="domainAuto"
+              [(ngModel)]="domainInput"
+              (blur)="onDomainInputBlur()"
+              placeholder="e.g. At the airport, At home..."
+            />
+            @if (selectedDomain()) {
+              <button matSuffix mat-icon-button aria-label="Clear" (click)="clearDomain()">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+          <mat-autocomplete
+            #domainAuto="matAutocomplete"
+            (optionSelected)="selectDomain($event.option.value)"
+          >
+            @for (domain of filteredDomains(); track domain) {
+              <mat-option [value]="domain">
+                <mat-icon>topic</mat-icon>
+                {{ domain }}
+              </mat-option>
+            }
+            @if (filteredDomains().length === 0 && domainInput().trim()) {
+              <mat-option [value]="domainInput().trim()">
+                <mat-icon>add_circle</mat-icon>
+                Add "{{ domainInput().trim() }}" as new theme
+              </mat-option>
+            }
+          </mat-autocomplete>
+        </div>
+
+        <div class="settings-section">
+          <h2 class="section-title">Grammar Topics</h2>
+          <p class="section-hint">Select grammar topics for the sentences</p>
+          <mat-form-field appearance="outline" class="domain-field">
+            <mat-label>Search grammar topics</mat-label>
+            <input
+              matInput
+              [(ngModel)]="grammarSearchInput"
+              placeholder="e.g. Dative case, Modal verbs..."
+            />
+            @if (selectedGrammarTopics().length > 0) {
+              <button matSuffix mat-icon-button aria-label="Clear all" (click)="clearGrammarTopics()">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+
+          @if (selectedGrammarTopics().length > 0) {
+            <div class="selected-topics">
+              @for (topic of selectedGrammarTopics(); track topic) {
+                <button class="topic-chip" (click)="toggleGrammarTopic(topic)">
+                  {{ topic }}
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+            </div>
+          }
+
+          <div class="topics-list">
+            @for (topic of filteredGrammarTopics(); track topic) {
+              <button
+                class="topic-option"
+                [class.selected]="selectedGrammarTopics().includes(topic)"
+                (click)="toggleGrammarTopic(topic)"
+              >
+                <mat-icon class="topic-check">
+                  {{ selectedGrammarTopics().includes(topic) ? 'check_box' : 'check_box_outline_blank' }}
+                </mat-icon>
+                <span class="topic-name">{{ topic }}</span>
+              </button>
+            }
+            @if (filteredGrammarTopics().length === 0 && grammarSearchInput().trim()) {
+              <div class="no-topics-found">
+                No grammar topics match "{{ grammarSearchInput() }}"
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h2 class="section-title">Session Preview</h2>
+          <p class="section-hint">
+            Regular practice: up to 5 in-progress words + up to 5 new words (total ~10).
+          </p>
+          <div class="mode-buttons">
+            <div class="preview-stat">
+              <mat-icon>replay</mat-icon>
+              <span>In progress: <strong>{{ availableInProgress().length }}</strong></span>
+            </div>
+            <div class="preview-stat">
+              <mat-icon>fiber_new</mat-icon>
+              <span>New: <strong>{{ availableNew().length }}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        @if (generating()) {
+          <div class="generating-indicator">
+            <mat-spinner diameter="24" />
+            <span>Generating word exercises with AI...</span>
+          </div>
+        }
+
+        <button
+          class="start-button"
+          (click)="startPractice()"
+          [disabled]="generating()"
+        >
+          Start Practice
+        </button>
+      </div>
+
+      @if (masteredWordCount() > 0) {
+        <div class="side-column">
+          <div class="mastered-card">
+            <h2 class="section-title">
+              <mat-icon>stars</mat-icon>
+              Mastered Words
+            </h2>
+            <p class="section-hint">
+              Words you already know ({{ masteredWordCount() }} word{{ masteredWordCount() === 1 ? '' : 's' }}).
+            </p>
+            <div class="mastered-word-list">
+              @for (word of masteredWordList(); track word.id) {
+                <div class="mastered-word-item">
+                  <span class="word-german">{{ word.german }}</span>
+                  <span class="word-translation">{{ word.translationEn }}</span>
+                </div>
+              }
+            </div>
+            <button
+              class="start-button secondary"
+              (click)="startReviewMastered()"
+              [disabled]="generating()"
+            >
+              Review Mastered
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  } @else if (practiceFinished()) {
+    <div class="results-screen">
+      <h2 class="results-title">Practice Complete!</h2>
+      <div class="score-display">
+        <span class="score-number">{{ correctCount() }}</span>
+        <span class="score-total">/ {{ totalExercises() }}</span>
+      </div>
+      <p class="score-label">
+        {{ correctCount() === totalExercises() ? 'Perfect! 🎉' : 'words answered correctly' }}
+      </p>
+      <button class="start-button" (click)="restart()">Back to Start</button>
+    </div>
+  } @else {
+    <div class="practice-screen">
+      <div class="progress">
+        <span>Word {{ currentNumber() }} of {{ totalExercises() }}</span>
+        <span>Correct: {{ correctCount() }}</span>
+      </div>
+
+      <div class="sentence-card">
+        <div class="sentence-label">Fill in the missing word:</div>
+        <div class="sentence-text">
+          @if (currentExercise(); as current) {
+            @if (result() !== null) {
+              {{ buildFilledSentence(current.exercise, userInput()) }}
+            } @else {
+              {{ buildBlankSentence(current.exercise) }}
+            }
+          }
+        </div>
+        <div class="sentence-hint">
+          <mat-icon>translate</mat-icon>
+          <span>Hint: {{ currentExercise() ? getHint(currentExercise()!.exercise) : '' }}</span>
+        </div>
+        <div class="sentence-meta">
+          <span class="level-badge">{{ currentExercise()?.exercise?.level }}</span>
+          <span class="domain-badge">{{ currentExercise()?.exercise?.domain }}</span>
+        </div>
+      </div>
+
+      <div class="input-section">
+        <input
+          class="answer-input"
+          [(ngModel)]="userInput"
+          placeholder="Type the German word..."
+          [disabled]="result() !== null"
+          (keydown.enter)="checkAnswer()"
+        />
+        @if (result() === null) {
+          <button class="submit-button" (click)="checkAnswer()" [disabled]="!userInput().trim()">
+            Check Answer
+          </button>
+        }
+      </div>
+
+      @if (result() !== null) {
+        <div class="result-section" [class.correct]="result()" [class.incorrect]="!result()">
+          <div class="result-header">
+            @if (result()) {
+              <mat-icon class="result-icon correct-icon">check_circle</mat-icon>
+              <span>Correct! ✓</span>
+            } @else {
+              <mat-icon class="result-icon incorrect-icon">cancel</mat-icon>
+              <span>Not quite right</span>
+            }
+          </div>
+
+          <div class="full-sentence">
+            <strong>Sentence:</strong> {{ currentExercise() ? buildFilledSentence(currentExercise()!.exercise, expectedAnswer(currentExercise()!.exercise)) : '' }}
+            <button mat-icon-button aria-label="Pronounce sentence" (click)="speakWord()">
+              <mat-icon>volume_up</mat-icon>
+            </button>
+          </div>
+
+          @if (!result()) {
+            <div class="correct-answer">
+              <strong>Correct word:</strong> {{ currentExercise() ? expectedAnswer(currentExercise()!.exercise) : '' }}
+            </div>
+            <div class="feedback-text">
+              You typed: "{{ userInput() }}". The correct answer is "{{ currentExercise() ? expectedAnswer(currentExercise()!.exercise) : '' }}".
+            </div>
+          }
+
+          @if (translationLoading()) {
+            <div class="translation-block loading">
+              <mat-icon>translate</mat-icon>
+              <span>Translating...</span>
+            </div>
+          } @else if (translation(); as t) {
+            <div class="translation-block">
+              <mat-icon>translate</mat-icon>
+              <span>{{ t }}</span>
+            </div>
+          }
+
+          <div class="mastery-actions">
+            <button
+              class="mastery-btn negative"
+              [class.selected]="masteryFeedback() === -10"
+              (click)="adjustMastery(-10)"
+            >
+              @if (masteryFeedback() === -10) {
+                <mat-icon>check</mat-icon>
+              }
+              Still learning (−10)
+            </button>
+            <button
+              class="mastery-btn positive"
+              [class.selected]="masteryFeedback() === 10"
+              (click)="adjustMastery(10)"
+            >
+              @if (masteryFeedback() === 10) {
+                <mat-icon>check</mat-icon>
+              }
+              Got it (+10)
+            </button>
+            <button
+              class="mastery-btn mastered"
+              [class.selected]="masteryFeedback() === 100"
+              (click)="adjustMastery(100)"
+            >
+              @if (masteryFeedback() === 100) {
+                <mat-icon>check</mat-icon>
+              }
+              Mastered (100)
+            </button>
+          </div>
+
+          <button class="next-button" (click)="nextExercise()">
+            {{ currentNumber() >= totalExercises() ? 'See Results' : 'Next Word' }}
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

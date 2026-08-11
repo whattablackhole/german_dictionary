@@ -1,0 +1,290 @@
+<div class="exercise-container">
+  <h1 class="page-title">Translation Exercise</h1>
+  <p class="page-subtitle">Practice translating sentences into German</p>
+
+  @if (!exerciseStarted()) {
+    <div class="start-screen">
+      <div class="settings-section">
+        <h2 class="section-title">Select Difficulty</h2>
+        <mat-chip-set class="level-chips" aria-label="Difficulty levels">
+          @for (level of allLevels; track level) {
+            <button
+              mat-chip
+              [class.selected]="selectedLevels().includes(level)"
+              (click)="toggleLevel(level)"
+            >
+              {{ level }}
+            </button>
+          }
+        </mat-chip-set>
+      </div>
+
+      <div class="settings-section">
+        <h2 class="section-title">Parts of Speech</h2>
+        <mat-chip-set class="level-chips" aria-label="Parts of speech">
+          @for (pos of allPartsOfSpeech; track pos.key) {
+            <button
+              mat-chip
+              [class.selected]="selectedPartsOfSpeech().includes(pos.key)"
+              (click)="togglePartOfSpeech(pos.key)"
+            >
+              {{ pos.label }}
+            </button>
+          }
+        </mat-chip-set>
+      </div>
+
+      <div class="settings-section">
+        <h2 class="section-title">Select Theme</h2>
+        <div class="domain-search-wrapper">
+          <mat-form-field appearance="outline" class="domain-field">
+            <mat-label>Search or type a theme</mat-label>
+            <input
+              matInput
+              [matAutocomplete]="domainAuto"
+              [(ngModel)]="domainInput"
+              (focus)="domainSearchFocused.set(true)"
+              (blur)="onDomainInputBlur()"
+              placeholder="e.g. At the airport, At home..."
+            />
+            @if (selectedDomain()) {
+              <button
+                matSuffix
+                mat-icon-button
+                aria-label="Clear"
+                (click)="clearDomain()"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+          <mat-autocomplete
+            #domainAuto="matAutocomplete"
+            (optionSelected)="selectDomain($event.option.value)"
+          >
+            @for (domain of filteredDomains(); track domain) {
+              <mat-option [value]="domain">
+                <mat-icon>topic</mat-icon>
+                {{ domain }}
+              </mat-option>
+            }
+            @if (filteredDomains().length === 0 && domainInput().trim()) {
+              <mat-option [value]="domainInput().trim()">
+                <mat-icon>add_circle</mat-icon>
+                Add "{{ domainInput().trim() }}" as new theme
+              </mat-option>
+            }
+          </mat-autocomplete>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2 class="section-title">Grammar Topics</h2>
+        <p class="section-hint">Select grammar topics you want to practice</p>
+        <div class="grammar-topics-wrapper">
+          <mat-form-field appearance="outline" class="grammar-field">
+            <mat-label>Search grammar topics</mat-label>
+            <input
+              matInput
+              [(ngModel)]="grammarSearchInput"
+              placeholder="e.g. Dative case, Modal verbs..."
+            />
+            @if (selectedGrammarTopics().length > 0) {
+              <button
+                matSuffix
+                mat-icon-button
+                aria-label="Clear all"
+                (click)="clearGrammarTopics()"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+
+          @if (selectedGrammarTopics().length > 0) {
+            <div class="selected-topics">
+              @for (topic of selectedGrammarTopics(); track topic) {
+                <button class="topic-chip" (click)="toggleGrammarTopic(topic)">
+                  {{ topic }}
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+            </div>
+          }
+
+          <div class="topics-list">
+            @for (topic of filteredGrammarTopics(); track topic) {
+              <button
+                class="topic-option"
+                [class.selected]="selectedGrammarTopics().includes(topic)"
+                (click)="toggleGrammarTopic(topic)"
+              >
+                <mat-icon class="topic-check">
+                  {{ selectedGrammarTopics().includes(topic) ? 'check_box' : 'check_box_outline_blank' }}
+                </mat-icon>
+                <span class="topic-name">{{ topic }}</span>
+              </button>
+            }
+            @if (filteredGrammarTopics().length === 0 && grammarSearchInput().trim()) {
+              <div class="no-topics-found">
+                No grammar topics match "{{ grammarSearchInput() }}"
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2 class="section-title">Exercise Mode</h2>
+        <div class="mode-buttons">
+          <button
+            mat-stroked-button
+            [class.active]="mode() === 'new'"
+            (click)="mode.set('new')"
+          >
+            <mat-icon>fiber_new</mat-icon>
+            New Sentences
+            <span class="count-badge">{{ availableNew().length }}</span>
+          </button>
+          <button
+            mat-stroked-button
+            [class.active]="mode() === 'review'"
+            (click)="mode.set('review')"
+          >
+            <mat-icon>replay</mat-icon>
+            Review Passed
+            <span class="count-badge">{{ availableReview().length }}</span>
+          </button>
+        </div>
+      </div>
+
+      @if (generating()) {
+        <div class="generating-indicator">
+          <mat-spinner diameter="24" />
+          <span>Generating sentences with AI...</span>
+        </div>
+      }
+
+      <button
+        class="start-button"
+        (click)="startExercise()"
+        [disabled]="
+          generating() ||
+          (mode() === 'new' && availableNew().length === 0 && !generating()) ||
+          (mode() === 'review' && availableReview().length === 0)
+        "
+      >
+        Start Exercise
+      </button>
+    </div>
+  } @else if (exerciseFinished()) {
+    <div class="results-screen">
+      <h2 class="results-title">Exercise Complete!</h2>
+      <div class="score-display">
+        <span class="score-number">{{ correctCount() }}</span>
+        <span class="score-total">/ {{ totalSentences() }}</span>
+      </div>
+      <p class="score-label">
+        {{ correctCount() === totalSentences() ? 'Perfect! 🎉' : 'correct translations' }}
+      </p>
+      <button class="start-button" (click)="restart()">Back to Start</button>
+    </div>
+  } @else {
+    <div class="exercise-screen">
+      <div class="progress">
+        <span>Sentence {{ currentNumber() }} of {{ totalSentences() }}</span>
+        <span>Correct: {{ correctCount() }}</span>
+      </div>
+
+      <div class="sentence-card">
+        <div class="sentence-label">Translate this sentence to German:</div>
+        <div class="sentence-text">
+          {{ currentSentence() ? getTranslation(currentSentence()!.sentence) : '' }}
+        </div>
+        <div class="sentence-meta">
+          <span class="level-badge">{{ currentSentence()?.sentence?.level }}</span>
+          <span class="domain-badge">{{ currentSentence()?.sentence?.domain }}</span>
+        </div>
+      </div>
+
+      <div class="input-section">
+        <textarea
+          class="translation-input"
+          [(ngModel)]="userInput"
+          placeholder="Type your German translation here..."
+          rows="3"
+          [disabled]="result() !== null"
+        ></textarea>
+
+        @if (result() === null) {
+          <button
+            class="submit-button"
+            (click)="submitTranslation()"
+            [disabled]="loading() || !userInput().trim()"
+          >
+            @if (loading()) {
+              <mat-spinner diameter="20" />
+              Checking...
+            } @else {
+              Check Translation
+            }
+          </button>
+        }
+      </div>
+
+      @if (result(); as r) {
+        <div class="result-section" [class.correct]="r.correct" [class.incorrect]="!r.correct">
+          <div class="result-header">
+            @if (r.correct) {
+              <mat-icon class="result-icon correct-icon">check_circle</mat-icon>
+              <span>Correct! ✓</span>
+            } @else {
+              <mat-icon class="result-icon incorrect-icon">cancel</mat-icon>
+              <span>Not quite right</span>
+            }
+            <span class="score">Score: {{ r.score }}%</span>
+          </div>
+
+          @if (!r.correct && r.errors.length > 0) {
+            <div class="errors-section">
+              <div class="error-text-display">
+                @for (error of r.errors; track error.errorId) {
+                  <span>
+                    <span class="error-highlight">{{ getErrorText(userInput(), error) }}</span>
+                    <sup class="error-ref">{{ error.errorId }}</sup>
+                  </span>
+                }
+              </div>
+
+              <div class="error-list">
+                @for (error of r.errors; track error.errorId) {
+                  <div class="error-item">
+                    <span class="error-number">{{ error.errorId }}.</span>
+                    <span class="error-explanation">{{ error.explanation }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="correct-sentence">
+            <strong>Correct:</strong> {{ currentSentence()?.sentence?.german }}
+          </div>
+
+          <div class="feedback-text">{{ r.feedback }}</div>
+
+          <div class="result-actions">
+            @if (r.correct) {
+              <button mat-flat-button color="primary" (click)="markAsPassed()">
+                Mark as Passed
+              </button>
+            }
+            <button class="next-button" (click)="nextSentence()">
+              {{ currentNumber() >= totalSentences() ? 'See Results' : 'Next Sentence' }}
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

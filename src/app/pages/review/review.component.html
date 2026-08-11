@@ -1,0 +1,117 @@
+<div class="review-container">
+  <h1 class="page-title">Review Words</h1>
+  <p class="page-subtitle">German nouns grouped by grammatical gender</p>
+
+  <div class="filter-bar">
+    <mat-form-field appearance="outline" class="date-field">
+      <mat-label>From date</mat-label>
+      <input
+        matInput
+        [matDatepicker]="fromPicker"
+        [value]="fromDate()"
+        (dateChange)="fromDate.set($event.value)"
+      />
+      <mat-datepicker-toggle matIconSuffix [for]="fromPicker" />
+      <mat-datepicker #fromPicker />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="date-field">
+      <mat-label>To date</mat-label>
+      <input
+        matInput
+        [matDatepicker]="toPicker"
+        [value]="toDate()"
+        (dateChange)="toDate.set($event.value)"
+      />
+      <mat-datepicker-toggle matIconSuffix [for]="toPicker" />
+      <mat-datepicker #toPicker />
+    </mat-form-field>
+
+    @if (filterActive()) {
+      <button mat-stroked-button (click)="clearFilter()">Clear</button>
+    }
+  </div>
+
+  @if (filterActive()) {
+    <p class="filter-summary">
+      Showing {{ filteredWords().length }}
+      {{ filteredWords().length === 1 ? 'word' : 'words' }}
+    </p>
+  }
+
+  <div class="columns">
+    @for (gender of genders; track gender.key) {
+      <section class="column" [style.--gender-color]="gender.color">
+        <header class="column-header">
+          <span class="gender-badge">{{ gender.key }}</span>
+          <span class="word-count">
+            {{ wordsByGender()[gender.key].length }}
+            {{ wordsByGender()[gender.key].length === 1 ? 'word' : 'words' }}
+          </span>
+        </header>
+
+        @if (wordsByGender()[gender.key].length === 0) {
+          <p class="empty-state">No {{ gender.key }} words yet</p>
+        } @else {
+          <ul class="word-list">
+@for (word of wordsByGender()[gender.key]; track word.id) {
+              <li class="word-item" [style.--mastery-bg]="getMasteryColor(word.mastery, gender.color)">
+                <span class="word-german" [style.color]="gender.color">
+                  <span class="word-article">{{ word.gender }}</span>
+                  {{ word.german }}
+                </span>
+                <span class="word-right">
+                  <span class="word-translation">{{ getTranslation(word) }}</span>
+                  <span class="mastery-indicator">{{ word.mastery }}%</span>
+                  <button
+                    class="speak-button"
+                    aria-label="Pronounce {{ word.german }}"
+                    (click)="speak(word)"
+                  >
+                    <mat-icon>volume_up</mat-icon>
+                  </button>
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+
+    <section class="column other-column">
+      <header class="column-header">
+        <span class="gender-badge">Other</span>
+        <span class="word-count">
+          {{ wordsByGender()['other'].length }}
+          {{ wordsByGender()['other'].length === 1 ? 'word' : 'words' }}
+        </span>
+      </header>
+
+      @if (wordsByGender()['other'].length === 0) {
+        <p class="empty-state">No other words yet</p>
+      } @else {
+        <ul class="word-list">
+          @for (word of wordsByGender()['other']; track word.id) {
+            <li class="word-item" [style.--mastery-bg]="getMasteryColor(word.mastery, '#757575')">
+              <span class="word-german">
+                <span class="pos-badge">{{ getPosLabel(word) }}</span>
+                {{ word.german }}
+              </span>
+              <span class="word-right">
+                <span class="word-translation">{{ getTranslation(word) }}</span>
+                <span class="mastery-indicator">{{ word.mastery }}%</span>
+                <button
+                  class="speak-button"
+                  aria-label="Pronounce {{ word.german }}"
+                  (click)="speak(word)"
+                >
+                  <mat-icon>volume_up</mat-icon>
+                </button>
+              </span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  </div>
+</div>
