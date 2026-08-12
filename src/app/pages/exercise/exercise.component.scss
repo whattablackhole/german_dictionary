@@ -196,6 +196,25 @@
   font-size: 14px;
 }
 
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(211, 47, 47, 0.1);
+  border: 1px solid rgba(211, 47, 47, 0.3);
+  color: #c62828;
+  font-size: 14px;
+  max-width: 500px;
+  width: 100%;
+  box-sizing: border-box;
+
+  mat-icon {
+    flex-shrink: 0;
+  }
+}
+
 .start-button {
   font-size: 16px;
   font-weight: 500;

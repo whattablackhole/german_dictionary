@@ -1,0 +1,160 @@
+<div class="notes-container">
+  <header class="notes-header">
+    <h1 class="page-title">Grammar Notes</h1>
+    <p class="page-subtitle">AI-powered grammar reference — describe what you learned, and AI will create a structured note</p>
+  </header>
+
+  <div class="notes-layout">
+    <!-- Left Sidebar -->
+    <aside class="notes-sidebar">
+      <div class="sidebar-actions">
+        <button class="new-note-button" (click)="openNewNoteForm()">
+          <mat-icon>add_circle</mat-icon>
+          New Note
+        </button>
+        <div class="search-wrapper">
+          <mat-icon class="search-icon">search</mat-icon>
+          <input
+            class="search-input"
+            type="text"
+            placeholder="Search notes..."
+            [(ngModel)]="searchQuery"
+          />
+        </div>
+      </div>
+
+      <div class="categories-list">
+        @for (group of notesByCategory(); track group.category) {
+          <div class="category-group">
+            <button
+              class="category-header"
+              [class.active]="selectedCategory() === group.category"
+              (click)="selectCategory(group.category)"
+            >
+              <span class="category-name">{{ group.category }}</span>
+              <span class="category-count">{{ group.count }}</span>
+            </button>
+            <div class="category-notes">
+              @for (note of group.notes; track note.id) {
+                <button
+                  class="note-item"
+                  [class.active]="selectedNoteId() === note.id"
+                  (click)="selectNote(note.id)"
+                >
+                  <mat-icon class="note-item-icon">article</mat-icon>
+                  <span class="note-item-title">{{ note.title }}</span>
+                </button>
+              }
+            </div>
+          </div>
+        } @empty {
+          @if (!showNewNoteForm()) {
+            <div class="empty-sidebar">
+              <mat-icon>menu_book</mat-icon>
+              <p>No grammar notes yet</p>
+              <p class="empty-hint">Click "New Note" to create your first one</p>
+            </div>
+          }
+        }
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="notes-content">
+      @if (showNewNoteForm()) {
+        <div class="new-note-panel">
+          <h2 class="panel-title">Create a Grammar Note</h2>
+          <p class="panel-hint">Describe what you learned in your own words. AI will expand it into a structured note.</p>
+
+          <textarea
+            class="query-input"
+            [(ngModel)]="userQuery"
+            placeholder="e.g. I learned that 'auf' is used with special verbs like 'warten'. Also 'mit' takes Dativ..."
+            rows="5"
+          ></textarea>
+
+          @if (generationError(); as error) {
+            <div class="error-message">
+              <mat-icon>error_outline</mat-icon>
+              <span>{{ error }}</span>
+            </div>
+          }
+
+          <div class="form-actions">
+            <button class="cancel-button" (click)="cancelNewNote()">Cancel</button>
+            <button
+              class="generate-button"
+              (click)="generateAndSave()"
+              [disabled]="generating() || !userQuery().trim()"
+            >
+              @if (generating()) {
+                <mat-spinner diameter="18" />
+                Generating...
+              } @else {
+                <mat-icon>auto_awesome</mat-icon>
+                Generate with AI
+              }
+            </button>
+          </div>
+        </div>
+      } @else if (selectedNote(); as note) {
+        <div class="note-display">
+          <div class="note-header">
+            <div class="note-title-row">
+              <h2 class="note-title">{{ note.title }}</h2>
+              <button class="delete-button" (click)="deleteNote(note.id)" title="Delete note">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+            <div class="note-meta">
+              <span class="note-category-badge">{{ note.category }}</span>
+              <span class="note-date">Created {{ note.createdAt | date:'mediumDate' }}</span>
+            </div>
+          </div>
+
+          <div class="note-body">
+            <div class="note-content markdown-content" [innerHTML]="note.content | markdown"></div>
+
+            @if (note.examples.length > 0) {
+              <div class="note-section">
+                <h3 class="section-heading">
+                  <mat-icon>format_quote</mat-icon>
+                  Examples
+                </h3>
+                <div class="examples-list">
+                  @for (example of note.examples; track example) {
+                    <div class="example-item">{{ example }}</div>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (note.relatedTopics.length > 0) {
+              <div class="note-section">
+                <h3 class="section-heading">
+                  <mat-icon>link</mat-icon>
+                  Related Topics
+                </h3>
+                <div class="related-topics">
+                  @for (topic of note.relatedTopics; track topic) {
+                    <span class="topic-tag">{{ topic }}</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      } @else {
+        <div class="empty-state">
+          <mat-icon class="empty-icon">menu_book</mat-icon>
+          <h2>Your Grammar Reference</h2>
+          <p>Select a note from the sidebar or create a new one to get started.</p>
+          <button class="new-note-button" (click)="openNewNoteForm()">
+            <mat-icon>add_circle</mat-icon>
+            Create Your First Note
+          </button>
+        </div>
+      }
+    </main>
+  </div>
+</div>

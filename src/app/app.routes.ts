@@ -36,6 +36,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'grammar-notes',
+    loadComponent: () =>
+      import('./pages/grammar-notes/grammar-notes.component').then(
+        (m) => m.GrammarNotesComponent
+      ),
+  },
+  {
     path: 'settings',
     loadComponent: () =>
       import('./pages/settings/settings.component').then(

@@ -197,7 +197,7 @@ Word: "${german}"`;
         : '';
 
     const prompt = `You are a German language teacher. Generate ${count} German sentences at CEFR level ${level}.
-Respond with JSON only (no markdown) as an array of objects with exactly these fields:
+Respond with JSON only (no markdown) as an object with a single key "sentences" containing an array of objects. Each object must have exactly these fields:
 - "german": the German sentence
 - "translationEn": the English translation
 - "translationRu": the Russian translation
@@ -214,7 +214,10 @@ Rules:
 - ${domainInstruction}
 - ${grammarInstruction}
 
-Generate exactly ${count} sentences.`;
+Generate exactly ${count} sentences.
+
+Example format:
+{"sentences":[{"german":"...","translationEn":"...","translationRu":"...","level":"${level}","domain":"...","grammarTopics":["..."]}]}`;
 
     const response = await fetch(environment.openRouterApiUrl, {
       method: 'POST',
@@ -290,7 +293,7 @@ Generate exactly ${count} sentences.`;
       : '';
 
     const prompt = `You are a German language teacher. Generate ${count} German cloze (fill-in-the-blank) exercises at CEFR level ${level}.
-Respond with JSON only (no markdown) as an array of objects with exactly these fields:
+Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
 - "fullSentence": the complete German sentence without blanks
 - "targetWord": the German word(s) the student must type (WITHOUT the article for nouns, e.g. "Hund"; for separable verbs the full verb form, e.g. "abholen")
 - "wordHint": the English translation of the target word (for the student to know what word to fill in)
@@ -315,7 +318,10 @@ Rules:
 - Do NOT add any hints about gender or word endings.
 - ${avoidInstruction}
 
-Generate exactly ${count} exercises.`;
+Generate exactly ${count} exercises.
+
+Example format:
+{"exercises":[{"fullSentence":"...","targetWord":"...","wordHint":"...","blankRanges":[{"start":0,"end":5}],"hasArticle":false,"level":"${level}","domain":"...","grammarTopics":["..."]}]}`;
 
     const response = await fetch(environment.openRouterApiUrl, {
       method: 'POST',
@@ -364,6 +370,84 @@ Generate exactly ${count} exercises.`;
       level: level,
       grammarTopics: e.grammarTopics ?? [],
     }));
+  }
+
+  async generateGrammarNote(userQuery: string): Promise<{
+    title: string;
+    category: string;
+    content: string;
+    examples: string[];
+    relatedTopics: string[];
+  }> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const prompt = `You are a German language expert and teacher. A student has asked about a German grammar topic. Based on their query, generate a comprehensive, well-structured grammar note.
+
+Respond with JSON only (no markdown) as an object with exactly these fields:
+- "title": a clear, concise title for the note (e.g. "Verbs with the Preposition 'auf'")
+- "category": the broad category this belongs to, exactly one of: "Prepositions & Cases", "Verb Conjugation & Tenses", "Sentence Structure & Word Order", "Articles & Nouns", "Adjectives & Adverbs", "Pronouns", "Negation & Questions", "Numbers & Time", "Modal Particles & Connectors", "Special Topics & Idioms"
+- "content": a detailed explanation in English, formatted with markdown for readability (use **bold** for key terms, bullet points for lists, etc.)
+- "examples": an array of 3-5 German example sentences with English translations, formatted as "German: ... — English: ..."
+- "relatedTopics": an array of related grammar topic strings (e.g. "Dative case (Dativ)", "Prepositions with dative") — use the exact topic names from this list if applicable: Prepositions with accusative, Prepositions with dative, Prepositions with genitive, Two-way prepositions, Verbs with fixed prepositions, Dative case, Accusative case, Separable prefix verbs, Modal verbs, Subordinating conjunctions, Word order (subordinate clauses)
+
+Rules:
+- The explanation should be thorough but accessible for a language learner.
+- Include practical usage tips and common mistakes to avoid.
+- Examples must be realistic and natural.
+- If the query is about a specific verb-preposition combination, explain the pattern and list other common verbs with the same preposition.
+
+Student's query: "${userQuery}"`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: {
+      title?: string;
+      category?: string;
+      content?: string;
+      examples?: string[];
+      relatedTopics?: string[];
+    };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    return {
+      title: parsed.title ?? 'Untitled Note',
+      category: parsed.category ?? 'Special Topics & Idioms',
+      content: parsed.content ?? '',
+      examples: parsed.examples ?? [],
+      relatedTopics: parsed.relatedTopics ?? [],
+    };
   }
 
   async verifyTranslation(

@@ -165,12 +165,18 @@
         </div>
       }
 
+      @if (generationError(); as error) {
+        <div class="error-message">
+          <mat-icon>error_outline</mat-icon>
+          <span>{{ error }}</span>
+        </div>
+      }
+
       <button
         class="start-button"
         (click)="startExercise()"
         [disabled]="
           generating() ||
-          (mode() === 'new' && availableNew().length === 0 && !generating()) ||
           (mode() === 'review' && availableReview().length === 0)
         "
       >

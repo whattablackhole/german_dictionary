@@ -54,6 +54,7 @@ export class ExerciseComponent {
   readonly userInput = signal('');
   readonly loading = signal(false);
   readonly generating = signal(false);
+  readonly generationError = signal<string | null>(null);
   readonly result = signal<TranslationResult | null>(null);
   readonly exerciseStarted = signal(false);
   readonly exerciseFinished = signal(false);
@@ -180,6 +181,7 @@ export class ExerciseComponent {
   }
 
   async startExercise(): Promise<void> {
+    this.generationError.set(null);
     const levels =
       this.selectedLevels().length > 0
         ? this.selectedLevels()
@@ -200,6 +202,13 @@ export class ExerciseComponent {
     }
 
     if (sentences.length === 0) {
+      if (!this.generationError()) {
+        this.generationError.set(
+          this.mode() === 'review'
+            ? 'No reviewed sentences match your filters.'
+            : 'Could not find or generate sentences matching your filters. Check your API key in settings.'
+        );
+      }
       return;
     }
 
@@ -219,6 +228,7 @@ export class ExerciseComponent {
     grammarTopics?: string[]
   ): Promise<void> {
     this.generating.set(true);
+    this.generationError.set(null);
     try {
       // Select up to 50 words matching the chosen difficulty, weighted by usage
       const selectedWords = this.wordService.selectWordsForGeneration(
@@ -243,7 +253,7 @@ export class ExerciseComponent {
           translationRu: g.translationRu,
           level: g.level,
           domain: g.domain,
-          grammarTopics: [],
+          grammarTopics: grammarTopics ?? [],
           passedAt: null,
           timesPassed: 0,
         }))
@@ -260,6 +270,9 @@ export class ExerciseComponent {
       }
     } catch (err) {
       console.error('Failed to generate sentences:', err);
+      this.generationError.set(
+        err instanceof Error ? err.message : 'Failed to generate sentences. Check your API key.'
+      );
     } finally {
       this.generating.set(false);
     }
