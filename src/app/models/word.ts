@@ -4,6 +4,8 @@ export type TranslationLanguage = 'ru' | 'en';
 
 export type DifficultyLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
+export type VerbType = 'strong' | 'weak' | 'mixed';
+
 export type PartOfSpeech =
   | 'noun'
   | 'verb'
@@ -27,4 +29,9 @@ export interface Word {
   mastery: number;
   usageCount: number;
   createdAt: string;
+  // Verb-specific fields (optional)
+  verbType?: VerbType;
+  presentThirdPerson?: string;
+  simplePast?: string;
+  pastParticiple?: string;
 }

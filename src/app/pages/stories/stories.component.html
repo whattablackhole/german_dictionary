@@ -1,0 +1,373 @@
+<div class="stories-container">
+  <h1 class="page-title">Story Generator</h1>
+  <p class="page-subtitle">Generate German stories with AI and listen with word-by-word highlighting</p>
+
+  <div class="stories-layout">
+    <!-- Left: Controls -->
+    <aside class="controls-panel">
+      <div class="panel-card">
+        <h2 class="panel-title">Configuration</h2>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Theme / Topic</mat-label>
+          <input
+            matInput
+            [(ngModel)]="themeInput"
+            placeholder="e.g. Travel, Family, Technology..."
+          />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Difficulty Level</mat-label>
+          <mat-select [(ngModel)]="levelInput">
+            @for (level of levels; track level) {
+              <mat-option [value]="level">{{ level }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <div class="chip-section">
+          <label class="chip-label">Word types to prioritize</label>
+          <div class="chip-group">
+            @for (type of wordTypes; track type) {
+              <button
+                class="chip"
+                [class.chip-selected]="selectedWordTypes().includes(type)"
+                (click)="toggleWordType(type)"
+              >
+                {{ type }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="chip-section">
+          <label class="chip-label">Grammar topics to include</label>
+          <div class="chip-group">
+            @for (topic of grammarTopicsList; track topic) {
+              <button
+                class="chip"
+                [class.chip-selected]="selectedGrammarTopics().includes(topic)"
+                (click)="toggleGrammarTopic(topic)"
+              >
+                {{ topic }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="slider-section">
+          <label class="chip-label">Number of sentences: {{ sentenceCount() }}</label>
+          <input
+            type="range"
+            min="3"
+            max="30"
+            step="1"
+            [value]="sentenceCount()"
+            #sentenceSlider
+            (input)="onSentenceCountChange(sentenceSlider.value)"
+            class="sentence-slider"
+          />
+          <div class="slider-labels">
+            <span>3</span>
+            <span>30</span>
+          </div>
+        </div>
+
+        <button
+          mat-flat-button
+          color="primary"
+          class="generate-btn"
+          (click)="generateStory()"
+          [disabled]="isGenerating() || !themeInput().trim()"
+        >
+          @if (isGenerating()) {
+            <mat-spinner diameter="20" />
+            <span>Generating...</span>
+          } @else {
+            <ng-container>
+              <mat-icon>auto_awesome</mat-icon>
+              Generate Story
+            </ng-container>
+          }
+        </button>
+
+        @if (errorMessage()) {
+          <div class="error-message">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ errorMessage() }}</span>
+          </div>
+        }
+      </div>
+
+      <!-- Saved Stories -->
+      <div class="panel-card">
+        <h2 class="panel-title">Saved Stories ({{ stories().length }})</h2>
+        @if (stories().length === 0) {
+          <p class="empty-state">No stories yet. Generate one above!</p>
+        } @else {
+          <div class="story-list">
+            @for (story of stories(); track story.id) {
+              <button
+                class="story-list-item"
+                [class.active]="selectedStoryId() === story.id"
+                (click)="selectStory(story.id)"
+              >
+                <span class="story-list-title">{{ story.title }}</span>
+                <span class="story-list-meta">
+                  {{ story.level }} &middot; {{ story.wordCount }} words
+                </span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+    </aside>
+
+    <!-- Right: Story Display -->
+    <main class="story-panel">
+      @if (!selectedStory()) {
+        <div class="empty-state-large">
+          <mat-icon class="empty-icon">auto_stories</mat-icon>
+          <p>Select a saved story or generate a new one</p>
+        </div>
+      } @else {
+        @let story = selectedStory()!;
+
+        <div class="story-header">
+          <h2 class="story-title">{{ story.title }}</h2>
+          <div class="story-badges">
+            <span class="badge badge-level">{{ story.level }}</span>
+            <span class="badge badge-domain">{{ story.domain }}</span>
+            <span class="badge badge-count">{{ story.wordCount }} words</span>
+            @if (story.grammarTopics.length > 0) {
+              @for (topic of story.grammarTopics; track topic) {
+                <span class="badge badge-grammar">{{ topic }}</span>
+              }
+            }
+          </div>
+        </div>
+
+        <!-- Word Lookup Toggle -->
+        <div class="lookup-toggle-row">
+          <mat-slide-toggle
+            [checked]="wordLookupEnabled()"
+            (toggleChange)="wordLookupEnabled.set(!wordLookupEnabled())"
+          >
+            Word lookup mode
+          </mat-slide-toggle>
+          @if (wordLookupEnabled()) {
+            <span class="lookup-hint">Click any word to see translation & add to dictionary</span>
+          }
+        </div>
+
+        <div class="story-text-card">
+          <div class="story-text" #storyText>
+            @for (token of wordTokens(); track token.start) {
+              <span
+                class="word-span"
+                [class.word-highlight]="
+                  currentCharIndex() !== null &&
+                  currentCharIndex()! >= token.start &&
+                  currentCharIndex()! < token.end
+                "
+                [class.word-lookup-hover]="wordLookupEnabled()"
+                (click)="onWordClick(token.text, $event)"
+              >{{ token.text }} </span>
+            }
+          </div>
+        </div>
+
+        <!-- Word Lookup Popup -->
+        @if (selectedLookupWord() && wordLookupEnabled()) {
+          <div
+            class="word-popup-overlay"
+            (click)="closeWordPopup()"
+          ></div>
+          <div
+            class="word-popup"
+            [style.left.px]="popupPosition().x"
+            [style.top.px]="popupPosition().y"
+          >
+            <button class="popup-close" (click)="closeWordPopup()">
+              <mat-icon>close</mat-icon>
+            </button>
+
+            <div class="popup-header">
+              <span class="popup-word">{{ lookupGenderArticle() }}{{ selectedLookupWord() }}</span>
+              @if (wordSuggestion(); as s) {
+                <span class="popup-pos-badge">{{ s.partOfSpeech }}</span>
+                <span class="popup-level-badge">{{ s.level }}</span>
+              }
+            </div>
+
+            @if (wordLookupLoading()) {
+              <div class="popup-loading">
+                <mat-spinner diameter="16" />
+                <span>Looking up...</span>
+              </div>
+            } @else if (wordSuggestion(); as s) {
+              <div class="popup-translation">{{ lookupTranslation() }}</div>
+
+              @if (s.partOfSpeech === 'verb' && (s.verbType || s.presentThirdPerson || s.simplePast || s.pastParticiple)) {
+                <div class="popup-verb-forms">
+                  @if (s.verbType) {
+                    <span class="verb-form">{{ s.verbType }} verb</span>
+                  }
+                  @if (s.presentThirdPerson) {
+                    <span class="verb-form">er/sie/es {{ s.presentThirdPerson }}</span>
+                  }
+                  @if (s.simplePast) {
+                    <span class="verb-form">Präteritum: {{ s.simplePast }}</span>
+                  }
+                  @if (s.pastParticiple) {
+                    <span class="verb-form">Partizip II: {{ s.pastParticiple }}</span>
+                  }
+                </div>
+              }
+            }
+
+            <div class="popup-actions">
+              <button mat-icon-button (click)="playLookupWord()" class="popup-action-btn" title="Pronounce">
+                <mat-icon>volume_up</mat-icon>
+              </button>
+
+              @if (isWordAlreadyInDictionary()) {
+                <span class="already-in-dict">Already in dictionary</span>
+              } @else if (wordAddedFeedback()) {
+                <span class="added-feedback">✓ Added!</span>
+              } @else {
+                <button
+                  mat-stroked-button
+                  color="primary"
+                  (click)="addLookupWordToDictionary()"
+                  [disabled]="!wordSuggestion()"
+                  class="popup-add-btn"
+                >
+                  <mat-icon>playlist_add</mat-icon>
+                  Add to Dictionary
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Microsoft TTS: Progress bar + time + speed -->
+        @if (isMicrosoftTts()) {
+          <div class="audio-controls">
+            <div class="progress-row">
+              <span class="time-label">{{ formattedCurrentTime() }}</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="0.1"
+                [value]="audioDuration() > 0 ? (audioCurrentTime() / audioDuration() * 100) : 0"
+                (mousedown)="onSeekStart()"
+                (mouseup)="onSeekEnd($any($event.target).value)"
+                (touchstart)="onSeekStart()"
+                (touchend)="onSeekEnd($any($event.target).value)"
+                class="progress-slider"
+              />
+              <span class="time-label">{{ formattedDuration() }}</span>
+            </div>
+
+            <div class="playback-row">
+              <div class="playback-buttons">
+                @if (!isPlaying()) {
+                  <button mat-icon-button color="primary" (click)="playStory()" class="play-btn">
+                    <mat-icon>play_arrow</mat-icon>
+                  </button>
+                } @else {
+                  <button mat-icon-button color="primary" (click)="pausePlayback()" class="play-btn">
+                    <mat-icon>pause</mat-icon>
+                  </button>
+                }
+                <button mat-icon-button (click)="stopPlayback()" class="stop-btn">
+                  <mat-icon>stop</mat-icon>
+                </button>
+              </div>
+
+              <div class="speed-control">
+                <span class="speed-label">Speed:</span>
+                <div class="speed-buttons">
+                  @for (speed of speeds; track speed) {
+                    <button
+                      class="speed-btn"
+                      [class.speed-active]="playbackSpeed() === speed"
+                      (click)="setPlaybackSpeed(speed)"
+                    >{{ speed }}x</button>
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- Browser TTS: Simple controls -->
+        @if (!isMicrosoftTts()) {
+          <div class="story-controls">
+            @if (!isPlaying()) {
+              <button mat-flat-button color="primary" (click)="playStory()">
+                <mat-icon>play_arrow</mat-icon>
+                Play
+              </button>
+            } @else {
+              <button mat-flat-button color="warn" (click)="stopPlayback()">
+                <mat-icon>stop</mat-icon>
+                Stop
+              </button>
+            }
+            <span class="tts-indicator">
+              TTS: {{ settingsService.ttsEngine() === 'openai' ? 'OpenAI' : 'Browser' }}
+            </span>
+
+            <button
+              mat-stroked-button
+              color="warn"
+              (click)="deleteStory(story.id)"
+              class="delete-btn"
+            >
+              <mat-icon>delete</mat-icon>
+              Delete
+            </button>
+          </div>
+        }
+
+        <!-- Delete button for Microsoft TTS (shown separately) -->
+        @if (isMicrosoftTts()) {
+          <div class="story-controls-extra">
+            <span class="tts-indicator">
+              TTS: Microsoft MAI-Voice-2 Flash
+            </span>
+            <button
+              mat-stroked-button
+              color="warn"
+              (click)="deleteStory(story.id)"
+              class="delete-btn"
+            >
+              <mat-icon>delete</mat-icon>
+              Delete
+            </button>
+          </div>
+        }
+
+        <mat-accordion class="translations-accordion">
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              <mat-panel-title>English Translation</mat-panel-title>
+            </mat-expansion-panel-header>
+            <p>{{ story.translationEn }}</p>
+          </mat-expansion-panel>
+
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              <mat-panel-title>Russian Translation</mat-panel-title>
+            </mat-expansion-panel-header>
+            <p>{{ story.translationRu }}</p>
+          </mat-expansion-panel>
+        </mat-accordion>
+      }
+    </main>
+  </div>
+</div>

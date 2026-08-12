@@ -2,12 +2,14 @@ import { Component } from '@angular/core';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatCardModule } from '@angular/material/card';
-import { SettingsService } from '../../services/settings.service';
+import { MatSelectModule } from '@angular/material/select';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { SettingsService, TtsEngine } from '../../services/settings.service';
 import { TranslationLanguage } from '../../models/word';
 
 @Component({
   selector: 'app-settings',
-  imports: [MatRadioModule, MatSlideToggleModule, MatCardModule],
+  imports: [MatRadioModule, MatSlideToggleModule, MatCardModule, MatSelectModule, MatFormFieldModule],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
 })
@@ -25,5 +27,9 @@ export class SettingsComponent {
 
   toggleShowArticle(show: boolean): void {
     this.settingsService.setShowArticleInPractice(show);
+  }
+
+  setTtsEngine(engine: TtsEngine): void {
+    this.settingsService.setTtsEngine(engine);
   }
 }

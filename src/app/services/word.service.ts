@@ -19,6 +19,12 @@ const SEED_WORDS: Word[] = [
   { id: '13', german: 'Apfel', partOfSpeech: 'noun', gender: 'der', translationEn: 'apple', translationRu: 'яблоко', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-07T10:00:00.000Z' },
   { id: '14', german: 'Milch', partOfSpeech: 'noun', gender: 'die', translationEn: 'milk', translationRu: 'молоко', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-07T10:00:00.000Z' },
   { id: '15', german: 'Wasser', partOfSpeech: 'noun', gender: 'das', translationEn: 'water', translationRu: 'вода', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-08T10:00:00.000Z' },
+  // Verbs with principal parts
+  { id: '16', german: 'sein', partOfSpeech: 'verb', gender: null, translationEn: 'to be', translationRu: 'быть', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'ist', simplePast: 'war', pastParticiple: 'gewesen' },
+  { id: '17', german: 'haben', partOfSpeech: 'verb', gender: null, translationEn: 'to have', translationRu: 'иметь', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', verbType: 'weak', presentThirdPerson: 'hat', simplePast: 'hatte', pastParticiple: 'gehabt' },
+  { id: '18', german: 'fliegen', partOfSpeech: 'verb', gender: null, translationEn: 'to fly', translationRu: 'летать', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'fliegt', simplePast: 'flog', pastParticiple: 'geflogen' },
+  { id: '19', german: 'gehen', partOfSpeech: 'verb', gender: null, translationEn: 'to go', translationRu: 'идти', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'geht', simplePast: 'ging', pastParticiple: 'gegangen' },
+  { id: '20', german: 'machen', partOfSpeech: 'verb', gender: null, translationEn: 'to do/make', translationRu: 'делать', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-03T10:00:00.000Z', verbType: 'weak', presentThirdPerson: 'macht', simplePast: 'machte', pastParticiple: 'gemacht' },
 ];
 
 @Injectable({ providedIn: 'root' })

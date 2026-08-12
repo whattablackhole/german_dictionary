@@ -1,5 +1,6 @@
 import { Component, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { CommonModule } from '@angular/common';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -10,12 +11,13 @@ import { WordService } from '../../services/word.service';
 import { SettingsService } from '../../services/settings.service';
 import { PartOfSpeechService, PartOfSpeechInfo } from '../../services/part-of-speech.service';
 import { AiService, AiSuggestion } from '../../services/ai.service';
-import { Gender, DifficultyLevel, PartOfSpeech, Word } from '../../models/word';
+import { Gender, DifficultyLevel, PartOfSpeech, VerbType, Word } from '../../models/word';
 
 @Component({
   selector: 'app-manage',
   imports: [
     FormsModule,
+    CommonModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
@@ -28,10 +30,43 @@ import { Gender, DifficultyLevel, PartOfSpeech, Word } from '../../models/word';
 })
 export class ManageComponent {
   readonly genders: Gender[] = ['der', 'die', 'das'];
+  readonly verbTypes: VerbType[] = ['strong', 'weak', 'mixed'];
   readonly levels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
   readonly partsOfSpeech: PartOfSpeechInfo[];
 
-  readonly words = computed(() => this.wordService.words());
+  readonly allWords = computed(() => this.wordService.words());
+
+  readonly searchQuery = signal('');
+  readonly posFilter = signal<PartOfSpeech | ''>('');
+  readonly levelFilter = signal<DifficultyLevel | ''>('');
+  readonly genderFilter = signal<Gender | ''>('');
+
+  readonly words = computed(() => {
+    let words = this.allWords();
+    const search = this.searchQuery().toLowerCase().trim();
+    const pos = this.posFilter();
+    const level = this.levelFilter();
+    const gender = this.genderFilter();
+
+    if (search) {
+      words = words.filter(
+        (w) =>
+          w.german.toLowerCase().includes(search) ||
+          w.translationEn.toLowerCase().includes(search) ||
+          w.translationRu.toLowerCase().includes(search)
+      );
+    }
+    if (pos) {
+      words = words.filter((w) => w.partOfSpeech === pos);
+    }
+    if (level) {
+      words = words.filter((w) => w.level === level);
+    }
+    if (gender) {
+      words = words.filter((w) => w.gender === gender);
+    }
+    return words;
+  });
 
   readonly editingId = signal<string | null>(null);
   readonly germanInput = signal('');
@@ -40,8 +75,17 @@ export class ManageComponent {
   readonly translationEnInput = signal('');
   readonly translationRuInput = signal('');
   readonly levelInput = signal<DifficultyLevel>('A1');
+  // Verb-specific fields
+  readonly verbTypeInput = signal<VerbType>('weak');
+  readonly presentThirdPersonInput = signal('');
+  readonly simplePastInput = signal('');
+  readonly pastParticipleInput = signal('');
+
+  // Expanded row in word list
+  readonly expandedRowId = signal<string | null>(null);
 
   readonly isNoun = computed(() => this.partOfSpeechInput() === 'noun');
+  readonly isVerb = computed(() => this.partOfSpeechInput() === 'verb');
 
   readonly apiKeyInput = signal('');
   readonly apiKeySaved = signal(false);
@@ -69,6 +113,10 @@ export class ManageComponent {
     this.translationEnInput.set('');
     this.translationRuInput.set('');
     this.levelInput.set('A1');
+    this.verbTypeInput.set('weak');
+    this.presentThirdPersonInput.set('');
+    this.simplePastInput.set('');
+    this.pastParticipleInput.set('');
     this.clearSuggestion();
   }
 
@@ -80,6 +128,10 @@ export class ManageComponent {
     this.translationEnInput.set(word.translationEn);
     this.translationRuInput.set(word.translationRu);
     this.levelInput.set(word.level);
+    this.verbTypeInput.set(word.verbType ?? 'weak');
+    this.presentThirdPersonInput.set(word.presentThirdPerson ?? '');
+    this.simplePastInput.set(word.simplePast ?? '');
+    this.pastParticipleInput.set(word.pastParticiple ?? '');
     this.clearSuggestion();
   }
 
@@ -91,6 +143,10 @@ export class ManageComponent {
     this.translationEnInput.set('');
     this.translationRuInput.set('');
     this.levelInput.set('A1');
+    this.verbTypeInput.set('weak');
+    this.presentThirdPersonInput.set('');
+    this.simplePastInput.set('');
+    this.pastParticipleInput.set('');
     this.clearSuggestion();
   }
 
@@ -108,6 +164,8 @@ export class ManageComponent {
 
     const isNoun = this.partOfSpeechInput() === 'noun';
 
+    const isVerb = this.partOfSpeechInput() === 'verb';
+
     const data = {
       german,
       partOfSpeech: this.partOfSpeechInput(),
@@ -117,6 +175,10 @@ export class ManageComponent {
       level: this.levelInput(),
       mastery: existing?.mastery ?? 0,
       usageCount: existing?.usageCount ?? 0,
+      verbType: isVerb ? this.verbTypeInput() : undefined,
+      presentThirdPerson: isVerb ? (this.presentThirdPersonInput().trim() || undefined) : undefined,
+      simplePast: isVerb ? (this.simplePastInput().trim() || undefined) : undefined,
+      pastParticiple: isVerb ? (this.pastParticipleInput().trim() || undefined) : undefined,
     };
 
     if (this.editingId()) {
@@ -176,6 +238,13 @@ export class ManageComponent {
     this.translationEnInput.set(s.translationEn);
     this.translationRuInput.set(s.translationRu);
     this.levelInput.set(s.level);
+    // Fill verb fields if present
+    if (s.verbType) {
+      this.verbTypeInput.set(s.verbType);
+      this.presentThirdPersonInput.set(s.presentThirdPerson ?? '');
+      this.simplePastInput.set(s.simplePast ?? '');
+      this.pastParticipleInput.set(s.pastParticiple ?? '');
+    }
     this.clearSuggestion();
   }
 
@@ -194,6 +263,16 @@ export class ManageComponent {
       return '';
     }
     return date.toLocaleDateString();
+  }
+
+  getVerbTypeLabel(type: VerbType | undefined): string {
+    if (!type) return '';
+    const labels: Record<VerbType, string> = { strong: 'stark', weak: 'schwach', mixed: 'gemischt' };
+    return labels[type];
+  }
+
+  toggleExpand(wordId: string): void {
+    this.expandedRowId.update((current) => (current === wordId ? null : wordId));
   }
 
   getTranslation(word: Word): string {

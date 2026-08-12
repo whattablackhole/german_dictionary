@@ -97,6 +97,46 @@
       </mat-form-field>
     </div>
 
+    @if (isVerb()) {
+      <div class="verb-forms-row">
+        <mat-form-field appearance="outline" class="form-field verb-form-field">
+          <mat-label>Verb type</mat-label>
+          <mat-select [(ngModel)]="verbTypeInput">
+            @for (type of verbTypes; track type) {
+              <mat-option [value]="type">{{ getVerbTypeLabel(type) }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="form-field verb-form-field">
+          <mat-label>er/sie/es form</mat-label>
+          <input
+            matInput
+            [(ngModel)]="presentThirdPersonInput"
+            placeholder="e.g. fliegt"
+          />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="form-field verb-form-field">
+          <mat-label>Simple past</mat-label>
+          <input
+            matInput
+            [(ngModel)]="simplePastInput"
+            placeholder="e.g. flog"
+          />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="form-field verb-form-field">
+          <mat-label>Past participle</mat-label>
+          <input
+            matInput
+            [(ngModel)]="pastParticipleInput"
+            placeholder="e.g. geflogen"
+          />
+        </mat-form-field>
+      </div>
+    }
+
     <div class="form-actions form-actions-between">
       <div class="ai-suggest">
         <button
@@ -182,6 +222,22 @@
               </span>
             </div>
           }
+          @if (s.verbType) {
+            <div class="ai-suggestion-item">
+              <span class="ai-suggestion-label">Verb type</span>
+              <span class="ai-suggestion-level">{{ getVerbTypeLabel(s.verbType) }}</span>
+            </div>
+            <div class="ai-suggestion-item">
+              <span class="ai-suggestion-label">Conjugation</span>
+              <span class="ai-suggestion-conjugation">
+                <span class="verb-form">{{ s.presentThirdPerson }}</span>
+                <span class="verb-arrow">&rarr;</span>
+                <span class="verb-form">{{ s.simplePast }}</span>
+                <span class="verb-arrow">&rarr;</span>
+                <span class="verb-form verb-form-participle">{{ s.pastParticiple }}</span>
+              </span>
+            </div>
+          }
           <div class="ai-suggestion-item">
             <span class="ai-suggestion-label">Level</span>
             <span class="ai-suggestion-level">{{ s.level }}</span>
@@ -198,7 +254,55 @@
   </div>
 
   <div class="word-list-card">
-    <h2 class="form-title">Word List ({{ words().length }})</h2>
+    <h2 class="form-title">Word List ({{ allWords().length }})</h2>
+
+    <div class="list-filter-bar">
+      <mat-form-field appearance="outline" class="list-search-field">
+        <mat-label>Search</mat-label>
+        <input
+          matInput
+          [(ngModel)]="searchQuery"
+          placeholder="german, english, russian..."
+        />
+        @if (searchQuery()) {
+          <button matSuffix mat-icon-button aria-label="Clear" (click)="searchQuery.set('')">
+            <mat-icon>close</mat-icon>
+          </button>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="list-filter-select">
+        <mat-label>Type</mat-label>
+        <mat-select [(ngModel)]="posFilter">
+          <mat-option value="">All</mat-option>
+          @for (pos of partsOfSpeech; track pos.key) {
+            <mat-option [value]="pos.key">{{ pos.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="list-filter-select">
+        <mat-label>Level</mat-label>
+        <mat-select [(ngModel)]="levelFilter">
+          <mat-option value="">All</mat-option>
+          @for (level of levels; track level) {
+            <mat-option [value]="level">{{ level }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="list-filter-select">
+        <mat-label>Gender</mat-label>
+        <mat-select [(ngModel)]="genderFilter">
+          <mat-option value="">All</mat-option>
+          @for (gender of genders; track gender) {
+            <mat-option [value]="gender">{{ gender }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <span class="list-filter-count">{{ words().length }} shown</span>
+    </div>
 
     @if (words().length === 0) {
       <p class="empty-state">No words yet. Add your first word above!</p>
@@ -215,33 +319,60 @@
         </div>
 
         @for (word of words(); track word.id) {
-          <div class="word-table-row" [class.editing]="isEditing(word.id)">
-            <span class="pos-cell">{{ getPosLabel(word.partOfSpeech) }}</span>
-            <span class="article-cell" [class.der]="word.gender === 'der'" [class.die]="word.gender === 'die'" [class.das]="word.gender === 'das'">
-              {{ word.gender ?? '—' }}
-            </span>
-            <span class="german-cell" [class.der]="word.gender === 'der'" [class.die]="word.gender === 'die'" [class.das]="word.gender === 'das'">{{ word.german }}</span>
-            <span class="translation-cell">{{ getTranslation(word) }}</span>
-            <span class="level-cell">{{ word.level }}</span>
-            <span class="date-cell">{{ formatDate(word.createdAt) }}</span>
-            <span class="actions-cell">
-              <button
-                mat-icon-button
-                color="primary"
-                aria-label="Edit word"
-                (click)="startEdit(word)"
-              >
-                <mat-icon>edit</mat-icon>
-              </button>
-              <button
-                mat-icon-button
-                color="warn"
-                aria-label="Delete word"
-                (click)="deleteWord(word.id)"
-              >
-                <mat-icon>delete</mat-icon>
-              </button>
-            </span>
+          <div class="word-row-wrapper" [class.editing]="isEditing(word.id)">
+            <div class="word-table-row">
+              <span class="pos-cell">{{ getPosLabel(word.partOfSpeech) }}</span>
+              <span class="article-cell" [class.der]="word.gender === 'der'" [class.die]="word.gender === 'die'" [class.das]="word.gender === 'das'">
+                {{ word.gender ?? '—' }}
+              </span>
+              <span class="german-cell" [class.der]="word.gender === 'der'" [class.die]="word.gender === 'die'" [class.das]="word.gender === 'das'">
+                @if (word.partOfSpeech === 'verb') {
+                  <button class="expand-toggle" (click)="toggleExpand(word.id)" title="Show verb forms">
+                    <mat-icon>{{ expandedRowId() === word.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+                  </button>
+                }
+                {{ word.german }}
+              </span>
+              <span class="translation-cell">{{ getTranslation(word) }}</span>
+              <span class="level-cell">{{ word.level }}</span>
+              <span class="date-cell">{{ formatDate(word.createdAt) }}</span>
+              <span class="actions-cell">
+                <button
+                  mat-icon-button
+                  color="primary"
+                  aria-label="Edit word"
+                  (click)="startEdit(word)"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  mat-icon-button
+                  color="warn"
+                  aria-label="Delete word"
+                  (click)="deleteWord(word.id)"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </span>
+            </div>
+
+            @if (word.partOfSpeech === 'verb' && expandedRowId() === word.id) {
+              <div class="verb-details-row">
+                <div class="verb-details-content">
+                  <span class="verb-type-badge" [class.strong]="word.verbType === 'strong'" [class.weak]="word.verbType === 'weak'" [class.mixed]="word.verbType === 'mixed'">
+                    {{ getVerbTypeLabel(word.verbType) }}
+                  </span>
+                  <span class="verb-form-label">Präsens (er/sie/es):</span>
+                  <span class="verb-form-value">{{ word.presentThirdPerson ?? '—' }}</span>
+                  <span class="verb-form-sep">&vert;</span>
+                  <span class="verb-form-label">Präteritum:</span>
+                  <span class="verb-form-value">{{ word.simplePast ?? '—' }}</span>
+                  <span class="verb-form-sep">&vert;</span>
+                  <span class="verb-form-label">Partizip II:</span>
+                  <span class="verb-form-value verb-form-highlight">{{ word.pastParticiple ?? '—' }}</span>
+                </div>
+              </div>
+            }
           </div>
         }
       </div>

@@ -3,6 +3,64 @@
   <p class="page-subtitle">German nouns grouped by grammatical gender</p>
 
   <div class="filter-bar">
+    <mat-form-field appearance="outline" class="search-field">
+      <mat-label>Search words</mat-label>
+      <input
+        matInput
+        [(ngModel)]="searchQuery"
+        placeholder="german, english, russian..."
+      />
+      @if (searchQuery()) {
+        <button matSuffix mat-icon-button aria-label="Clear search" (click)="searchQuery.set('')">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="filter-select">
+      <mat-label>Type</mat-label>
+      <mat-select [(ngModel)]="posFilter">
+        <mat-option value="">All</mat-option>
+        @for (pos of partsOfSpeech; track pos) {
+          <mat-option [value]="pos">{{ pos }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="filter-select">
+      <mat-label>Level</mat-label>
+      <mat-select [(ngModel)]="levelFilter">
+        <mat-option value="">All</mat-option>
+        @for (level of levels; track level) {
+          <mat-option [value]="level">{{ level }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="filter-number">
+      <mat-label>Mastery min</mat-label>
+      <input
+        matInput
+        type="number"
+        min="0"
+        max="100"
+        [(ngModel)]="masteryMin"
+        placeholder="0"
+      />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="filter-number">
+      <mat-label>Mastery max</mat-label>
+      <input
+        matInput
+        type="number"
+        min="0"
+        max="100"
+        [(ngModel)]="masteryMax"
+        placeholder="100"
+      />
+    </mat-form-field>
+
     <mat-form-field appearance="outline" class="date-field">
       <mat-label>From date</mat-label>
       <input
@@ -57,6 +115,11 @@
 @for (word of wordsByGender()[gender.key]; track word.id) {
               <li class="word-item" [style.--mastery-bg]="getMasteryColor(word.mastery, gender.color)">
                 <span class="word-german" [style.color]="gender.color">
+                  @if (word.partOfSpeech === 'verb') {
+                    <button class="expand-toggle" (click)="toggleExpand(word.id)" title="Show verb forms">
+                      <mat-icon>{{ expandedWordId() === word.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    </button>
+                  }
                   <span class="word-article">{{ word.gender }}</span>
                   {{ word.german }}
                 </span>
@@ -72,6 +135,23 @@
                   </button>
                 </span>
               </li>
+              @if (word.partOfSpeech === 'verb' && expandedWordId() === word.id) {
+                <li class="verb-details-item">
+                  <div class="verb-details-content">
+                    <span class="verb-type-badge" [class.strong]="word.verbType === 'strong'" [class.weak]="word.verbType === 'weak'" [class.mixed]="word.verbType === 'mixed'">
+                      {{ getVerbTypeLabel(word.verbType) }}
+                    </span>
+                    <span class="verb-form-label">Präsens (er/sie/es):</span>
+                    <span class="verb-form-value">{{ word.presentThirdPerson ?? '—' }}</span>
+                    <span class="verb-form-sep">&vert;</span>
+                    <span class="verb-form-label">Präteritum:</span>
+                    <span class="verb-form-value">{{ word.simplePast ?? '—' }}</span>
+                    <span class="verb-form-sep">&vert;</span>
+                    <span class="verb-form-label">Partizip II:</span>
+                    <span class="verb-form-value verb-form-highlight">{{ word.pastParticiple ?? '—' }}</span>
+                  </div>
+                </li>
+              }
             }
           </ul>
         }
@@ -94,6 +174,11 @@
           @for (word of wordsByGender()['other']; track word.id) {
             <li class="word-item" [style.--mastery-bg]="getMasteryColor(word.mastery, '#757575')">
               <span class="word-german">
+                @if (word.partOfSpeech === 'verb') {
+                  <button class="expand-toggle" (click)="toggleExpand(word.id)" title="Show verb forms">
+                    <mat-icon>{{ expandedWordId() === word.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+                  </button>
+                }
                 <span class="pos-badge">{{ getPosLabel(word) }}</span>
                 {{ word.german }}
               </span>
@@ -109,6 +194,23 @@
                 </button>
               </span>
             </li>
+            @if (word.partOfSpeech === 'verb' && expandedWordId() === word.id) {
+              <li class="verb-details-item">
+                <div class="verb-details-content">
+                  <span class="verb-type-badge" [class.strong]="word.verbType === 'strong'" [class.weak]="word.verbType === 'weak'" [class.mixed]="word.verbType === 'mixed'">
+                    {{ getVerbTypeLabel(word.verbType) }}
+                  </span>
+                  <span class="verb-form-label">Präsens (er/sie/es):</span>
+                  <span class="verb-form-value">{{ word.presentThirdPerson ?? '—' }}</span>
+                  <span class="verb-form-sep">&vert;</span>
+                  <span class="verb-form-label">Präteritum:</span>
+                  <span class="verb-form-value">{{ word.simplePast ?? '—' }}</span>
+                  <span class="verb-form-sep">&vert;</span>
+                  <span class="verb-form-label">Partizip II:</span>
+                  <span class="verb-form-value verb-form-highlight">{{ word.pastParticiple ?? '—' }}</span>
+                </div>
+              </li>
+            }
           }
         </ul>
       }

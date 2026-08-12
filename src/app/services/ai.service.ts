@@ -8,6 +8,11 @@ export interface AiSuggestion {
   partOfSpeech: PartOfSpeech;
   gender: Gender | null;
   level: DifficultyLevel;
+  // Verb-specific fields (only when partOfSpeech is 'verb')
+  verbType?: 'strong' | 'weak' | 'mixed';
+  presentThirdPerson?: string;
+  simplePast?: string;
+  pastParticiple?: string;
 }
 
 export interface TranslationError {
@@ -75,6 +80,10 @@ export class AiService {
 - "partOfSpeech": the part of speech, exactly one of "noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection", "numeral" or "phrase"
 - "gender": the grammatical gender, exactly one of "der", "die" or "das", OR null if the word is NOT a noun
 - "level": the CEFR difficulty level of the word, exactly one of "A1", "A2", "B1", "B2" or "C1"
+- "verbType": (only if partOfSpeech is "verb") the verb conjugation type, exactly one of "strong", "weak" or "mixed". For other parts of speech, omit this field or set to null.
+- "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense form, e.g. "fliegt" for "fliegen", "ist" for "sein". For other parts of speech, omit.
+- "simplePast": (only if partOfSpeech is "verb") the simple past (Präteritum) form, e.g. "flog" for "fliegen", "war" for "sein". For other parts of speech, omit.
+- "pastParticiple": (only if partOfSpeech is "verb") the past participle (Partizip II) form, e.g. "geflogen" for "fliegen", "gewesen" for "sein". For other parts of speech, omit.
 
 Rules:
 - For nouns: gender is required. If the noun is plural-only, gender is "die". For compound nouns, use the gender of the last component.
@@ -133,15 +142,13 @@ Word: "${german}"`;
       partOfSpeech?: string;
       gender?: string | null;
       level?: string;
+      verbType?: string | null;
+      presentThirdPerson?: string | null;
+      simplePast?: string | null;
+      pastParticiple?: string | null;
     };
     try {
-      parsed = JSON.parse(jsonText) as {
-        translationEn?: string;
-        translationRu?: string;
-        partOfSpeech?: string;
-        gender?: string | null;
-        level?: string;
-      };
+      parsed = JSON.parse(jsonText) as typeof parsed;
     } catch {
       throw new Error('AI returned an invalid response.');
     }
@@ -172,7 +179,23 @@ Word: "${german}"`;
     const validLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
     const finalLevel = validLevels.includes(level) ? level : 'A1';
 
-    return { translationEn, translationRu, partOfSpeech, gender, level: finalLevel };
+    // Extract verb-specific fields
+    const isVerb = partOfSpeech === 'verb';
+    const validVerbTypes = ['strong', 'weak', 'mixed'];
+    const verbTypeRaw = parsed.verbType?.trim().toLowerCase() ?? '';
+    const verbType = isVerb && validVerbTypes.includes(verbTypeRaw) ? verbTypeRaw as 'strong' | 'weak' | 'mixed' : undefined;
+
+    return {
+      translationEn,
+      translationRu,
+      partOfSpeech,
+      gender,
+      level: finalLevel,
+      verbType,
+      presentThirdPerson: isVerb ? (parsed.presentThirdPerson?.trim() || undefined) : undefined,
+      simplePast: isVerb ? (parsed.simplePast?.trim() || undefined) : undefined,
+      pastParticiple: isVerb ? (parsed.pastParticiple?.trim() || undefined) : undefined,
+    };
   }
 
   async generateSentences(
@@ -524,6 +547,129 @@ Student's translation: "${userInput}"`;
       errors: parsed.errors ?? [],
       feedback: parsed.feedback ?? '',
     };
+  }
+
+  async generateStory(config: {
+    theme: string;
+    level: DifficultyLevel;
+    wordTypes: string[];
+    grammarTopics: string[];
+    sentenceCount: number;
+  }): Promise<{ title: string; german: string; translationEn: string; translationRu: string }> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const wordTypesInstruction = config.wordTypes.length > 0
+      ? `Prioritize using these word types: ${config.wordTypes.join(', ')}.`
+      : '';
+    const grammarInstruction = config.grammarTopics.length > 0
+      ? `The story must demonstrate these grammar topics: ${config.grammarTopics.join(', ')}.`
+      : '';
+
+    const prompt = `You are a German language teacher. Generate a cohesive German story at CEFR level ${config.level}.
+Respond with JSON only (no markdown) as an object with these fields:
+- "title": a short, engaging title for the story
+- "german": the complete German story text (${config.sentenceCount} sentences, all in one paragraph or with line breaks)
+- "translationEn": the complete English translation
+- "translationRu": the complete Russian translation
+
+Rules:
+- The story must be about the theme: "${config.theme}".
+- ${wordTypesInstruction}
+- ${grammarInstruction}
+- The story should be natural and coherent, not a list of isolated sentences.
+- Use vocabulary and grammar appropriate for ${config.level} level.
+- Generate exactly ${config.sentenceCount} sentences.
+- The German text must use proper punctuation and capitalization.
+
+Generate exactly ${config.sentenceCount} sentences.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: { title?: string; german?: string; translationEn?: string; translationRu?: string };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    if (!parsed.german || !parsed.translationEn || !parsed.translationRu) {
+      throw new Error('AI could not generate a complete story. Try again.');
+    }
+
+    return {
+      title: parsed.title ?? 'Untitled Story',
+      german: parsed.german,
+      translationEn: parsed.translationEn,
+      translationRu: parsed.translationRu,
+    };
+  }
+
+  async generateSpeechOpenAI(text: string): Promise<string> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const response = await fetch('https://openrouter.ai/api/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'microsoft/mai-voice-2-flash',
+        input: text,
+        voice: 'de-DE-Klaus:MAI-Voice-2',
+        response_format: 'mp3',
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('API key rejected. Check your OpenRouter key.');
+      }
+      if (response.status === 402) {
+        throw new Error('OpenRouter account has insufficient credits for TTS.');
+      }
+      throw new Error(`TTS request failed (HTTP ${response.status})`);
+    }
+
+    // Response is raw audio bytes — convert to a base64 data URL for persistence
+    const blob = await response.blob();
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to encode audio data.'));
+      reader.readAsDataURL(blob);
+    });
   }
 
   private handleError(response: Response): never {

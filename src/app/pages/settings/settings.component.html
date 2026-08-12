@@ -24,4 +24,22 @@
       Show article (der/die/das) in sentence — when off, the blank includes the article
     </mat-slide-toggle>
   </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Text-to-Speech Engine</h2>
+    <p class="settings-description">
+      Choose which TTS engine to use for story playback. Browser TTS is free and works offline.
+      Microsoft MAI-Voice-2 Flash provides natural German speech via OpenRouter (requires API key with credits).
+    </p>
+    <mat-form-field appearance="outline" class="tts-select">
+      <mat-label>TTS Engine</mat-label>
+      <mat-select
+        [value]="settingsService.ttsEngine()"
+        (valueChange)="setTtsEngine($event)"
+      >
+        <mat-option value="browser">Browser SpeechSynthesis (free)</mat-option>
+        <mat-option value="openai">Microsoft MAI-Voice-2 Flash (German, via OpenRouter)</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </mat-card>
 </div>

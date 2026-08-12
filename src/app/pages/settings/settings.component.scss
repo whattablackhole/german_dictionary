@@ -30,3 +30,15 @@
   flex-direction: column;
   gap: 12px;
 }
+
+.settings-description {
+  margin: 0 0 12px;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.tts-select {
+  width: 320px;
+  max-width: 100%;
+}

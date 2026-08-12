@@ -1,12 +1,25 @@
 import { Injectable } from '@angular/core';
+import { Subject } from 'rxjs';
+
+export interface SpeechWordBoundary {
+  charIndex: number;
+  charLength: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class SpeechService {
   private voices: SpeechSynthesisVoice[] = [];
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
+  private _onBoundary = new Subject<SpeechWordBoundary>();
+  private _onEnd = new Subject<void>();
+  private _onStart = new Subject<void>();
+
+  readonly onBoundary = this._onBoundary.asObservable();
+  readonly onEnd = this._onEnd.asObservable();
+  readonly onStart = this._onStart.asObservable();
 
   constructor() {
     if ('speechSynthesis' in window) {
-      // Load available voices (async in some browsers)
       this.voices = window.speechSynthesis.getVoices();
       window.speechSynthesis.onvoiceschanged = () => {
         this.voices = window.speechSynthesis.getVoices();
@@ -20,13 +33,11 @@ export class SpeechService {
       return;
     }
 
-    // Stop any currently playing speech before starting new playback
-    window.speechSynthesis.cancel();
+    this.stop();
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = 'de-DE';
 
-    // Prefer a German voice if available
     const germanVoice = this.voices.find((v) =>
       v.lang.toLowerCase().startsWith('de')
     );
@@ -34,6 +45,36 @@ export class SpeechService {
       utterance.voice = germanVoice;
     }
 
+    utterance.onboundary = (event) => {
+      if (event.name === 'word') {
+        this._onBoundary.next({
+          charIndex: event.charIndex,
+          charLength: event.charLength ?? 0,
+        });
+      }
+    };
+
+    utterance.onend = () => {
+      this.currentUtterance = null;
+      this._onEnd.next();
+    };
+
+    utterance.onstart = () => {
+      this._onStart.next();
+    };
+
+    this.currentUtterance = utterance;
     window.speechSynthesis.speak(utterance);
+  }
+
+  stop(): void {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    this.currentUtterance = null;
+  }
+
+  isSpeaking(): boolean {
+    return 'speechSynthesis' in window && window.speechSynthesis.speaking;
   }
 }

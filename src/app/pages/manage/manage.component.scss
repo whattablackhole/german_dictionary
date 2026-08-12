@@ -236,6 +236,30 @@
   padding: 24px 0;
 }
 
+.list-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.list-search-field {
+  width: 200px;
+  flex: 1 1 160px;
+}
+
+.list-filter-select {
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.list-filter-count {
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
 .word-table {
   display: flex;
   flex-direction: column;
@@ -346,4 +370,156 @@
 
 .actions-header {
   text-align: right;
+}
+
+/* Verb forms row (appears below the main form row when verb is selected) */
+.verb-forms-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--mat-sys-surface-container-low);
+  border-radius: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.verb-form-field {
+  min-width: 140px;
+  flex: 1;
+}
+
+/* Expandable verb details in word list */
+.word-row-wrapper {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  &.editing {
+    background: var(--mat-sys-surface-container-low);
+  }
+}
+
+.word-table-row {
+  display: grid;
+  grid-template-columns: 70px 60px 1fr 1fr 60px 90px 90px;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.expand-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant);
+  cursor: pointer;
+  vertical-align: middle;
+  margin-right: 4px;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high);
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.verb-details-row {
+  padding: 0 12px 10px 12px;
+}
+
+.verb-details-content {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--mat-sys-surface-container-low);
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.verb-type-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+
+  &.strong {
+    background: #e3f2fd;
+    color: #1565c0;
+  }
+
+  &.weak {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  &.mixed {
+    background: #fff3e0;
+    color: #e65100;
+  }
+}
+
+.verb-form-label {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 12px;
+}
+
+.verb-form-value {
+  font-weight: 500;
+  color: var(--mat-sys-on-surface);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+}
+
+.verb-form-highlight {
+  color: var(--mat-sys-primary);
+  font-weight: 600;
+}
+
+.verb-form-sep {
+  color: var(--mat-sys-outline-variant);
+  font-size: 14px;
+}
+
+/* AI suggestion conjugation display */
+.ai-suggestion-conjugation {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.verb-arrow {
+  color: var(--mat-sys-outline-variant);
+  font-size: 14px;
+  margin: 0 2px;
+}
+
+.verb-form {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 6px;
+  background: var(--mat-sys-surface-container-high);
+  border-radius: 4px;
+}
+
+.verb-form-participle {
+  color: var(--mat-sys-primary);
+  font-weight: 600;
 }
