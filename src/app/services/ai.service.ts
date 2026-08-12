@@ -10,6 +10,7 @@ export interface AiSuggestion {
   level: DifficultyLevel;
   // Verb-specific fields (only when partOfSpeech is 'verb')
   verbType?: 'strong' | 'weak' | 'mixed';
+  infinitive?: string;
   presentThirdPerson?: string;
   simplePast?: string;
   pastParticiple?: string;
@@ -81,6 +82,7 @@ export class AiService {
 - "gender": the grammatical gender, exactly one of "der", "die" or "das", OR null if the word is NOT a noun
 - "level": the CEFR difficulty level of the word, exactly one of "A1", "A2", "B1", "B2" or "C1"
 - "verbType": (only if partOfSpeech is "verb") the verb conjugation type, exactly one of "strong", "weak" or "mixed". For other parts of speech, omit this field or set to null.
+- "infinitive": (only if partOfSpeech is "verb") the infinitive form of the verb, e.g. "schmecken" for "schmeckt", "sein" for "ist", "gehen" for "geht". For other parts of speech, omit.
 - "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense form, e.g. "fliegt" for "fliegen", "ist" for "sein". For other parts of speech, omit.
 - "simplePast": (only if partOfSpeech is "verb") the simple past (Präteritum) form, e.g. "flog" for "fliegen", "war" for "sein". For other parts of speech, omit.
 - "pastParticiple": (only if partOfSpeech is "verb") the past participle (Partizip II) form, e.g. "geflogen" for "fliegen", "gewesen" for "sein". For other parts of speech, omit.
@@ -93,6 +95,7 @@ Rules:
 - Capitalize translations properly (nouns in English are lowercase, but proper names are capitalized).
 - Common everyday words are typically A1-A2, less common words are B1-B2, specialized/formal words are C1.
 - If the input is not a recognizable German word, still provide your best guess for all fields.
+- IMPORTANT: If the input is a conjugated verb form (e.g. "schmeckt", "geht", "ist"), set "infinitive" to the infinitive form (e.g. "schmecken", "gehen", "sein").
 
 Word: "${german}"`;
 
@@ -143,6 +146,7 @@ Word: "${german}"`;
       gender?: string | null;
       level?: string;
       verbType?: string | null;
+      infinitive?: string | null;
       presentThirdPerson?: string | null;
       simplePast?: string | null;
       pastParticiple?: string | null;
@@ -192,6 +196,7 @@ Word: "${german}"`;
       gender,
       level: finalLevel,
       verbType,
+      infinitive: isVerb ? (parsed.infinitive?.trim() || undefined) : undefined,
       presentThirdPerson: isVerb ? (parsed.presentThirdPerson?.trim() || undefined) : undefined,
       simplePast: isVerb ? (parsed.simplePast?.trim() || undefined) : undefined,
       pastParticiple: isVerb ? (parsed.pastParticiple?.trim() || undefined) : undefined,

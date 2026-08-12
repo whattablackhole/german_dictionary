@@ -4,13 +4,22 @@ An interactive German language learning application built with [Angular CLI](htt
 
 ## Features
 
-- **Word Management** — Add, edit, and organize German vocabulary with translations, parts of speech, and difficulty levels
-- **AI-Powered Analysis** — Uses OpenRouter AI to analyze German words and generate exercises
-- **Sentence Generation** — Generate practice sentences at your CEFR level (A1-C1)
-- **Fill-in-the-Blank Exercises** — AI-generated cloze exercises targeting specific words
-- **Translation Verification** — Get AI feedback on your translations
+- **Word Management** — Add, edit, and organize German vocabulary with translations, parts of speech, gender, verb forms, and difficulty levels
+- **AI-Powered Analysis** — Uses OpenRouter AI to analyze German words (translation, gender, part of speech, verb conjugation types, CEFR level)
+- **Sentence Generation** — Generate practice sentences at your CEFR level (A1-C1) with specific word types and grammar topics
+- **Fill-in-the-Blank Exercises** — AI-generated cloze exercises targeting specific words with smart blank ranges (nouns exclude articles, separable verbs split into two blanks)
+- **Translation Verification** — Get AI feedback on your translations with error highlighting and scoring
 - **Local Translation** — Optional LibreTranslate integration for on-the-fly translations
-- **Text-to-Speech** — Hear German words and sentences pronounced
+- **Text-to-Speech** — Two TTS engines:
+  - **Browser SpeechSynthesis** — free, works offline
+  - **Microsoft MAI-Voice-2 Flash** — natural German voice via OpenRouter (requires API key with credits)
+- **Story Generator** — Generate cohesive German stories with AI, listen with word-by-word highlighting, progress slider, speed control, and pause/resume
+- **Word Lookup Mode** — Click any word in a story to see its translation, part of speech, verb forms, hear pronunciation, and add to dictionary (conjugated verbs auto-convert to infinitive)
+- **Grammar Notes** — AI-generated grammar explanations with examples and related topics
+- **Word Practice** — Practice words with cloze-style sentence completion
+- **Review** — Flashcard-style review of learned words with mastery tracking
+- **Word Matching Game** — Match German words with their translations in a timed game
+- **Settings** — Configure translation language (English/Russian), article display in practice, and TTS engine
 
 ## Prerequisites
 
@@ -28,12 +37,12 @@ npm install
 
 ### 2. Get an OpenRouter API Key
 
-The application uses OpenRouter AI to analyze words, generate sentences, and verify translations. You need an API key:
+The application uses OpenRouter AI to analyze words, generate sentences, create stories, and verify translations. You need an API key:
 
 1. Go to [openrouter.ai/keys](https://openrouter.ai/keys)
 2. Sign up or log in
 3. Create a new API key
-4. Add credits to your OpenRouter account (the app uses models like DeepSeek)
+4. Add credits to your OpenRouter account
 
 ### 3. Configure Your API Key
 
@@ -110,20 +119,25 @@ Uses the [Vitest](https://vitest.dev/) test runner.
 ```
 src/
 ├── app/
-│   ├── models/           # Data models (Word, Sentence, Exercise, etc.)
+│   ├── models/           # Data models (Word, Story, GrammarNote, etc.)
 │   ├── pages/            # Page components
 │   │   ├── exercise/     # Fill-in-the-blank exercises
 │   │   ├── game/         # Word matching game
+│   │   ├── grammar-notes/ # AI-generated grammar explanations
 │   │   ├── manage/       # Word CRUD management
-│   │   ├── practice-word/ # Word practice
-│   │   ├── review/       # Review learned words
-│   │   └── settings/     # Settings page (API key configuration, etc.)
+│   │   ├── practice-word/ # Word practice with cloze sentences
+│   │   ├── review/       # Flashcard review with mastery tracking
+│   │   ├── settings/     # Settings (API key, language, TTS engine)
+│   │   └── stories/      # AI story generator with TTS playback
+│   ├── pipes/            # Custom pipes (markdown rendering)
 │   ├── services/         # Application services
-│   │   ├── ai.service.ts         # OpenRouter AI integration
-│   │   ├── translation.service.ts # LibreTranslate integration
-│   │   ├── speech.service.ts     # Text-to-speech
-│   │   ├── word.service.ts       # Word data management
-│   │   ├── sentence.service.ts   # Sentence generation
+│   │   ├── ai.service.ts           # OpenRouter AI integration
+│   │   ├── translation.service.ts  # LibreTranslate integration
+│   │   ├── speech.service.ts       # Text-to-speech (browser + word boundary events)
+│   │   ├── word.service.ts         # Word data management (localStorage)
+│   │   ├── story.service.ts        # Story data management (localStorage)
+│   │   ├── grammar-notes.service.ts # Grammar notes management (localStorage)
+│   │   ├── settings.service.ts     # User settings (language, TTS, article display)
 │   │   └── ...
 │   ├── app.ts            # Root component
 │   └── app.config.ts     # Angular app configuration

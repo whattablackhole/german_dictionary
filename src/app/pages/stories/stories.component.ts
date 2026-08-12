@@ -142,9 +142,15 @@ export class StoriesComponent implements OnDestroy {
 
   readonly isWordAlreadyInDictionary = computed(() => {
     const word = this.selectedLookupWord();
+    const suggestion = this.wordSuggestion();
     if (!word) return false;
+    // Check both the clicked word and the infinitive (for verbs)
+    const checkWords = [word.toLowerCase()];
+    if (suggestion?.infinitive) {
+      checkWords.push(suggestion.infinitive.toLowerCase());
+    }
     return this.wordService.getWords().some(
-      (w) => w.german.toLowerCase() === word.toLowerCase()
+      (w) => checkWords.includes(w.german.toLowerCase())
     );
   });
 
@@ -463,8 +469,11 @@ export class StoriesComponent implements OnDestroy {
     const isNoun = suggestion.partOfSpeech === 'noun';
     const isVerb = suggestion.partOfSpeech === 'verb';
 
+    // Use infinitive for verbs if available, otherwise use the clicked word
+    const dictionaryWord = isVerb && suggestion.infinitive ? suggestion.infinitive : word;
+
     this.wordService.addWord({
-      german: word,
+      german: dictionaryWord,
       partOfSpeech: suggestion.partOfSpeech,
       gender: isNoun ? suggestion.gender : null,
       translationEn: suggestion.translationEn,
