@@ -240,6 +240,17 @@ export class PracticeWordComponent {
   /** Build the filled sentence with the user's answer / expected answer */
   buildFilledSentence(exercise: WordExercise, answer: string): string {
     const ranges = this.getBlankRanges(exercise);
+    // If multiple blank ranges (separable verb), split answer by space and fill each range
+    if (ranges.length > 1) {
+      const parts = answer.split(/\s+/);
+      const sorted = [...ranges].sort((a, b) => b.start - a.start);
+      let result = exercise.fullSentence;
+      for (let i = 0; i < sorted.length; i++) {
+        const part = parts[parts.length - 1 - i] ?? '';
+        result = result.slice(0, sorted[i].start) + part + result.slice(sorted[i].end);
+      }
+      return result.charAt(0).toUpperCase() + result.slice(1);
+    }
     const sorted = [...ranges].sort((a, b) => b.start - a.start);
     let result = exercise.fullSentence;
     for (const range of sorted) {
@@ -272,12 +283,12 @@ export class PracticeWordComponent {
     const newExercises = this.wordExerciseService.getNewExercises(levels, domain);
     const shuffledNew = this.shuffleArray(newExercises).slice(0, 5);
 
-    // 3. If we don't have enough exercises total, generate more
+    // 3. If we don't have enough exercises total (target ~10), generate more
     let exercises = [...shuffledInProgress, ...shuffledNew];
 
-    if (exercises.length < 3) {
+    if (exercises.length < 10) {
       await this.generateExercises(levels, domain);
-      // After generation, recheck
+      // After generation, recheck for fresh new exercises
       const freshNew = this.wordExerciseService.getNewExercises(levels, domain);
       const freshShuffled = this.shuffleArray(freshNew).slice(0, 10 - exercises.length);
       exercises = [...exercises, ...freshShuffled];
@@ -333,6 +344,35 @@ export class PracticeWordComponent {
     return shuffled;
   }
 
+  private readonly levelOrder: Record<DifficultyLevel, number> = { 'A1': 0, 'A2': 1, 'B1': 2, 'B2': 3, 'C1': 4 };
+  private readonly allLevelsOrdered: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
+
+  /** Determine the AI generation level range based on user selection and available words */
+  private determineGenerationLevel(
+    levels: DifficultyLevel[],
+    words: Word[]
+  ): { level: DifficultyLevel; levelRange: DifficultyLevel[] } {
+    let levelSet: Set<DifficultyLevel>;
+
+    if (this.selectedLevels().length > 0) {
+      // User explicitly selected levels → use exactly those
+      levelSet = new Set(this.selectedLevels());
+    } else {
+      // No levels selected → find the range from lowest to highest level among our words
+      const wordLevels = new Set(words.map((w) => w.level));
+      if (wordLevels.size === 0) {
+        return { level: 'A1', levelRange: ['A1'] };
+      }
+      levelSet = wordLevels;
+    }
+
+    const minIdx = Math.min(...Array.from(levelSet).map(l => this.levelOrder[l]));
+    const maxIdx = Math.max(...Array.from(levelSet).map(l => this.levelOrder[l]));
+    const levelRange = this.allLevelsOrdered.slice(minIdx, maxIdx + 1);
+    // Use the highest level as the primary level for the prompt
+    return { level: levelRange[levelRange.length - 1], levelRange };
+  }
+
   private async generateExercises(
     levels: DifficultyLevel[],
     domain?: string
@@ -374,7 +414,7 @@ export class PracticeWordComponent {
         }
       }
 
-      const level = levels[0] ?? 'A1';
+      const { level, levelRange } = this.determineGenerationLevel(levels, words);
       const generated: GeneratedWordExercise[] =
         await this.aiService.generateWordExercises(
           level,
@@ -382,7 +422,8 @@ export class PracticeWordComponent {
           10,
           domain,
           this.selectedGrammarTopics(),
-          avoidSentences.length > 0 ? avoidSentences : undefined
+          avoidSentences.length > 0 ? avoidSentences : undefined,
+          levelRange
         );
 
       // Map AI output to WordExercise objects

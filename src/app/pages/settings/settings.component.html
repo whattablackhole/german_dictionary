@@ -42,4 +42,33 @@
       </mat-select>
     </mat-form-field>
   </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Data Backup</h2>
+    <p class="settings-description">
+      Export all your data (words, sentences, stories, grammar notes, practice progress, settings, API key) to a JSON file,
+      and import it later — for example in a new browser — to restore everything.
+    </p>
+    <div class="backup-actions">
+      <button mat-raised-button color="primary" (click)="onExport()">
+        Export Data
+      </button>
+      <button mat-raised-button (click)="fileInput.click()">
+        Import Data
+      </button>
+      <input
+        #fileInput
+        type="file"
+        accept=".json,application/json"
+        class="file-input"
+        (change)="onImportFileSelected($event)"
+      />
+    </div>
+    @if (backupStatus) {
+      <p class="backup-status">{{ backupStatus }}</p>
+    }
+    @if (backupError) {
+      <p class="backup-error">{{ backupError }}</p>
+    }
+  </mat-card>
 </div>

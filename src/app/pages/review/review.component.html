@@ -115,8 +115,8 @@
 @for (word of wordsByGender()[gender.key]; track word.id) {
               <li class="word-item" [style.--mastery-bg]="getMasteryColor(word.mastery, gender.color)">
                 <span class="word-german" [style.color]="gender.color">
-                  @if (word.partOfSpeech === 'verb') {
-                    <button class="expand-toggle" (click)="toggleExpand(word.id)" title="Show verb forms">
+                  @if (word.partOfSpeech === 'verb' || word.partOfSpeech === 'noun') {
+                    <button class="expand-toggle" (click)="toggleExpand(word.id)" title="Show details">
                       <mat-icon>{{ expandedWordId() === word.id ? 'expand_less' : 'expand_more' }}</mat-icon>
                     </button>
                   }
@@ -149,6 +149,19 @@
                     <span class="verb-form-sep">&vert;</span>
                     <span class="verb-form-label">Partizip II:</span>
                     <span class="verb-form-value verb-form-highlight">{{ word.pastParticiple ?? '—' }}</span>
+                  </div>
+                </li>
+              }
+              @if (word.partOfSpeech === 'noun' && expandedWordId() === word.id) {
+                <li class="noun-details-item">
+                  <div class="noun-details-content">
+                    <span class="noun-form-label">Plural:</span>
+                    <span class="noun-form-value">{{ word.pluralForm ?? '—' }}</span>
+                    @if (word.pluralFormation) {
+                      <span class="noun-form-sep">&vert;</span>
+                      <span class="noun-form-label">Formation:</span>
+                      <span class="plural-formation-badge">{{ word.pluralFormation }}</span>
+                    }
                   </div>
                 </li>
               }

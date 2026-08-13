@@ -137,6 +137,28 @@
       </div>
     }
 
+    @if (isNoun()) {
+      <div class="noun-forms-row">
+        <mat-form-field appearance="outline" class="form-field noun-form-field">
+          <mat-label>Plural form</mat-label>
+          <input
+            matInput
+            [(ngModel)]="pluralFormInput"
+            placeholder="e.g. Hunde"
+          />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="form-field noun-form-field">
+          <mat-label>Plural formation</mat-label>
+          <mat-select [(ngModel)]="pluralFormationInput">
+            @for (pf of pluralFormations; track pf) {
+              <mat-option [value]="pf">{{ pf }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+    }
+
     <div class="form-actions form-actions-between">
       <div class="ai-suggest">
         <button
@@ -238,6 +260,17 @@
               </span>
             </div>
           }
+          @if (s.pluralForm) {
+            <div class="ai-suggestion-item">
+              <span class="ai-suggestion-label">Plural</span>
+              <span class="ai-suggestion-conjugation">
+                <span class="verb-form">{{ s.pluralForm }}</span>
+                @if (s.pluralFormation) {
+                  <span class="plural-formation-badge">{{ s.pluralFormation }}</span>
+                }
+              </span>
+            </div>
+          }
           <div class="ai-suggestion-item">
             <span class="ai-suggestion-label">Level</span>
             <span class="ai-suggestion-level">{{ s.level }}</span>
@@ -326,8 +359,8 @@
                 {{ word.gender ?? '—' }}
               </span>
               <span class="german-cell" [class.der]="word.gender === 'der'" [class.die]="word.gender === 'die'" [class.das]="word.gender === 'das'">
-                @if (word.partOfSpeech === 'verb') {
-                  <button class="expand-toggle" (click)="toggleExpand(word.id)" title="Show verb forms">
+                @if (word.partOfSpeech === 'verb' || word.partOfSpeech === 'noun') {
+                  <button class="expand-toggle" (click)="toggleExpand(word.id)" title="Show details">
                     <mat-icon>{{ expandedRowId() === word.id ? 'expand_less' : 'expand_more' }}</mat-icon>
                   </button>
                 }
@@ -370,6 +403,20 @@
                   <span class="verb-form-sep">&vert;</span>
                   <span class="verb-form-label">Partizip II:</span>
                   <span class="verb-form-value verb-form-highlight">{{ word.pastParticiple ?? '—' }}</span>
+                </div>
+              </div>
+            }
+
+            @if (word.partOfSpeech === 'noun' && expandedRowId() === word.id) {
+              <div class="noun-details-row">
+                <div class="noun-details-content">
+                  <span class="noun-form-label">Plural:</span>
+                  <span class="noun-form-value">{{ word.pluralForm ?? '—' }}</span>
+                  @if (word.pluralFormation) {
+                    <span class="noun-form-sep">&vert;</span>
+                    <span class="noun-form-label">Formation:</span>
+                    <span class="plural-formation-badge">{{ word.pluralFormation }}</span>
+                  }
                 </div>
               </div>
             }

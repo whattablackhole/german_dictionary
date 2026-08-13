@@ -42,3 +42,26 @@
   width: 320px;
   max-width: 100%;
 }
+
+.backup-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.file-input {
+  display: none;
+}
+
+.backup-status {
+  margin: 16px 0 0;
+  color: var(--mat-sys-primary);
+  font-size: 14px;
+}
+
+.backup-error {
+  margin: 16px 0 0;
+  color: var(--mat-sys-error);
+  font-size: 14px;
+}

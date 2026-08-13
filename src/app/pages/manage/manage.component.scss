@@ -389,6 +389,23 @@
   flex: 1;
 }
 
+/* Noun forms row (appears below the main form row when noun is selected) */
+.noun-forms-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--mat-sys-surface-container-low);
+  border-radius: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.noun-form-field {
+  min-width: 140px;
+  flex: 1;
+}
+
 /* Expandable verb details in word list */
 .word-row-wrapper {
   display: flex;
@@ -522,4 +539,49 @@
 .verb-form-participle {
   color: var(--mat-sys-primary);
   font-weight: 600;
+}
+
+/* Noun details row in word list */
+.noun-details-row {
+  padding: 0 12px 10px 12px;
+}
+
+.noun-details-content {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--mat-sys-surface-container-low);
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+
+.noun-form-label {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 12px;
+}
+
+.noun-form-value {
+  font-weight: 500;
+  color: var(--mat-sys-on-surface);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+}
+
+.noun-form-sep {
+  color: var(--mat-sys-outline-variant);
+  font-size: 14px;
+}
+
+.plural-formation-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #f3e5f5;
+  color: #7b1fa2;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }

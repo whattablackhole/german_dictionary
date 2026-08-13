@@ -6,6 +6,19 @@ export type DifficultyLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
 export type VerbType = 'strong' | 'weak' | 'mixed';
 
+export type PluralFormation =
+  | '-e'
+  | '-en'
+  | '-er'
+  | '-s'
+  | '-n'
+  | '-'
+  | 'umlaut'
+  | 'umlaut + -e'
+  | 'umlaut + -er'
+  | 'umlaut + -en'
+  | 'foreign';
+
 export type PartOfSpeech =
   | 'noun'
   | 'verb'
@@ -34,4 +47,7 @@ export interface Word {
   presentThirdPerson?: string;
   simplePast?: string;
   pastParticiple?: string;
+  // Noun-specific fields (optional)
+  pluralForm?: string;
+  pluralFormation?: PluralFormation;
 }

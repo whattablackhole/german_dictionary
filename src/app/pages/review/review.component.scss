@@ -291,3 +291,51 @@
   color: var(--mat-sys-outline-variant);
   font-size: 12px;
 }
+
+/* Noun details */
+.noun-details-item {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.noun-details-content {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--mat-sys-surface-container-high);
+  border-radius: 8px;
+  font-size: 12px;
+  margin: 0 6px 6px 24px;
+  border-left: 3px solid var(--gender-color, var(--mat-sys-primary));
+}
+
+.noun-form-label {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 11px;
+}
+
+.noun-form-value {
+  font-weight: 500;
+  color: var(--mat-sys-on-surface);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+}
+
+.noun-form-sep {
+  color: var(--mat-sys-outline-variant);
+  font-size: 12px;
+}
+
+.plural-formation-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #f3e5f5;
+  color: #7b1fa2;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}

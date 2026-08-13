@@ -14,6 +14,9 @@ export interface AiSuggestion {
   presentThirdPerson?: string;
   simplePast?: string;
   pastParticiple?: string;
+  // Noun-specific fields (only when partOfSpeech is 'noun')
+  pluralForm?: string;
+  pluralFormation?: string;
 }
 
 export interface TranslationError {
@@ -86,9 +89,12 @@ export class AiService {
 - "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense form, e.g. "fliegt" for "fliegen", "ist" for "sein". For other parts of speech, omit.
 - "simplePast": (only if partOfSpeech is "verb") the simple past (Präteritum) form, e.g. "flog" for "fliegen", "war" for "sein". For other parts of speech, omit.
 - "pastParticiple": (only if partOfSpeech is "verb") the past participle (Partizip II) form, e.g. "geflogen" for "fliegen", "gewesen" for "sein". For other parts of speech, omit.
+- "pluralForm": (only if partOfSpeech is "noun") the plural form of the noun, e.g. "Hunde" for "Hund", "Katze" for "Katze", "Häuser" for "Haus", "Autos" for "Auto". For other parts of speech, omit.
+- "pluralFormation": (only if partOfSpeech is "noun") the plural formation pattern, exactly one of "-e", "-en", "-er", "-s", "-n", "-", "umlaut", "umlaut + -e", "umlaut + -er", "umlaut + -en" or "foreign". For other parts of speech, omit.
 
 Rules:
 - For nouns: gender is required. If the noun is plural-only, gender is "die". For compound nouns, use the gender of the last component.
+- For nouns: always provide the pluralForm and pluralFormation.
 - For any non-noun (verb, adjective, adverb, etc.): gender MUST be null.
 - For verb infinitives (e.g. "gehen", "essen"), partOfSpeech is "verb".
 - For adjectives (e.g. "schnell", "schön"), partOfSpeech is "adjective".
@@ -150,6 +156,8 @@ Word: "${german}"`;
       presentThirdPerson?: string | null;
       simplePast?: string | null;
       pastParticiple?: string | null;
+      pluralForm?: string | null;
+      pluralFormation?: string | null;
     };
     try {
       parsed = JSON.parse(jsonText) as typeof parsed;
@@ -189,6 +197,11 @@ Word: "${german}"`;
     const verbTypeRaw = parsed.verbType?.trim().toLowerCase() ?? '';
     const verbType = isVerb && validVerbTypes.includes(verbTypeRaw) ? verbTypeRaw as 'strong' | 'weak' | 'mixed' : undefined;
 
+    // Extract noun-specific fields
+    const validPluralFormations = ['-e', '-en', '-er', '-s', '-n', '-', 'umlaut', 'umlaut + -e', 'umlaut + -er', 'umlaut + -en', 'foreign'];
+    const pluralFormationRaw = parsed.pluralFormation?.trim() ?? '';
+    const pluralFormation = isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
+
     return {
       translationEn,
       translationRu,
@@ -200,6 +213,8 @@ Word: "${german}"`;
       presentThirdPerson: isVerb ? (parsed.presentThirdPerson?.trim() || undefined) : undefined,
       simplePast: isVerb ? (parsed.simplePast?.trim() || undefined) : undefined,
       pastParticiple: isVerb ? (parsed.pastParticiple?.trim() || undefined) : undefined,
+      pluralForm: isNoun ? (parsed.pluralForm?.trim() || undefined) : undefined,
+      pluralFormation,
     };
   }
 
@@ -301,7 +316,8 @@ Example format:
     count: number,
     domain?: string,
     grammarTopics?: string[],
-    avoidSentences?: string[]
+    avoidSentences?: string[],
+    levelRange?: DifficultyLevel[]
   ): Promise<GeneratedWordExercise[]> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -320,7 +336,11 @@ Example format:
       ? `\n- Do NOT generate any of these exact sentences: ${avoidSentences.join('; ')}. Create different sentences using the same words.`
       : '';
 
-    const prompt = `You are a German language teacher. Generate ${count} German cloze (fill-in-the-blank) exercises at CEFR level ${level}.
+    const levelInstruction = levelRange && levelRange.length > 1
+      ? `Generate sentences at a variety of CEFR levels between ${levelRange[0]} and ${levelRange[levelRange.length - 1]}, mixing easier and harder sentences.`
+      : `Generate sentences at CEFR level ${level}.`;
+
+    const prompt = `You are a German language teacher. Generate ${count} German cloze (fill-in-the-blank) exercises. ${levelInstruction}
 Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
 - "fullSentence": the complete German sentence without blanks
 - "targetWord": the German word(s) the student must type (WITHOUT the article for nouns, e.g. "Hund"; for separable verbs the full verb form, e.g. "abholen")

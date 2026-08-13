@@ -11,7 +11,7 @@ import { WordService } from '../../services/word.service';
 import { SettingsService } from '../../services/settings.service';
 import { PartOfSpeechService, PartOfSpeechInfo } from '../../services/part-of-speech.service';
 import { AiService, AiSuggestion } from '../../services/ai.service';
-import { Gender, DifficultyLevel, PartOfSpeech, VerbType, Word } from '../../models/word';
+import { Gender, DifficultyLevel, PartOfSpeech, VerbType, PluralFormation, Word } from '../../models/word';
 
 @Component({
   selector: 'app-manage',
@@ -31,6 +31,7 @@ import { Gender, DifficultyLevel, PartOfSpeech, VerbType, Word } from '../../mod
 export class ManageComponent {
   readonly genders: Gender[] = ['der', 'die', 'das'];
   readonly verbTypes: VerbType[] = ['strong', 'weak', 'mixed'];
+  readonly pluralFormations: PluralFormation[] = ['-e', '-en', '-er', '-s', '-n', '-', 'umlaut', 'umlaut + -e', 'umlaut + -er', 'umlaut + -en', 'foreign'];
   readonly levels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
   readonly partsOfSpeech: PartOfSpeechInfo[];
 
@@ -80,6 +81,9 @@ export class ManageComponent {
   readonly presentThirdPersonInput = signal('');
   readonly simplePastInput = signal('');
   readonly pastParticipleInput = signal('');
+  // Noun-specific fields
+  readonly pluralFormInput = signal('');
+  readonly pluralFormationInput = signal<PluralFormation | ''>('');
 
   // Expanded row in word list
   readonly expandedRowId = signal<string | null>(null);
@@ -117,6 +121,8 @@ export class ManageComponent {
     this.presentThirdPersonInput.set('');
     this.simplePastInput.set('');
     this.pastParticipleInput.set('');
+    this.pluralFormInput.set('');
+    this.pluralFormationInput.set('');
     this.clearSuggestion();
   }
 
@@ -132,6 +138,8 @@ export class ManageComponent {
     this.presentThirdPersonInput.set(word.presentThirdPerson ?? '');
     this.simplePastInput.set(word.simplePast ?? '');
     this.pastParticipleInput.set(word.pastParticiple ?? '');
+    this.pluralFormInput.set(word.pluralForm ?? '');
+    this.pluralFormationInput.set(word.pluralFormation ?? '');
     this.clearSuggestion();
   }
 
@@ -147,6 +155,8 @@ export class ManageComponent {
     this.presentThirdPersonInput.set('');
     this.simplePastInput.set('');
     this.pastParticipleInput.set('');
+    this.pluralFormInput.set('');
+    this.pluralFormationInput.set('');
     this.clearSuggestion();
   }
 
@@ -179,12 +189,29 @@ export class ManageComponent {
       presentThirdPerson: isVerb ? (this.presentThirdPersonInput().trim() || undefined) : undefined,
       simplePast: isVerb ? (this.simplePastInput().trim() || undefined) : undefined,
       pastParticiple: isVerb ? (this.pastParticipleInput().trim() || undefined) : undefined,
+      pluralForm: isNoun ? (this.pluralFormInput().trim() || undefined) : undefined,
+      pluralFormation: isNoun ? (this.pluralFormationInput() || undefined) : undefined,
     };
 
     if (this.editingId()) {
       this.wordService.updateWord(this.editingId()!, data);
     } else {
-      this.wordService.addWord(data);
+      // Check for duplicate German word (case-insensitive)
+      const duplicate = this.wordService
+        .getWords()
+        .find((w) => w.german.toLowerCase() === german.toLowerCase());
+      if (duplicate) {
+        const confirmed = window.confirm(
+          `The word "${german}" already exists (${duplicate.translationEn}).\n\nClick OK to update the existing entry with the new data.\nClick Cancel to go back and edit.`
+        );
+        if (confirmed) {
+          this.wordService.updateWord(duplicate.id, data);
+        } else {
+          return; // keep the form open so the user can adjust
+        }
+      } else {
+        this.wordService.addWord(data);
+      }
     }
 
     this.cancelEdit();
@@ -244,6 +271,11 @@ export class ManageComponent {
       this.presentThirdPersonInput.set(s.presentThirdPerson ?? '');
       this.simplePastInput.set(s.simplePast ?? '');
       this.pastParticipleInput.set(s.pastParticiple ?? '');
+    }
+    // Fill noun fields if present
+    if (s.pluralForm) {
+      this.pluralFormInput.set(s.pluralForm);
+      this.pluralFormationInput.set((s.pluralFormation as PluralFormation) ?? '');
     }
     this.clearSuggestion();
   }
