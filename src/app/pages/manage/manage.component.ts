@@ -260,6 +260,10 @@ export class ManageComponent {
     if (!s) {
       return;
     }
+    // Use the base form if available (e.g. "sein" for "seine", "gut" for "gute")
+    if (s.baseForm?.trim()) {
+      this.germanInput.set(s.baseForm.trim());
+    }
     this.partOfSpeechInput.set(s.partOfSpeech);
     this.genderInput.set(s.gender ?? 'der');
     this.translationEnInput.set(s.translationEn);

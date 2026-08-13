@@ -214,11 +214,17 @@
 
     @if (suggestion(); as s) {
       <div class="ai-suggestion-card">
-        <div class="ai-suggestion-header">
+      <div class="ai-suggestion-header">
           <mat-icon>auto_awesome</mat-icon>
           <span>AI suggestion for <strong>{{ germanInput() }}</strong></span>
         </div>
         <div class="ai-suggestion-body">
+          @if (s.baseForm && s.baseForm !== germanInput().trim()) {
+            <div class="ai-suggestion-item ai-suggestion-baseform">
+              <span class="ai-suggestion-label">Base form</span>
+              <span class="ai-suggestion-baseform-value">{{ s.baseForm }}</span>
+            </div>
+          }
           <div class="ai-suggestion-item">
             <span class="ai-suggestion-label">English</span>
             <span class="ai-suggestion-translation">{{ s.translationEn }}</span>

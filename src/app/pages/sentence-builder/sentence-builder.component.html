@@ -1,0 +1,284 @@
+<div class="sentence-builder-layout">
+  <!-- Left Panel: Pattern List -->
+  <aside class="pattern-sidebar">
+    <h2>Sentence Patterns</h2>
+    <p class="sidebar-hint">Pick a pattern, then write a German sentence from scratch using your own words.</p>
+    <div class="pattern-list">
+      @for (pattern of patterns; track pattern.id) {
+        <button
+          class="pattern-card"
+          [class.active]="selectedPatternId() === pattern.id"
+          (click)="selectPattern(pattern.id)"
+        >
+          <div class="pattern-header">
+            <span class="pattern-level">Level {{ pattern.level }}</span>
+            @let mastery = patternService.getMastery(pattern.id);
+            <div class="mastery-bar-container" title="Mastery: {{ mastery }}%">
+              <div
+                class="mastery-bar"
+                [class.mastery-high]="mastery >= 80"
+                [class.mastery-mid]="mastery >= 40 && mastery < 80"
+                [class.mastery-low]="mastery < 40"
+                [style.width.%]="mastery"
+              ></div>
+            </div>
+          </div>
+          <div class="pattern-name">{{ pattern.name }}</div>
+        </button>
+      }
+    </div>
+  </aside>
+
+  <!-- Right Panel: Chat / Input -->
+  <main class="pattern-main">
+    @if (selectedPattern(); as pattern) {
+      <!-- Pattern Info Header -->
+      <div class="pattern-info">
+        <div class="pattern-info-header">
+          <h2>{{ pattern.name }}</h2>
+          <span class="level-badge">Level {{ pattern.level }}</span>
+        </div>
+        <div class="pattern-diagram">{{ pattern.wordOrderDiagram }}</div>
+        <p class="pattern-description">{{ pattern.description }}</p>
+        <details class="pattern-details">
+          <summary>Show Tips & Examples</summary>
+          <div class="pattern-tips">{{ pattern.tips }}</div>
+          <div class="pattern-examples">
+            <strong>Examples:</strong>
+            <ul>
+              @for (ex of pattern.examples; track ex) {
+                <li>{{ ex }}</li>
+              }
+            </ul>
+          </div>
+        </details>
+      </div>
+
+      <!-- Your Words Box -->
+      <div class="word-box">
+        <div class="word-box-header">
+          <span>Your Words ({{ wordBox().length }})</span>
+          <button mat-button (click)="reseedWords()" class="reseed-btn">
+            <mat-icon>refresh</mat-icon> New Seed
+          </button>
+        </div>
+        <div class="word-chips">
+          @for (word of wordBox(); track word.german) {
+            <button class="word-chip" (click)="insertWord(word.german)" title="{{ word.translationEn }}">
+              {{ word.german }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Chat Area -->
+      <div class="chat-area" #chatArea>
+        @if (messages().length === 0) {
+          <div class="chat-empty">
+            <mat-icon>chat</mat-icon>
+            <p>Write your first sentence using this pattern. Use the words above as building blocks!</p>
+          </div>
+        }
+        @for (msg of messages(); track msg; let msgIndex = $index) {
+          @if (msg.type === 'user' && msg.sentence) {
+            <div class="chat-message user-message">
+              <div class="message-avatar">You</div>
+              <div class="message-bubble">
+                <div class="message-text">{{ msg.sentence }}</div>
+                <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
+              </div>
+            </div>
+          }
+          @if (msg.type === 'ai') {
+            @if (msg.loading) {
+              <div class="chat-message ai-message">
+                <div class="message-avatar">AI</div>
+                <div class="message-bubble loading-bubble">
+                  <mat-spinner diameter="20"></mat-spinner>
+                  <span>Analyzing your sentence...</span>
+                </div>
+              </div>
+            }
+            @if (msg.feedback; as feedback) {
+              <div class="chat-message ai-message">
+                <div class="message-avatar">AI</div>
+                <div class="message-bubble">
+                  <div class="feedback-section">
+                    <div class="feedback-row" [class.status-ok]="feedback.patternCorrect" [class.status-bad]="!feedback.patternCorrect">
+                      <mat-icon>{{ feedback.patternCorrect ? 'check_circle' : 'error' }}</mat-icon>
+                      <span><strong>Pattern:</strong> {{ feedback.patternCorrect ? 'Correct!' : 'Needs work' }}</span>
+                    </div>
+                    @if (feedback.patternErrors.length > 0) {
+                      <ul class="feedback-errors">
+                        @for (err of feedback.patternErrors; track err) {
+                          <li>⚠️ {{ err }}</li>
+                        }
+                      </ul>
+                    }
+                    <div class="feedback-row" [class.status-ok]="feedback.vocabCorrect" [class.status-bad]="!feedback.vocabCorrect">
+                      <mat-icon>{{ feedback.vocabCorrect ? 'check_circle' : 'warning' }}</mat-icon>
+                      <span><strong>Vocabulary:</strong> {{ feedback.vocabCorrect ? 'All words from your vocabulary' : 'Some words not in your vocabulary' }}</span>
+                    </div>
+                    @if (feedback.unknownWords.length > 0) {
+                      <div class="unknown-words">
+                        <div class="unknown-words-text">
+                          Unknown words: <strong>{{ feedback.unknownWords.join(', ') }}</strong>
+                        </div>
+                        <button
+                          mat-stroked-button
+                          color="primary"
+                          class="add-words-btn"
+                          [disabled]="addingWords().has(msgIndex) || analyzingWords()"
+                          (click)="analyzeUnknownWords(msgIndex)"
+                        >
+                          @if (analyzingWords()) {
+                            <mat-spinner diameter="16"></mat-spinner>
+                            <span>Analyzing...</span>
+                          } @else {
+                            <ng-container>
+                              <mat-icon>playlist_add</mat-icon>
+                              <span>
+                                Add {{ feedback.unknownWords.length > 1 ? 'these words' : 'this word' }} to vocabulary
+                              </span>
+                            </ng-container>
+                          }
+                        </button>
+                      </div>
+                    }
+                    @if (feedback.tips.length > 0) {
+                      <div class="feedback-tips">
+                        <strong>💡 Tips:</strong>
+                        <ul>
+                          @for (tip of feedback.tips; track tip) {
+                            <li>{{ tip }}</li>
+                          }
+                        </ul>
+                      </div>
+                    }
+                    <div class="mastery-delta" [class.positive]="feedback.masteryDelta > 0" [class.negative]="feedback.masteryDelta < 0">
+                      Mastery: {{ feedback.masteryDelta > 0 ? '+' : '' }}{{ feedback.masteryDelta }}
+                      @let mastery = patternService.getMastery(pattern.id);
+                      <span class="current-mastery">({{ mastery }}%)</span>
+                    </div>
+                  </div>
+                  <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
+                </div>
+              </div>
+            }
+          }
+        }
+      </div>
+
+      <!-- Add Words Preview Dialog -->
+      @let currentMsgIndex = pendingMsgIndex();
+      @if (pendingWords(); as words) {
+        <div class="add-words-preview-overlay" (click)="cancelAddWords()">
+          <div class="add-words-preview" (click)="$event.stopPropagation()">
+            <div class="preview-header">
+              <h3>Add words to vocabulary</h3>
+              <button class="preview-close-btn" (click)="cancelAddWords()">
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+            <div class="preview-list">
+              @for (pw of words; track pw.word) {
+                <div class="preview-item" [class.is-duplicate]="pw.isDuplicate">
+                  <div class="preview-item-row">
+                    @if (!pw.isDuplicate) {
+                      <mat-checkbox
+                        [checked]="selectedPendingWords().has(pw.word)"
+                        (change)="togglePendingWord(pw.word)"
+                        color="primary"
+                        class="preview-checkbox"
+                      ></mat-checkbox>
+                    }
+                    <div class="preview-item-body">
+                      <div class="preview-word">{{ pw.word }}</div>
+                      @if (pw.isDuplicate) {
+                        <div class="preview-status">
+                          <mat-icon class="duplicate-icon">check_circle</mat-icon>
+                          <span>Already in vocabulary as <strong>{{ pw.duplicateOf }}</strong></span>
+                        </div>
+                      } @else {
+                        <div class="preview-details">
+                          <span class="preview-pos">{{ pw.suggestion.partOfSpeech }}</span>
+                          @if (pw.suggestion.gender) {
+                            <span class="preview-gender">{{ pw.suggestion.gender }}</span>
+                          }
+                          <span class="preview-level">{{ pw.suggestion.level }}</span>
+                        </div>
+                        <div class="preview-translations">
+                          <span>{{ pw.suggestion.translationEn }}</span>
+                          <span class="preview-ru">{{ pw.suggestion.translationRu }}</span>
+                        </div>
+                        @if (pw.storeAs !== pw.word) {
+                          <div class="preview-normalized">
+                            Will be saved as: <strong>{{ pw.storeAs }}</strong>
+                          </div>
+                        }
+                      }
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+            <div class="preview-actions">
+              <button mat-button (click)="cancelAddWords()">Cancel</button>
+              <button
+                mat-raised-button
+                color="primary"
+                [disabled]="addingWords().has(currentMsgIndex ?? -1) || selectedPendingWords().size === 0"
+                (click)="confirmAddWords(currentMsgIndex ?? -1)"
+              >
+                @if (addingWords().has(currentMsgIndex ?? -1)) {
+                  <mat-spinner diameter="16"></mat-spinner>
+                  <span>Adding...</span>
+                } @else {
+                  <span>Add {{ selectedPendingWords().size }} selected word{{ selectedPendingWords().size !== 1 ? 's' : '' }}</span>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Input Area -->
+      <div class="input-area">
+        @if (aiError()) {
+          <div class="ai-error">{{ aiError() }}</div>
+        }
+        <div class="input-row">
+          <mat-form-field appearance="outline" class="sentence-input">
+            <textarea
+              matInput
+              [(ngModel)]="userInput"
+              placeholder="Write your German sentence..."
+              rows="2"
+              (keydown.enter)="submitOnEnter($any($event))"
+            ></textarea>
+          </mat-form-field>
+          <button
+            mat-raised-button
+            color="primary"
+            class="send-btn"
+            [disabled]="!userInput().trim() || submitting()"
+            (click)="submitSentence()"
+          >
+            @if (submitting()) {
+              <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+              <mat-icon>send</mat-icon>
+            }
+          </button>
+        </div>
+        <div class="input-hint">Press Enter to send · Shift+Enter for new line</div>
+      </div>
+    } @else {
+      <div class="no-pattern-selected">
+        <mat-icon>menu_book</mat-icon>
+        <h2>Select a sentence pattern</h2>
+        <p>Choose a grammar pattern from the left to start practicing writing German sentences using your own vocabulary.</p>
+      </div>
+    }
+  </main>
+</div>

@@ -192,6 +192,20 @@
   gap: 8px;
 }
 
+.ai-suggestion-baseform {
+  background: #e3f2fd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  width: 100%;
+}
+
+.ai-suggestion-baseform-value {
+  font-weight: 600;
+  color: #1976d2;
+  font-size: 0.95rem;
+}
+
 .ai-suggestion-label {
   color: var(--mat-sys-on-surface-variant);
   font-size: 13px;

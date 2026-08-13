@@ -50,6 +50,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'sentence-builder',
+    loadComponent: () =>
+      import('./pages/sentence-builder/sentence-builder.component').then(
+        (m) => m.SentenceBuilderComponent
+      ),
+  },
+  {
     path: 'settings',
     loadComponent: () =>
       import('./pages/settings/settings.component').then(

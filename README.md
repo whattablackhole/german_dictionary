@@ -16,6 +16,13 @@ An interactive German language learning application built with [Angular CLI](htt
 - **Story Generator** — Generate cohesive German stories with AI, listen with word-by-word highlighting, progress slider, speed control, and pause/resume
 - **Word Lookup Mode** — Click any word in a story to see its translation, part of speech, verb forms, hear pronunciation, and add to dictionary (conjugated verbs auto-convert to infinitive)
 - **Grammar Notes** — AI-generated grammar explanations with examples and related topics
+- **Sentence Builder** — Practice writing German sentences by picking a grammar pattern and building sentences from your word box, with:
+  - AI feedback on word order, pattern correctness, and vocabulary usage (conjugated forms of known verbs are accepted)
+  - Mastery tracking per grammar pattern with a progress bar
+  - One-click add unknown words to your vocabulary with AI classification
+  - Smart normalization — verbs auto-convert to their infinitive (e.g., "hat" → "haben") and declined forms to their base form (e.g., "seine" → "sein")
+  - Confirmation dialog with per-word checkboxes and duplicate detection (checks verb forms already in vocabulary)
+  - Per-pattern history stored in localStorage
 - **Word Practice** — Practice words with cloze-style sentence completion
 - **Review** — Flashcard-style review of learned words with mastery tracking
 - **Word Matching Game** — Match German words with their translations in a timed game
@@ -127,6 +134,7 @@ src/
 │   │   ├── manage/       # Word CRUD management
 │   │   ├── practice-word/ # Word practice with cloze sentences
 │   │   ├── review/       # Flashcard review with mastery tracking
+│   │   ├── sentence-builder/ # Practice writing sentences with grammar patterns
 │   │   ├── settings/     # Settings (API key, language, TTS engine)
 │   │   └── stories/      # AI story generator with TTS playback
 │   ├── pipes/            # Custom pipes (markdown rendering)

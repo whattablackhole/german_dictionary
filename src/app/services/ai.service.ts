@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { Gender, DifficultyLevel, PartOfSpeech } from '../models/word';
+import { SentenceFeedback } from '../models/sentence-pattern';
 
 export interface AiSuggestion {
   translationEn: string;
@@ -8,6 +9,8 @@ export interface AiSuggestion {
   partOfSpeech: PartOfSpeech;
   gender: Gender | null;
   level: DifficultyLevel;
+  /** The dictionary/base form of the word (e.g. "sein" for "seine", "gut" for "gute") */
+  baseForm?: string;
   // Verb-specific fields (only when partOfSpeech is 'verb')
   verbType?: 'strong' | 'weak' | 'mixed';
   infinitive?: string;
@@ -84,6 +87,7 @@ export class AiService {
 - "partOfSpeech": the part of speech, exactly one of "noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection", "numeral" or "phrase"
 - "gender": the grammatical gender, exactly one of "der", "die" or "das", OR null if the word is NOT a noun
 - "level": the CEFR difficulty level of the word, exactly one of "A1", "A2", "B1", "B2" or "C1"
+- "baseForm": the dictionary/base form of the word. For declined/inflected forms (e.g. "seine" → "sein", "gute" → "gut", "hat" → "haben", "schmeckt" → "schmecken"), provide the base form. If the input is already the base form, set this to the same value as the input word.
 - "verbType": (only if partOfSpeech is "verb") the verb conjugation type, exactly one of "strong", "weak" or "mixed". For other parts of speech, omit this field or set to null.
 - "infinitive": (only if partOfSpeech is "verb") the infinitive form of the verb, e.g. "schmecken" for "schmeckt", "sein" for "ist", "gehen" for "geht". For other parts of speech, omit.
 - "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense form, e.g. "fliegt" for "fliegen", "ist" for "sein". For other parts of speech, omit.
@@ -151,6 +155,7 @@ Word: "${german}"`;
       partOfSpeech?: string;
       gender?: string | null;
       level?: string;
+      baseForm?: string | null;
       verbType?: string | null;
       infinitive?: string | null;
       presentThirdPerson?: string | null;
@@ -203,6 +208,7 @@ Word: "${german}"`;
     const pluralFormation = isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
 
     return {
+      baseForm: parsed.baseForm?.trim() || undefined,
       translationEn,
       translationRu,
       partOfSpeech,
@@ -418,6 +424,89 @@ Example format:
       level: level,
       grammarTopics: e.grammarTopics ?? [],
     }));
+  }
+
+  async verifySentenceWriting(
+    sentence: string,
+    patternId: string,
+    patternDescription: string,
+    patternTips: string,
+    vocabList: { german: string; translationEn: string; translationRu: string }[]
+  ): Promise<SentenceFeedback> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const vocabJson = JSON.stringify(vocabList.map((v: { german: string }) => v.german.toLowerCase()));
+
+    const prompt = `You are a German language teacher. A student has written a German sentence to practice a specific grammar pattern.
+
+Analyze the sentence and respond with JSON only (no markdown) using exactly these fields:
+- "patternCorrect": boolean — does the sentence follow the required grammar pattern?
+- "patternErrors": array of strings — specific errors in the grammar pattern (e.g. "Verb should be at the end of the subordinate clause", "Modal verb should be in position 2"). Empty array if none.
+- "vocabCorrect": boolean — are ALL words in the sentence from the student's known vocabulary list?
+- "unknownWords": array of strings — any words in the sentence NOT in the student's vocabulary list. Empty array if all known.
+- "tips": array of strings — encouraging, actionable tips to improve the sentence, including suggestions for replacements if unknown words were used
+- "masteryDelta": number — how much the student's mastery of this pattern should change: +5 if perfectly correct, +2 if mostly correct with minor issues, 0 if partially correct, -5 if pattern is wrong, -10 if completely wrong
+
+Pattern to practice: "${patternId}"
+Pattern description: ${patternDescription}
+Pattern tips: ${patternTips}
+
+Student's known vocabulary (only these words are allowed in the sentence): ${vocabJson}
+Student's sentence: "${sentence}"
+
+Rules:
+- Check if the sentence follows the grammar pattern correctly (word order, verb position, etc.)
+- Check if all words in the sentence are from the student's known vocabulary (case-insensitive). Allow conjugated forms of known verbs (e.g. "geht" for "gehen", "isst" for "essen").
+- If the student used words not in their vocabulary, suggest replacements from their known vocabulary.
+- Be encouraging but honest. The goal is to teach, not just criticize.
+- Ignore punctuation and capitalization differences.
+- For separable verbs: check if the prefix is correctly separated and moved to the end.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: SentenceFeedback;
+    try {
+      parsed = JSON.parse(jsonText) as SentenceFeedback;
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    return {
+      patternCorrect: parsed.patternCorrect ?? false,
+      patternErrors: parsed.patternErrors ?? [],
+      vocabCorrect: parsed.vocabCorrect ?? false,
+      unknownWords: parsed.unknownWords ?? [],
+      tips: parsed.tips ?? [],
+      masteryDelta: parsed.masteryDelta ?? 0,
+    };
   }
 
   async generateGrammarNote(userQuery: string): Promise<{
