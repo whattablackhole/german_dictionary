@@ -2,6 +2,9 @@ import { Injectable, signal } from '@angular/core';
 import { Story } from '../models/story';
 
 const STORAGE_KEY = 'german-dictionary-stories';
+const DB_NAME = 'german-dictionary-db';
+const DB_VERSION = 1;
+const STORE_NAME = 'stories';
 
 const SEED_STORIES: Story[] = [
   {
@@ -32,7 +35,35 @@ const SEED_STORIES: Story[] = [
 
 @Injectable({ providedIn: 'root' })
 export class StoryService {
-  readonly stories = signal<Story[]>(this.loadStories());
+  readonly stories = signal<Story[]>([]);
+
+  private dbPromise: Promise<IDBDatabase | null> | null = null;
+  private initPromise: Promise<void>;
+
+  constructor() {
+    this.initPromise = this.initialize();
+  }
+
+  /**
+   * Initialize the service: open IndexedDB, migrate any leftover localStorage data,
+   * then load all stories into the signal.
+   */
+  private async initialize(): Promise<void> {
+    const db = await this.openDb();
+    if (!db) {
+      // IndexedDB unavailable — fall back to localStorage
+      const local = this.loadFromLocalStorage();
+      this.stories.set(local);
+      return;
+    }
+
+    // Migrate any leftover data from localStorage into IndexedDB
+    await this.migrateFromLocalStorage(db);
+
+    // Load all stories from IndexedDB
+    const all = await this.loadAllFromDb(db);
+    this.stories.set(all.length > 0 ? all : [...SEED_STORIES]);
+  }
 
   getStories(): Story[] {
     return this.stories();
@@ -42,70 +73,176 @@ export class StoryService {
     return this.stories().find((s) => s.id === id);
   }
 
-  addStory(story: Omit<Story, 'id' | 'createdAt'>): Story {
+  async addStory(story: Omit<Story, 'id' | 'createdAt'>): Promise<Story> {
     const newStory: Story = {
       ...story,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
     this.stories.update((stories) => [newStory, ...stories]);
-    this.save();
+    await this.save();
     return newStory;
   }
 
-  deleteStory(id: string): void {
+  async deleteStory(id: string): Promise<void> {
     this.stories.update((stories) => stories.filter((s) => s.id !== id));
-    this.save();
+    await this.save();
   }
 
-  private loadStories(): Story[] {
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem(STORAGE_KEY);
-    } catch {
-      // localStorage unavailable (e.g. private mode) — fall back to seed data
-      return [...SEED_STORIES];
+  // ── IndexedDB helpers ──
+
+  private openDb(): Promise<IDBDatabase | null> {
+    if (this.dbPromise) return this.dbPromise;
+
+    if (typeof indexedDB === 'undefined') {
+      this.dbPromise = Promise.resolve(null);
+      return this.dbPromise;
     }
 
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as Story[];
-        if (!Array.isArray(parsed)) {
-          return [...SEED_STORIES];
-        }
+    this.dbPromise = new Promise((resolve) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        // Strip any legacy audioUrl fields. TTS audio is stored in IndexedDB now,
-        // not localStorage — embedded base64 blobs previously blew the quota.
-        let sanitized = parsed;
-        if (parsed.some((s) => 'audioUrl' in s)) {
-          sanitized = parsed.map(({ audioUrl, ...rest }) => rest as Story);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          store.createIndex('createdAt', 'createdAt', { unique: false });
         }
+      };
 
-        // Re-persist the sanitized (much smaller) payload only if it shrank
-        // materially, so we actually clear out the bloated old value.
-        const sanitizedJson = JSON.stringify(sanitized);
-        if (sanitizedJson.length <= stored.length - 1024) {
-          this.safeSave(sanitizedJson);
-        }
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => {
+          db.close();
+          this.dbPromise = null;
+        };
+        resolve(db);
+      };
 
-        return sanitized;
-      } catch {
-        // fall through to seed data
+      request.onerror = () => {
+        console.warn('IndexedDB unavailable for stories; falling back to localStorage.', request.error);
+        resolve(null);
+      };
+
+      request.onblocked = () => {
+        console.warn('IndexedDB open blocked; falling back to localStorage.');
+        resolve(null);
+      };
+    });
+
+    return this.dbPromise;
+  }
+
+  private async loadAllFromDb(db: IDBDatabase): Promise<Story[]> {
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const result = request.result as Story[];
+        resolve(result ?? []);
+      };
+      request.onerror = () => resolve([]);
+    });
+  }
+
+  private async saveAllToDb(db: IDBDatabase, stories: Story[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+
+      // Clear existing data first, then add all
+      store.clear();
+
+      for (const story of stories) {
+        store.add(story);
       }
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
+    });
+  }
+
+  // ── localStorage fallback ──
+
+  private loadFromLocalStorage(): Story[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Story[];
+        if (Array.isArray(parsed)) {
+          // Strip any legacy audioUrl fields
+          if (parsed.some((s) => 'audioUrl' in s)) {
+            return parsed.map(({ audioUrl, ...rest }) => rest as Story);
+          }
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
     }
     return [...SEED_STORIES];
   }
 
-  private save(): void {
-    this.safeSave(JSON.stringify(this.stories()));
+  /**
+   * On first load after this change, migrate any data from localStorage into
+   * IndexedDB, then remove the localStorage key so future loads don't re-migrate.
+   */
+  private async migrateFromLocalStorage(db: IDBDatabase): Promise<void> {
+    let localData: Story[] | null = null;
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Story[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Strip legacy audioUrl fields
+          if (parsed.some((s) => 'audioUrl' in s)) {
+            localData = parsed.map(({ audioUrl, ...rest }) => rest as Story);
+          } else {
+            localData = parsed;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    if (localData && localData.length > 0) {
+      try {
+        // Check if IndexedDB already has data — if so, merge
+        const existing = await this.loadAllFromDb(db);
+        if (existing.length === 0) {
+          await this.saveAllToDb(db, localData);
+        }
+        // Remove the old localStorage key to free up quota
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // migration failed — keep localStorage data as fallback
+      }
+    }
   }
 
-  private safeSave(json: string): void {
+  // ── Persistence ──
+
+  private async save(): Promise<void> {
+    const stories = this.stories();
+    const db = await this.openDb();
+    if (db) {
+      try {
+        await this.saveAllToDb(db, stories);
+        return;
+      } catch (err) {
+        console.warn('Failed to save stories to IndexedDB; falling back to localStorage.', err);
+      }
+    }
+
+    // Fallback: save to localStorage (with quota error handling)
     try {
-      localStorage.setItem(STORAGE_KEY, json);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
     } catch (err) {
-      // Quota exceeded or storage unavailable — keep working in memory only.
-      console.warn('Failed to persist stories to localStorage; keeping in memory.', err);
+      console.warn('Failed to persist stories to localStorage; keeping in memory only.', err);
     }
   }
 }

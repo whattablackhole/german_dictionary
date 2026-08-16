@@ -494,24 +494,48 @@ export class PracticeWordComponent {
           levelRange
         );
 
-      // Map AI output to WordExercise objects
-      const exercises = generated.map((g) => {
-        const matchedWord = combinedWords.find((w) =>
-          g.targetWord.toLowerCase() === w.german.toLowerCase()
-        );
-        return {
-          wordId: matchedWord?.id ?? '',
-          fullSentence: g.fullSentence,
-          targetWord: g.targetWord,
-          wordHint: g.wordHint,
-          blankRanges: g.blankRanges as BlankRange[],
-          hasArticle: g.hasArticle,
-          level: g.level,
-          domain: g.domain,
-          grammarTopics: g.grammarTopics,
-          sessionCount: 0,
-        };
-      });
+      // Map AI output to WordExercise objects, using the AI's word indices
+      // to compute character ranges. This is far more reliable than character
+      // indices, which the AI frequently gets wrong.
+      const exercises = generated
+        .map((g) => {
+          const matchedWord = combinedWords.find((w) =>
+            g.targetWord.toLowerCase() === w.german.toLowerCase()
+          );
+
+          // Convert word indices to character ranges by splitting the sentence
+          const words = g.fullSentence.split(/\s+/);
+          const blankRanges: BlankRange[] = [];
+          for (const idx of g.blankWordIndices) {
+            if (idx < 0 || idx >= words.length) continue;
+            // Find the character position of this word in the full sentence
+            let charPos = 0;
+            for (let i = 0; i < idx; i++) {
+              charPos += words[i].length + 1; // +1 for the space
+            }
+            blankRanges.push({
+              start: charPos,
+              end: charPos + words[idx].length,
+            });
+          }
+
+          // Skip if no valid blank ranges were produced
+          if (blankRanges.length === 0) return null;
+
+          return {
+            wordId: matchedWord?.id ?? '',
+            fullSentence: g.fullSentence,
+            targetWord: g.targetWord,
+            wordHint: g.wordHint,
+            blankRanges,
+            hasArticle: g.hasArticle,
+            level: g.level,
+            domain: g.domain,
+            grammarTopics: g.grammarTopics,
+            sessionCount: 0,
+          };
+        })
+        .filter((e): e is NonNullable<typeof e> => e !== null);
 
       this.wordExerciseService.addExercises(exercises);
     } catch (err) {

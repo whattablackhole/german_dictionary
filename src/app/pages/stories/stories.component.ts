@@ -304,7 +304,7 @@ export class StoriesComponent implements OnDestroy {
 
       const wordCount = result.german.split(/\s+/).filter(Boolean).length;
 
-      const story = this.storyService.addStory({
+      const story = await this.storyService.addStory({
         title: result.title,
         german: result.german,
         translationEn: result.translationEn,
@@ -545,7 +545,7 @@ export class StoriesComponent implements OnDestroy {
 
   async deleteStory(id: string): Promise<void> {
     const story = this.storyService.getStoryById(id);
-    this.storyService.deleteStory(id);
+    await this.storyService.deleteStory(id);
     if (story) {
       // Evict cached TTS audio so we don't leave orphaned blobs in IndexedDB.
       await this.ttsCacheService.deleteAudio(story.german, {
