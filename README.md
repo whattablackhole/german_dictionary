@@ -12,8 +12,9 @@ An interactive German language learning application built with [Angular CLI](htt
 - **Local Translation** — Optional LibreTranslate integration for on-the-fly translations
 - **Text-to-Speech** — Multiple TTS options:
   - **Browser SpeechSynthesis** — free, works offline
-  - **Microsoft MAI-Voice-2 Flash** — natural German voice via OpenRouter (requires API key with credits)
-  - **OpenAI GPT-Audio** — additional neural voices via OpenRouter
+  - **Microsoft MAI-Voice-2 Flash** — fast German TTS with the Klaus voice via OpenRouter (requires API key with credits)
+  - **Google Gemini 3.1 Flash TTS** — premium TTS with 70+ languages, 200+ inline audio tags for emotion/pacing, supports up to 2 speakers, 30 voices (Zephyr, Puck, Charon, Kore, Fenrir, Leda, Orus, Aoede, Callirrhoe, Autonoe, Enceladus, Iapetus, Umbriel, Algieba, Despina, Erinome, Algenib, Rasalgethi, Laomedeia, Achernar, Alnilam, Schedar, Gacrux, Pulcherrima, Achird, Zubenelgenubi, Vindemiatrix, Sadachbia, Sadaltager, Sulafat) (requires API key with credits)
+  - **Fish Audio S2.1 Pro (Free)** — free TTS for testing and prototyping
   - Audio is cached in IndexedDB to avoid re-generating repeated phrases
 - **Story Generator** — Generate cohesive German stories with AI, listen with word-by-word highlighting, progress slider, speed control, and pause/resume; includes search filters (theme, level, word types, grammar topics, sentence count)
 - **Word Lookup Mode** — Click any word in a story to see its translation, part of speech, verb forms, hear pronunciation, and add to dictionary (conjugated verbs auto-convert to infinitive)

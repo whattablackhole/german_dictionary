@@ -1370,10 +1370,9 @@ Rules:
   /**
    * Generates speech audio for the given text using the selected TTS model.
    *
-   * - Microsoft MAI models use the dedicated /audio/speech endpoint and return
-   *   raw MP3 bytes (converted to a base64 data URL).
-   * - OpenAI GPT-Audio models use the chat completions endpoint with an audio
-   *   modality; the response contains a base64 audio payload.
+   * All models (Microsoft MAI, Google Gemini, Fish Audio) use the dedicated
+   * /audio/speech endpoint and return raw MP3 bytes (converted to a base64
+   * data URL).
    */
   async generateSpeech(
     text: string,
@@ -1384,20 +1383,21 @@ Rules:
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
 
-    if (options.model.startsWith('microsoft/')) {
-      return this.generateSpeechMicrosoft(text, options.model, options.voice);
+    if (options.model.startsWith('microsoft/') || options.model.startsWith('fish-audio/')) {
+      return this.generateSpeechAudioEndpoint(text, options.model, options.voice, 'mp3');
     }
-    if (options.model.startsWith('openai/gpt-audio')) {
-      return this.generateSpeechOpenAiAudio(text, options.model, options.voice);
+    if (options.model.startsWith('google/')) {
+      return this.generateSpeechAudioEndpoint(text, options.model, options.voice, 'pcm');
     }
     throw new Error(`Unsupported TTS model: ${options.model}`);
   }
 
-  /** Legacy MAI voice generator — raw MP3 bytes via /audio/speech. */
-  private async generateSpeechMicrosoft(
+  /** TTS via the dedicated /audio/speech endpoint (Microsoft MAI, Google Gemini, Fish Audio). */
+  private async generateSpeechAudioEndpoint(
     text: string,
     model: string,
-    voice: string
+    voice: string,
+    responseFormat: 'mp3' | 'pcm' = 'mp3'
   ): Promise<string> {
     const apiKey = this.getApiKey();
 
@@ -1411,7 +1411,7 @@ Rules:
         model,
         input: text,
         voice,
-        response_format: 'mp3',
+        response_format: responseFormat,
       }),
     });
 
@@ -1421,6 +1421,20 @@ Rules:
 
     // Response is raw audio bytes — convert to a base64 data URL for caching.
     const blob = await response.blob();
+
+    if (responseFormat === 'pcm') {
+      // Gemini returns raw PCM (24kHz, 16-bit, mono). Wrap in a WAV container.
+      const arrayBuffer = await blob.arrayBuffer();
+      const pcmData = new Int16Array(arrayBuffer);
+      const wavBlob = this.encodePcmToWav(pcmData, 24000);
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to encode audio data.'));
+        reader.readAsDataURL(wavBlob);
+      });
+    }
+
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
@@ -1429,53 +1443,46 @@ Rules:
     });
   }
 
-  /** OpenAI GPT-Audio route — chat completions with audio modality. */
-  private async generateSpeechOpenAiAudio(
-    text: string,
-    model: string,
-    voice: string
-  ): Promise<string> {
-    const apiKey = this.getApiKey();
+  /** Wraps raw 16-bit PCM samples in a WAV container. */
+  private encodePcmToWav(samples: Int16Array, sampleRate: number): Blob {
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const dataSize = samples.byteLength;
+    const headerSize = 44;
+    const buffer = new ArrayBuffer(headerSize + dataSize);
+    const view = new DataView(buffer);
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        modalities: ['text', 'audio'],
-        audio: {
-          voice,
-          format: 'mp3',
-        },
-        messages: [
-          {
-            role: 'user',
-            content: `Read the following German text aloud, exactly as written, with natural pronunciation and intonation. Do not add any commentary.\n\n${text}`,
-          },
-        ],
-      }),
-    });
+    // RIFF header
+    this.writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    this.writeString(view, 8, 'WAVE');
 
-    if (!response.ok) {
-      await this.throwAudioError(response, 'GPT-Audio TTS');
+    // fmt chunk
+    this.writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true); // chunk size
+    view.setUint16(20, 1, true);  // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+
+    // data chunk
+    this.writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    // PCM samples
+    new Int16Array(buffer, headerSize, samples.length).set(samples);
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  private writeString(view: DataView, offset: number, str: string): void {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
     }
-
-    const data = await response.json();
-    const audioData: string | undefined =
-      data.choices?.[0]?.message?.audio?.data;
-
-    if (!audioData) {
-      throw new Error(
-        `The voice "${voice}" may not be available for ${model}. Try another voice.`
-      );
-    }
-
-    // OpenAI returns the audio as a base64-encoded MP3; wrap it in a data URL
-    // so it fits the same format used by the MAI route.
-    return `data:audio/mp3;base64,${audioData}`;
   }
 
   private async throwAudioError(response: Response, label: string): Promise<never> {
