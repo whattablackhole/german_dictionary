@@ -57,6 +57,11 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'diary',
+    loadComponent: () =>
+      import('./pages/diary/diary.component').then((m) => m.DiaryComponent),
+  },
+  {
     path: 'settings',
     loadComponent: () =>
       import('./pages/settings/settings.component').then(

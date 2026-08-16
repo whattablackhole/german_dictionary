@@ -157,13 +157,15 @@
             Word lookup mode
           </mat-slide-toggle>
           @if (wordLookupEnabled()) {
-            <span class="lookup-hint">Click any word to see translation & add to dictionary</span>
+            <span class="lookup-hint">Click words to select them, then {{ settingsService.lookupModifierKey() }}+click to look up the phrase</span>
           }
         </div>
 
         <div class="story-text-card">
-          <div class="story-text" #storyText>
-            @for (token of wordTokens(); track token.start) {
+          <div class="story-text" #storyText
+            (contextmenu)="onContextMenu($event)"
+          >
+            @for (token of wordTokens(); track token.start; let i = $index) {
               <span
                 class="word-span"
                 [class.word-highlight]="
@@ -171,12 +173,100 @@
                   currentCharIndex()! >= token.start &&
                   currentCharIndex()! < token.end
                 "
+                [class.word-selected]="wordLookupEnabled() && isWordSelected(i)"
                 [class.word-lookup-hover]="wordLookupEnabled()"
-                (click)="onWordClick(token.text, $event)"
+                (click)="onWordClick(token.text, i, $event)"
+                (contextmenu)="onWordRightClick(token.text, $event)"
               >{{ token.text }} </span>
             }
           </div>
         </div>
+
+        <!-- Right-click Context Menu -->
+        @if (contextMenuVisible()) {
+          <div class="context-menu-overlay" (click)="closeContextMenu()" (contextmenu)="closeContextMenu(); $event.preventDefault()"></div>
+          <div
+            class="context-menu"
+            [style.left.px]="contextMenuPosition().x"
+            [style.top.px]="contextMenuPosition().y"
+          >
+            <button class="context-menu-item" (click)="lookupPhrase()">
+              <mat-icon>search</mat-icon>
+              Look up "{{ contextMenuText() }}"
+            </button>
+          </div>
+        }
+
+        <!-- Phrase Lookup Popup (for multi-word selections) -->
+        @if (phrasePopupVisible()) {
+          <div class="word-popup-overlay" (click)="closePhrasePopup()"></div>
+          <div
+            class="word-popup"
+            [style.left.px]="phrasePopupPosition().x"
+            [style.top.px]="phrasePopupPosition().y"
+          >
+            <button class="popup-close" (click)="closePhrasePopup()">
+              <mat-icon>close</mat-icon>
+            </button>
+
+            <div class="popup-header">
+              <span class="popup-word">{{ phraseLookupWord() }}</span>
+              @if (phraseSuggestion(); as s) {
+                <span class="popup-pos-badge">{{ s.partOfSpeech }}</span>
+                <span class="popup-level-badge">{{ s.level }}</span>
+              }
+            </div>
+
+            @if (phraseLookupLoading()) {
+              <div class="popup-loading">
+                <mat-spinner diameter="16" />
+                <span>Looking up...</span>
+              </div>
+            } @else if (phraseLookupError()) {
+              <div class="popup-error">{{ phraseLookupError() }}</div>
+            } @else if (phraseSuggestion(); as s) {
+              <div class="popup-translation">{{ phraseTranslation() }}</div>
+
+              @if (s.partOfSpeech === 'verb' && (s.verbType || s.presentThirdPerson || s.simplePast || s.pastParticiple)) {
+                <div class="popup-verb-forms">
+                  @if (s.verbType) {
+                    <span class="verb-form">{{ s.verbType }} verb</span>
+                  }
+                  @if (s.presentThirdPerson) {
+                    <span class="verb-form">er/sie/es {{ s.presentThirdPerson }}</span>
+                  }
+                  @if (s.simplePast) {
+                    <span class="verb-form">Präteritum: {{ s.simplePast }}</span>
+                  }
+                  @if (s.pastParticiple) {
+                    <span class="verb-form">Partizip II: {{ s.pastParticiple }}</span>
+                  }
+                </div>
+              }
+            }
+
+            <div class="popup-actions">
+              <button mat-icon-button (click)="playPhraseWord()" class="popup-action-btn" title="Pronounce">
+                <mat-icon>volume_up</mat-icon>
+              </button>
+
+              @if (phraseAddedFeedback()) {
+                <span class="added-feedback">✓ Added!</span>
+              } @else {
+                <button
+                  mat-stroked-button
+                  color="primary"
+                  (click)="addPhraseToDictionary()"
+                  [disabled]="!phraseSuggestion()"
+                  class="popup-add-btn"
+                >
+                  <mat-icon>playlist_add</mat-icon>
+                  Add to Dictionary
+                </button>
+              }
+            </div>
+          </div>
+        }
 
         <!-- Word Lookup Popup -->
         @if (selectedLookupWord() && wordLookupEnabled()) {

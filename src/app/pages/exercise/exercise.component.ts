@@ -88,6 +88,44 @@ export class ExerciseComponent {
     return this.grammarTopicService.searchTopics(query);
   });
 
+  // Sentence count
+  readonly sentenceCount = signal(5);
+
+  // Forced word selection
+  readonly forcedWordIds = signal<Set<string>>(new Set());
+  readonly wordSearchQuery = signal('');
+  readonly wordDateFrom = signal<string>('');
+  readonly wordDateTo = signal<string>('');
+
+  readonly filteredWords = computed(() => {
+    let words = this.wordService.getWords();
+    const search = this.wordSearchQuery().toLowerCase().trim();
+    const from = this.wordDateFrom();
+    const to = this.wordDateTo();
+
+    if (search) {
+      words = words.filter(
+        (w) =>
+          w.german.toLowerCase().includes(search) ||
+          w.translationEn.toLowerCase().includes(search) ||
+          w.translationRu.toLowerCase().includes(search)
+      );
+    }
+    if (from) {
+      const fromDate = new Date(from);
+      words = words.filter((w) => new Date(w.createdAt) >= fromDate);
+    }
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      words = words.filter((w) => new Date(w.createdAt) <= toDate);
+    }
+
+    return words;
+  });
+
+  readonly forcedWordCount = computed(() => this.forcedWordIds().size);
+
   readonly currentSentence = computed(() => {
     const s = this.session();
     const i = this.currentIndex();
@@ -180,6 +218,32 @@ export class ExerciseComponent {
       : sentence.translationEn;
   }
 
+  // ── Forced word selection ──
+
+  toggleForcedWord(wordId: string): void {
+    this.forcedWordIds.update((s) => {
+      const next = new Set(s);
+      if (next.has(wordId)) {
+        next.delete(wordId);
+      } else {
+        next.add(wordId);
+      }
+      return next;
+    });
+  }
+
+  isWordForced(wordId: string): boolean {
+    return this.forcedWordIds().has(wordId);
+  }
+
+  clearForcedWords(): void {
+    this.forcedWordIds.set(new Set());
+  }
+
+  onSentenceCountChange(value: string): void {
+    this.sentenceCount.set(Number(value));
+  }
+
   async startExercise(): Promise<void> {
     this.generationError.set(null);
     const levels =
@@ -230,19 +294,29 @@ export class ExerciseComponent {
     this.generating.set(true);
     this.generationError.set(null);
     try {
-      // Select up to 50 words matching the chosen difficulty, weighted by usage
-      const selectedWords = this.wordService.selectWordsForGeneration(
-        levels,
-        50,
-        this.selectedPartsOfSpeech()
-      );
-      const knownWords = selectedWords.map((w: Word) => w.german);
+      // Forced words are always included
+      const forcedIds = Array.from(this.forcedWordIds());
+      const forcedWords = forcedIds
+        .map((id) => this.wordService.getWords().find((w) => w.id === id))
+        .filter((w): w is Word => w !== undefined)
+        .map((w) => w.german);
+
+      // Fill remaining slots with the existing weighted algorithm
+      const maxAuto = Math.max(0, 50 - forcedWords.length);
+      const autoWords = this.wordService
+        .selectWordsForGeneration(levels, maxAuto, this.selectedPartsOfSpeech())
+        .map((w: Word) => w.german);
+
+      // Combine: forced words first, then auto-selected
+      const knownWords = [...forcedWords, ...autoWords];
       const level = levels[0] ?? 'A1';
+      const count = this.sentenceCount();
+
       const generated: GeneratedSentence[] =
         await this.aiService.generateSentences(
           level,
           knownWords,
-          5,
+          count,
           domain,
           grammarTopics
         );

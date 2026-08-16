@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { Gender, DifficultyLevel, PartOfSpeech } from '../models/word';
 import { SentenceFeedback } from '../models/sentence-pattern';
+import { DiaryFeedback } from '../models/diary';
 
 export interface AiSuggestion {
   translationEn: string;
@@ -709,6 +710,105 @@ Rules:
     };
   }
 
+  /**
+   * Analyzes a free-form German diary entry, providing grammar corrections,
+   * an improved version, study suggestions, unknown words, follow-up questions,
+   * and a rough CEFR level estimate.
+   */
+  async analyzeDiaryEntry(
+    text: string,
+    vocabList: { german: string; translationEn: string; translationRu: string }[]
+  ): Promise<DiaryFeedback> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const vocabJson = JSON.stringify(vocabList.map((v) => v.german.toLowerCase()));
+
+    const prompt = `You are a German language teacher. A student has written a free-form diary entry in German as a language learning exercise.
+
+Analyze the diary entry and respond with JSON only (no markdown) using exactly these fields:
+- "overall": string — a short, encouraging overall assessment of the entry (2-3 sentences in English)
+- "corrections": array of objects, each with:
+  - "startIndex": number — character index in the ORIGINAL text where the error starts (inclusive)
+  - "endIndex": number — character index in the ORIGINAL text where the error ends (exclusive)
+  - "original": string — the exact original text segment (as written, including spaces if part of the error)
+  - "corrected": string — the corrected text segment
+  - "explanation": string — a brief English explanation of the grammar/usage error
+  Empty array if there are no errors.
+- "correctedText": string — the FULL corrected version of the diary entry (same content, with all corrections applied and natural phrasing preserved). If no corrections, this equals the original text.
+- "suggestions": array of strings — 2-4 actionable study suggestions based on errors or patterns noticed (e.g. "Review dative prepositions", "Practice separable verb word order"). Empty array if nothing to suggest.
+- "unknownWords": array of strings — any words in the entry NOT in the student's known vocabulary list (case-insensitive). Include conjugated verb forms but list the base/infinitive form. Empty array if all known.
+- "followUpQuestions": array of objects, each with:
+  - "de": string — a follow-up question in German encouraging the student to continue writing (natural, level-appropriate)
+  - "en": string — the English translation of the question
+  3-5 questions in total.
+- "cefrEstimate": string — the rough CEFR level of the writing, exactly one of "A1", "A2", "B1", "B2" or "C1"
+- "encouragements": string — a final encouraging sentence in English, celebrating what the student did well
+
+Student's known vocabulary (for unknownWords detection only): ${vocabJson}
+Diary entry: "${text}"
+
+Rules:
+- Be encouraging above all. The goal is to motivate the student to keep writing, not to overwhelm with corrections.
+- Only flag genuinely incorrect German (grammar, word choice, spelling, word order). Do NOT correct stylistic preferences.
+- For correction indices, count characters carefully against the ORIGINAL text.
+- "correctedText" must preserve the student's meaning and natural voice, while fixing all flagged errors.
+- Detect words not in the vocabulary by comparing lowercase forms; allow conjugated forms of known verbs (e.g. "ging" for "gehen", "hatte" for "haben"). If a conjugated form is unknown but its base form is in the vocabulary, do NOT list it.
+- Follow-up questions should be simple enough for the student to answer at their level, and should relate to the content of the entry (e.g. ask for more details about what they wrote about).
+- The cefrEstimate should be based on sentence complexity, vocabulary range, and error frequency.`;
+ 
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text2: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text2) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text2.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text2;
+
+    let parsed: Partial<DiaryFeedback>;
+    try {
+      parsed = JSON.parse(jsonText) as Partial<DiaryFeedback>;
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const validLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
+    const rawLevel = (parsed.cefrEstimate ?? '').trim().toUpperCase() as DifficultyLevel;
+    const cefrEstimate = validLevels.includes(rawLevel) ? rawLevel : 'A1';
+
+    return {
+      overall: parsed.overall ?? '',
+      corrections: Array.isArray(parsed.corrections) ? parsed.corrections : [],
+      correctedText: parsed.correctedText ?? text,
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+      unknownWords: Array.isArray(parsed.unknownWords) ? parsed.unknownWords : [],
+      followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions : [],
+      cefrEstimate,
+      encouragements: parsed.encouragements ?? '',
+    };
+  }
+
   async generateGrammarNote(userQuery: string): Promise<{
     title: string;
     category: string;
@@ -1267,11 +1367,39 @@ Rules:
     };
   }
 
-  async generateSpeechOpenAI(text: string): Promise<string> {
+  /**
+   * Generates speech audio for the given text using the selected TTS model.
+   *
+   * - Microsoft MAI models use the dedicated /audio/speech endpoint and return
+   *   raw MP3 bytes (converted to a base64 data URL).
+   * - OpenAI GPT-Audio models use the chat completions endpoint with an audio
+   *   modality; the response contains a base64 audio payload.
+   */
+  async generateSpeech(
+    text: string,
+    options: { model: string; voice: string }
+  ): Promise<string> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
+
+    if (options.model.startsWith('microsoft/')) {
+      return this.generateSpeechMicrosoft(text, options.model, options.voice);
+    }
+    if (options.model.startsWith('openai/gpt-audio')) {
+      return this.generateSpeechOpenAiAudio(text, options.model, options.voice);
+    }
+    throw new Error(`Unsupported TTS model: ${options.model}`);
+  }
+
+  /** Legacy MAI voice generator — raw MP3 bytes via /audio/speech. */
+  private async generateSpeechMicrosoft(
+    text: string,
+    model: string,
+    voice: string
+  ): Promise<string> {
+    const apiKey = this.getApiKey();
 
     const response = await fetch('https://openrouter.ai/api/v1/audio/speech', {
       method: 'POST',
@@ -1280,24 +1408,18 @@ Rules:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'microsoft/mai-voice-2-flash',
+        model,
         input: text,
-        voice: 'de-DE-Klaus:MAI-Voice-2',
+        voice,
         response_format: 'mp3',
       }),
     });
 
     if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error('API key rejected. Check your OpenRouter key.');
-      }
-      if (response.status === 402) {
-        throw new Error('OpenRouter account has insufficient credits for TTS.');
-      }
-      throw new Error(`TTS request failed (HTTP ${response.status})`);
+      await this.throwAudioError(response, 'TTS');
     }
 
-    // Response is raw audio bytes — convert to a base64 data URL for persistence
+    // Response is raw audio bytes — convert to a base64 data URL for caching.
     const blob = await response.blob();
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -1305,6 +1427,95 @@ Rules:
       reader.onerror = () => reject(new Error('Failed to encode audio data.'));
       reader.readAsDataURL(blob);
     });
+  }
+
+  /** OpenAI GPT-Audio route — chat completions with audio modality. */
+  private async generateSpeechOpenAiAudio(
+    text: string,
+    model: string,
+    voice: string
+  ): Promise<string> {
+    const apiKey = this.getApiKey();
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        modalities: ['text', 'audio'],
+        audio: {
+          voice,
+          format: 'mp3',
+        },
+        messages: [
+          {
+            role: 'user',
+            content: `Read the following German text aloud, exactly as written, with natural pronunciation and intonation. Do not add any commentary.\n\n${text}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      await this.throwAudioError(response, 'GPT-Audio TTS');
+    }
+
+    const data = await response.json();
+    const audioData: string | undefined =
+      data.choices?.[0]?.message?.audio?.data;
+
+    if (!audioData) {
+      throw new Error(
+        `The voice "${voice}" may not be available for ${model}. Try another voice.`
+      );
+    }
+
+    // OpenAI returns the audio as a base64-encoded MP3; wrap it in a data URL
+    // so it fits the same format used by the MAI route.
+    return `data:audio/mp3;base64,${audioData}`;
+  }
+
+  private async throwAudioError(response: Response, label: string): Promise<never> {
+    // OpenRouter wraps provider errors as {"error":{"message":"...","code":502}}.
+    // Surfacing that message is far more actionable than a bare status code.
+    let providerMessage = '';
+    try {
+      const body = await response.json();
+      const raw = body?.error?.message;
+      if (typeof raw === 'string' && raw.trim().length > 0) {
+        providerMessage = raw.trim();
+      }
+    } catch {
+      // No JSON body — fall through to status-based handling.
+    }
+
+    if (providerMessage) {
+      throw new Error(`${label} failed: ${providerMessage}`);
+    }
+
+    if (response.status === 401) {
+      throw new Error('API key rejected. Check your OpenRouter key.');
+    }
+    if (response.status === 402) {
+      throw new Error('OpenRouter account has insufficient credits for TTS.');
+    }
+    if (response.status === 404) {
+      throw new Error(
+        `TTS model or voice not found (${label}). Try another model or voice.`
+      );
+    }
+    if (response.status === 429) {
+      throw new Error('Rate limit reached. Try again in a moment.');
+    }
+    if (response.status === 502 || response.status === 503) {
+      throw new Error(
+        `TTS provider error (${response.status}). The selected voice may not be available for this model — try another voice.`
+      );
+    }
+    throw new Error(`${label} request failed (HTTP ${response.status})`);
   }
 
   private handleError(response: Response): never {

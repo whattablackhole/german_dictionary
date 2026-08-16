@@ -1,11 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, computed } from '@angular/core';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatButtonModule } from '@angular/material/button';
-import { SettingsService, TtsEngine } from '../../services/settings.service';
+import { SettingsService, TtsEngine, TTS_MODELS, LookupModifier } from '../../services/settings.service';
 import { BackupService } from '../../services/backup.service';
 import { TranslationLanguage } from '../../models/word';
 
@@ -20,6 +20,15 @@ export class SettingsComponent {
     { key: 'ru', label: 'Russian' },
     { key: 'en', label: 'English' },
   ];
+
+  readonly ttsModels = TTS_MODELS;
+
+  readonly currentModelVoices = computed(() => {
+    const model = this.ttsModels.find(
+      (m) => m.id === this.settingsService.ttsModel()
+    );
+    return model?.voices ?? [];
+  });
 
   backupStatus: string | null = null;
   backupError: string | null = null;
@@ -39,6 +48,18 @@ export class SettingsComponent {
 
   setTtsEngine(engine: TtsEngine): void {
     this.settingsService.setTtsEngine(engine);
+  }
+
+  setTtsModel(model: string): void {
+    this.settingsService.setTtsModel(model);
+  }
+
+  setTtsVoice(voice: string): void {
+    this.settingsService.setTtsVoice(voice);
+  }
+
+  setLookupModifier(modifier: LookupModifier): void {
+    this.settingsService.setLookupModifierKey(modifier);
   }
 
   onExport(): void {

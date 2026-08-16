@@ -120,6 +120,104 @@
           </div>
         </div>
 
+        <!-- Forced Word Selection -->
+        <div class="settings-section">
+          <div class="forced-words-header">
+            <h2 class="section-title">Select specific words</h2>
+            @if (forcedWordCount() > 0) {
+              <div class="forced-words-actions">
+                <span class="forced-count-badge">{{ forcedWordCount() }} selected</span>
+                <button class="clear-forced-btn" (click)="clearForcedWords()">
+                  <mat-icon>close</mat-icon>
+                  Clear
+                </button>
+              </div>
+            }
+          </div>
+          <p class="section-hint">Forced words are guaranteed to appear in generated exercises</p>
+
+          <div class="forced-words-filters">
+            <mat-form-field appearance="outline" class="word-search-field">
+              <mat-label>Search words</mat-label>
+              <input
+                matInput
+                [(ngModel)]="wordSearchQuery"
+                placeholder="German, English or Russian..."
+              />
+              @if (wordSearchQuery()) {
+                <button
+                  matSuffix
+                  mat-icon-button
+                  aria-label="Clear"
+                  (click)="wordSearchQuery.set('')"
+                >
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+            </mat-form-field>
+
+            <div class="date-filters">
+              <mat-form-field appearance="outline" class="date-field">
+                <mat-label>From date</mat-label>
+                <input
+                  matInput
+                  type="date"
+                  [(ngModel)]="wordDateFrom"
+                />
+                @if (wordDateFrom()) {
+                  <button
+                    matSuffix
+                    mat-icon-button
+                    aria-label="Clear"
+                    (click)="wordDateFrom.set('')"
+                  >
+                    <mat-icon>close</mat-icon>
+                  </button>
+                }
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" class="date-field">
+                <mat-label>To date</mat-label>
+                <input
+                  matInput
+                  type="date"
+                  [(ngModel)]="wordDateTo"
+                />
+                @if (wordDateTo()) {
+                  <button
+                    matSuffix
+                    mat-icon-button
+                    aria-label="Clear"
+                    (click)="wordDateTo.set('')"
+                  >
+                    <mat-icon>close</mat-icon>
+                  </button>
+                }
+              </mat-form-field>
+            </div>
+          </div>
+
+          <div class="forced-words-list">
+            @for (word of filteredWords(); track word.id) {
+              <button
+                class="forced-word-item"
+                [class.selected]="isWordForced(word.id)"
+                (click)="toggleForcedWord(word.id)"
+              >
+                <mat-icon class="word-check">
+                  {{ isWordForced(word.id) ? 'check_box' : 'check_box_outline_blank' }}
+                </mat-icon>
+                <span class="word-german">{{ word.german }}</span>
+                <span class="word-translation">{{ word.translationEn }}</span>
+                <span class="word-level">{{ word.level }}</span>
+              </button>
+            }
+            @if (filteredWords().length === 0) {
+              <div class="no-words-found">No words match your filters</div>
+            }
+          </div>
+        </div>
+
         <div class="settings-section">
           <h2 class="section-title">Session Preview</h2>
           <p class="section-hint">

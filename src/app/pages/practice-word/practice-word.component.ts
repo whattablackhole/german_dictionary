@@ -87,6 +87,41 @@ export class PracticeWordComponent {
     return this.grammarTopicService.searchTopics(query);
   });
 
+  // Forced word selection
+  readonly forcedWordIds = signal<Set<string>>(new Set());
+  readonly wordSearchQuery = signal('');
+  readonly wordDateFrom = signal<string>('');
+  readonly wordDateTo = signal<string>('');
+
+  readonly filteredWords = computed(() => {
+    let words = this.wordService.getWords();
+    const search = this.wordSearchQuery().toLowerCase().trim();
+    const from = this.wordDateFrom();
+    const to = this.wordDateTo();
+
+    if (search) {
+      words = words.filter(
+        (w) =>
+          w.german.toLowerCase().includes(search) ||
+          w.translationEn.toLowerCase().includes(search) ||
+          w.translationRu.toLowerCase().includes(search)
+      );
+    }
+    if (from) {
+      const fromDate = new Date(from);
+      words = words.filter((w) => new Date(w.createdAt) >= fromDate);
+    }
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      words = words.filter((w) => new Date(w.createdAt) <= toDate);
+    }
+
+    return words;
+  });
+
+  readonly forcedWordCount = computed(() => this.forcedWordIds().size);
+
   readonly currentExercise = computed(() => {
     const s = this.session();
     const i = this.currentIndex();
@@ -195,6 +230,28 @@ export class PracticeWordComponent {
 
   clearGrammarTopics(): void {
     this.selectedGrammarTopics.set([]);
+  }
+
+  // ── Forced word selection ──
+
+  toggleForcedWord(wordId: string): void {
+    this.forcedWordIds.update((s) => {
+      const next = new Set(s);
+      if (next.has(wordId)) {
+        next.delete(wordId);
+      } else {
+        next.add(wordId);
+      }
+      return next;
+    });
+  }
+
+  isWordForced(wordId: string): boolean {
+    return this.forcedWordIds().has(wordId);
+  }
+
+  clearForcedWords(): void {
+    this.forcedWordIds.set(new Set());
   }
 
   getHint(exercise: WordExercise): string {
@@ -383,23 +440,34 @@ export class PracticeWordComponent {
       const { wordIdsToExclude, allSentences } =
         this.wordExerciseService.getGenerationContext(words);
 
+      // Forced words are always included
+      const forcedIds = Array.from(this.forcedWordIds());
+      const forcedWords = forcedIds
+        .map((id) => this.wordService.getWords().find((w) => w.id === id))
+        .filter((w): w is Word => w !== undefined);
+
+      // Fill remaining slots with the existing weighted algorithm
+      const maxAuto = Math.max(0, 50 - forcedWords.length);
       const selectedWords = this.wordService.selectWordsForPractice(
         levels,
-        50,
+        maxAuto,
         this.selectedPartsOfSpeech()
       );
 
-      // Filter out mastered words
-      const filteredWords = selectedWords.filter(
+      // Filter out mastered words (but keep forced words even if mastered)
+      const autoWords = selectedWords.filter(
         (w) => !wordIdsToExclude.has(w.id)
       );
 
-      if (filteredWords.length === 0) {
+      // Combine: forced words first, then auto-selected
+      const combinedWords = [...forcedWords, ...autoWords];
+
+      if (combinedWords.length === 0) {
         console.warn('All words are mastered. Add new words first.');
         return;
       }
 
-      const targetWords = filteredWords.map((w: Word) => ({
+      const targetWords = combinedWords.map((w: Word) => ({
         german: w.german,
         translationEn: w.translationEn,
         translationRu: w.translationRu,
@@ -407,7 +475,7 @@ export class PracticeWordComponent {
 
       // Collect ALL existing sentences for these words to avoid repeats
       const avoidSentences: string[] = [];
-      for (const word of filteredWords) {
+      for (const word of combinedWords) {
         const existing = allSentences.get(word.id);
         if (existing) {
           avoidSentences.push(...existing);
@@ -428,7 +496,7 @@ export class PracticeWordComponent {
 
       // Map AI output to WordExercise objects
       const exercises = generated.map((g) => {
-        const matchedWord = filteredWords.find((w) =>
+        const matchedWord = combinedWords.find((w) =>
           g.targetWord.toLowerCase() === w.german.toLowerCase()
         );
         return {

@@ -15,8 +15,9 @@ import { Subscription } from 'rxjs';
 import { Story, StoryConfig } from '../../models/story';
 import { StoryService } from '../../services/story.service';
 import { AiService, AiSuggestion } from '../../services/ai.service';
-import { SettingsService } from '../../services/settings.service';
+import { SettingsService, TTS_MODELS } from '../../services/settings.service';
 import { SpeechService } from '../../services/speech.service';
+import { TtsCacheService } from '../../services/tts-cache.service';
 import { WordService } from '../../services/word.service';
 import { DifficultyLevel, PartOfSpeech } from '../../models/word';
 
@@ -99,6 +100,18 @@ export class StoriesComponent implements OnDestroy {
   readonly popupPosition = signal<PopupPosition>({ x: 0, y: 0 });
   readonly wordAddedFeedback = signal(false);
 
+  // Multi-word selection via right-click
+  readonly contextMenuVisible = signal(false);
+  readonly contextMenuPosition = signal<PopupPosition>({ x: 0, y: 0 });
+  readonly contextMenuText = signal('');
+  readonly phraseSuggestion = signal<AiSuggestion | null>(null);
+  readonly phraseAddedFeedback = signal(false);
+  readonly phraseLookupLoading = signal(false);
+  readonly phraseLookupError = signal('');
+  readonly phrasePopupPosition = signal<PopupPosition>({ x: 0, y: 0 });
+  readonly phrasePopupVisible = signal(false);
+  readonly phraseLookupWord = signal<string | null>(null);
+
   // Computed
   readonly selectedStory = computed(() => {
     const id = this.selectedStoryId();
@@ -173,7 +186,8 @@ export class StoriesComponent implements OnDestroy {
     private readonly aiService: AiService,
     readonly settingsService: SettingsService,
     private readonly speechService: SpeechService,
-    private readonly wordService: WordService
+    private readonly wordService: WordService,
+    private readonly ttsCacheService: TtsCacheService
   ) {
     this.boundarySub = this.speechService.onBoundary.subscribe((b) => {
       this.currentCharIndex.set(b.charIndex);
@@ -279,13 +293,47 @@ export class StoriesComponent implements OnDestroy {
   private async playWithOpenAI(story: Story): Promise<void> {
     this.isPlaying.set(true);
 
+    const ttsOptions = {
+      model: this.settingsService.ttsModel(),
+      voice: this.settingsService.ttsVoice(),
+    };
+
     try {
-      // Try to use cached audio
-      let audioUrl = story.audioUrl;
+      // Try the IndexedDB cache first, then the legacy in-memory audioUrl,
+      // then generate fresh audio via the API.
+      let audioUrl = await this.ttsCacheService.getAudio(story.german, ttsOptions);
+
+      if (!audioUrl && story.audioUrl) {
+        // Legacy path: audioUrl was previously embedded in the story object
+        // (persisted in localStorage before the IndexedDB migration).
+        audioUrl = story.audioUrl;
+      }
 
       if (!audioUrl) {
-        audioUrl = await this.aiService.generateSpeechOpenAI(story.german);
-        this.storyService.updateAudioUrl(story.id, audioUrl);
+        const model = TTS_MODELS.find((m) => m.id === ttsOptions.model);
+        const defaultVoice = model?.voices[0]?.id;
+
+        try {
+          audioUrl = await this.aiService.generateSpeech(story.german, ttsOptions);
+        } catch (err) {
+          if (defaultVoice && defaultVoice !== ttsOptions.voice) {
+            // A provider error (e.g. 502) often means the selected voice is
+            // unavailable for this model. Fall back to the model's default.
+            audioUrl = await this.aiService.generateSpeech(story.german, {
+              ...ttsOptions,
+              voice: defaultVoice,
+            });
+            this.errorMessage.set(
+              `The voice "${ttsOptions.voice}" is unavailable for ${ttsOptions.model}. Using "${defaultVoice}" instead.`
+            );
+          } else {
+            throw err;
+          }
+        }
+
+        // Cache under the selected voice key so subsequent plays are instant,
+        // even when the fallback voice was used.
+        await this.ttsCacheService.setAudio(story.german, audioUrl, ttsOptions);
       }
 
       const audio = new Audio(audioUrl);
@@ -404,8 +452,16 @@ export class StoriesComponent implements OnDestroy {
     }
   }
 
-  deleteStory(id: string): void {
+  async deleteStory(id: string): Promise<void> {
+    const story = this.storyService.getStoryById(id);
     this.storyService.deleteStory(id);
+    if (story) {
+      // Evict cached TTS audio so we don't leave orphaned blobs in IndexedDB.
+      await this.ttsCacheService.deleteAudio(story.german, {
+        model: this.settingsService.ttsModel(),
+        voice: this.settingsService.ttsVoice(),
+      });
+    }
     if (this.selectedStoryId() === id) {
       this.selectedStoryId.set(null);
     }
@@ -413,45 +469,94 @@ export class StoriesComponent implements OnDestroy {
 
   // Word lookup methods
 
-  onWordClick(word: string, event: MouseEvent): void {
+  /** Set of selected word token indices for multi-word selection. */
+  readonly selectedWordIndices = signal<Set<number>>(new Set());
+
+  /** Returns true if the required modifier key is held during the event. */
+  private isModifierHeld(event: MouseEvent): boolean {
+    const mod = this.settingsService.lookupModifierKey();
+    switch (mod) {
+      case 'alt': return event.altKey;
+      case 'ctrl': return event.ctrlKey;
+      case 'meta': return event.metaKey;
+      case 'shift': return event.shiftKey;
+      default: return false;
+    }
+  }
+
+  isWordSelected(index: number): boolean {
+    return this.selectedWordIndices().has(index);
+  }
+
+  onWordClick(word: string, index: number, event: MouseEvent): void {
     if (!this.wordLookupEnabled()) return;
 
-    // Clean the word: remove trailing punctuation
     const cleanWord = word.replace(/[.,!?;:()"']+$/, '').replace(/^[.,!?;:()"']+/, '');
     if (!cleanWord) return;
 
-    this.selectedLookupWord.set(cleanWord);
-    this.popupPosition.set({ x: event.clientX, y: event.clientY });
-    this.wordSuggestion.set(null);
-    this.wordAddedFeedback.set(false);
+    // If modifier key is held → trigger lookup for all selected words
+    if (this.isModifierHeld(event)) {
+      // Add this word's index to selection if not already there
+      this.selectedWordIndices.update((s) => {
+        const next = new Set(s);
+        next.add(index);
+        return next;
+      });
 
-    // Check if already in dictionary
-    const existing = this.wordService.getWords().find(
-      (w) => w.german.toLowerCase() === cleanWord.toLowerCase()
-    );
-    if (existing) {
-      // Show existing word info without AI call
-      this.wordSuggestion.set({
-        translationEn: existing.translationEn,
-        translationRu: existing.translationRu,
-        partOfSpeech: existing.partOfSpeech,
-        gender: existing.gender,
-        level: existing.level,
-        verbType: existing.verbType,
-        presentThirdPerson: existing.presentThirdPerson,
-        simplePast: existing.simplePast,
-        pastParticiple: existing.pastParticiple,
+      // Build phrase from selected tokens in order
+      const tokens = this.wordTokens();
+      const selected = Array.from(this.selectedWordIndices()).sort((a, b) => a - b);
+      if (selected.length === 0) return;
+
+      const phrase = selected
+        .map((i) => tokens[i].text.replace(/[.,!?;:()"']+$/, '').replace(/^[.,!?;:()"']+/, ''))
+        .filter(Boolean)
+        .join(' ');
+
+      this.selectedLookupWord.set(phrase);
+      this.popupPosition.set({ x: event.clientX, y: event.clientY });
+      this.wordSuggestion.set(null);
+      this.wordAddedFeedback.set(false);
+
+      // Check if already in dictionary
+      const existing = this.wordService.getWords().find(
+        (w) => w.german.toLowerCase() === phrase.toLowerCase()
+      );
+      if (existing) {
+        this.wordSuggestion.set({
+          translationEn: existing.translationEn,
+          translationRu: existing.translationRu,
+          partOfSpeech: existing.partOfSpeech,
+          gender: existing.gender,
+          level: existing.level,
+          verbType: existing.verbType,
+          presentThirdPerson: existing.presentThirdPerson,
+          simplePast: existing.simplePast,
+          pastParticiple: existing.pastParticiple,
+        });
+        return;
+      }
+
+      // Call AI to analyze the phrase
+      this.wordLookupLoading.set(true);
+      this.aiService.analyzeWord(phrase).then((suggestion) => {
+        this.wordSuggestion.set(suggestion);
+        this.wordLookupLoading.set(false);
+      }).catch(() => {
+        this.wordLookupLoading.set(false);
       });
       return;
     }
 
-    // Call AI to analyze the word
-    this.wordLookupLoading.set(true);
-    this.aiService.analyzeWord(cleanWord).then((suggestion) => {
-      this.wordSuggestion.set(suggestion);
-      this.wordLookupLoading.set(false);
-    }).catch(() => {
-      this.wordLookupLoading.set(false);
+    // Plain left-click → toggle word selection by index
+    this.selectedWordIndices.update((s) => {
+      const next = new Set(s);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
     });
   }
 
@@ -496,6 +601,123 @@ export class StoriesComponent implements OnDestroy {
     this.wordSuggestion.set(null);
     this.wordLookupLoading.set(false);
     this.wordAddedFeedback.set(false);
+  }
+
+  // ── Right-click context menu for multi-word selection ──
+
+  onContextMenu(event: MouseEvent): void {
+    if (!this.wordLookupEnabled()) return;
+
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().trim();
+    if (!selectedText || selectedText.length === 0) return;
+
+    event.preventDefault();
+    this.closeWordPopup();
+    this.closePhrasePopup();
+
+    this.contextMenuText.set(selectedText);
+    this.contextMenuPosition.set({ x: event.clientX, y: event.clientY });
+    this.contextMenuVisible.set(true);
+  }
+
+  /** Handles right-click on a single word span — triggers lookup directly. */
+  onWordRightClick(word: string, event: MouseEvent): void {
+    if (!this.wordLookupEnabled()) return;
+    event.preventDefault();
+
+    // Select this word so the user sees what's being looked up
+    const selection = window.getSelection();
+    if (selection) {
+      selection.selectAllChildren(event.currentTarget as Node);
+    }
+
+    this.contextMenuText.set(word);
+    this.contextMenuPosition.set({ x: event.clientX, y: event.clientY });
+    this.closeWordPopup();
+    this.closePhrasePopup();
+    this.contextMenuVisible.set(true);
+  }
+
+  closeContextMenu(): void {
+    this.contextMenuVisible.set(false);
+  }
+
+  async lookupPhrase(): Promise<void> {
+    const phrase = this.contextMenuText();
+    if (!phrase) return;
+
+    this.closeContextMenu();
+    this.phraseLookupLoading.set(true);
+    this.phraseLookupError.set('');
+    this.phraseSuggestion.set(null);
+    this.phraseAddedFeedback.set(false);
+
+    try {
+      const suggestion = await this.aiService.analyzeWord(phrase);
+      this.phraseSuggestion.set(suggestion);
+      this.phraseLookupWord.set(phrase);
+      this.phrasePopupPosition.set({
+        x: this.contextMenuPosition().x,
+        y: this.contextMenuPosition().y,
+      });
+      this.phrasePopupVisible.set(true);
+    } catch (err) {
+      this.phraseLookupError.set(
+        err instanceof Error ? err.message : 'Lookup failed.'
+      );
+    } finally {
+      this.phraseLookupLoading.set(false);
+    }
+  }
+
+  addPhraseToDictionary(): void {
+    const phrase = this.phraseLookupWord();
+    const suggestion = this.phraseSuggestion();
+    if (!phrase || !suggestion) return;
+
+    this.wordService.addWord({
+      german: phrase,
+      partOfSpeech: suggestion.partOfSpeech,
+      gender: suggestion.partOfSpeech === 'noun' ? suggestion.gender : null,
+      translationEn: suggestion.translationEn,
+      translationRu: suggestion.translationRu,
+      level: suggestion.level,
+      mastery: 0,
+      usageCount: 0,
+      verbType: suggestion.verbType,
+      presentThirdPerson: suggestion.presentThirdPerson,
+      simplePast: suggestion.simplePast,
+      pastParticiple: suggestion.pastParticiple,
+    });
+
+    this.phraseAddedFeedback.set(true);
+    setTimeout(() => this.phraseAddedFeedback.set(false), 2000);
+  }
+
+  playPhraseWord(): void {
+    const word = this.phraseLookupWord();
+    if (!word) return;
+    this.speechService.speak(word);
+  }
+
+  closePhrasePopup(): void {
+    this.phrasePopupVisible.set(false);
+    this.phraseLookupWord.set(null);
+    this.phraseSuggestion.set(null);
+    this.phraseLookupLoading.set(false);
+    this.phraseLookupError.set('');
+    this.phraseAddedFeedback.set(false);
+  }
+
+  /** Helper for template — gets the translation for a phrase suggestion. */
+  phraseTranslation(): string {
+    const s = this.phraseSuggestion();
+    if (!s) return '';
+    return this.settingsService.getTranslation({
+      translationEn: s.translationEn,
+      translationRu: s.translationRu,
+    } as any);
   }
 
   private formatTime(seconds: number): string {

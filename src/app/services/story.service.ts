@@ -58,18 +58,37 @@ export class StoryService {
     this.save();
   }
 
-  updateAudioUrl(id: string, audioUrl: string): void {
-    this.stories.update((stories) =>
-      stories.map((s) => (s.id === id ? { ...s, audioUrl } : s))
-    );
-    this.save();
-  }
-
   private loadStories(): Story[] {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      // localStorage unavailable (e.g. private mode) — fall back to seed data
+      return [...SEED_STORIES];
+    }
+
     if (stored) {
       try {
-        return JSON.parse(stored) as Story[];
+        const parsed = JSON.parse(stored) as Story[];
+        if (!Array.isArray(parsed)) {
+          return [...SEED_STORIES];
+        }
+
+        // Strip any legacy audioUrl fields. TTS audio is stored in IndexedDB now,
+        // not localStorage — embedded base64 blobs previously blew the quota.
+        let sanitized = parsed;
+        if (parsed.some((s) => 'audioUrl' in s)) {
+          sanitized = parsed.map(({ audioUrl, ...rest }) => rest as Story);
+        }
+
+        // Re-persist the sanitized (much smaller) payload only if it shrank
+        // materially, so we actually clear out the bloated old value.
+        const sanitizedJson = JSON.stringify(sanitized);
+        if (sanitizedJson.length <= stored.length - 1024) {
+          this.safeSave(sanitizedJson);
+        }
+
+        return sanitized;
       } catch {
         // fall through to seed data
       }
@@ -78,6 +97,15 @@ export class StoryService {
   }
 
   private save(): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.stories()));
+    this.safeSave(JSON.stringify(this.stories()));
+  }
+
+  private safeSave(json: string): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, json);
+    } catch (err) {
+      // Quota exceeded or storage unavailable — keep working in memory only.
+      console.warn('Failed to persist stories to localStorage; keeping in memory.', err);
+    }
   }
 }

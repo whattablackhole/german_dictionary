@@ -26,10 +26,30 @@
   </mat-card>
 
   <mat-card class="settings-card">
+    <h2 class="settings-title">Word Lookup in Stories</h2>
+    <p class="settings-description">
+      Choose which modifier key to hold while clicking a word in story lookup mode to look it up.
+      Right-click on a word or selection to look up phrases.
+    </p>
+    <mat-form-field appearance="outline" class="tts-select">
+      <mat-label>Lookup Modifier Key</mat-label>
+      <mat-select
+        [value]="settingsService.lookupModifierKey()"
+        (valueChange)="setLookupModifier($event)"
+      >
+        <mat-option value="alt">Alt</mat-option>
+        <mat-option value="ctrl">Ctrl</mat-option>
+        <mat-option value="meta">Meta (Windows/Command)</mat-option>
+        <mat-option value="shift">Shift</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </mat-card>
+
+  <mat-card class="settings-card">
     <h2 class="settings-title">Text-to-Speech Engine</h2>
     <p class="settings-description">
       Choose which TTS engine to use for story playback. Browser TTS is free and works offline.
-      Microsoft MAI-Voice-2 Flash provides natural German speech via OpenRouter (requires API key with credits).
+      OpenRouter TTS provides natural German speech via the API (requires API key with credits).
     </p>
     <mat-form-field appearance="outline" class="tts-select">
       <mat-label>TTS Engine</mat-label>
@@ -38,9 +58,37 @@
         (valueChange)="setTtsEngine($event)"
       >
         <mat-option value="browser">Browser SpeechSynthesis (free)</mat-option>
-        <mat-option value="openai">Microsoft MAI-Voice-2 Flash (German, via OpenRouter)</mat-option>
+        <mat-option value="openai">OpenRouter (AI voices)</mat-option>
       </mat-select>
     </mat-form-field>
+
+    @if (settingsService.ttsEngine() === 'openai') {
+      <mat-form-field appearance="outline" class="tts-select">
+        <mat-label>TTS Model</mat-label>
+        <mat-select
+          [value]="settingsService.ttsModel()"
+          (valueChange)="setTtsModel($event)"
+        >
+          @for (model of ttsModels; track model.id) {
+            <mat-option [value]="model.id">
+              {{ model.label }} — {{ model.description }}
+            </mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="tts-select">
+        <mat-label>Voice</mat-label>
+        <mat-select
+          [value]="settingsService.ttsVoice()"
+          (valueChange)="setTtsVoice($event)"
+        >
+          @for (voice of currentModelVoices(); track voice.id) {
+            <mat-option [value]="voice.id">{{ voice.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
   </mat-card>
 
   <mat-card class="settings-card">

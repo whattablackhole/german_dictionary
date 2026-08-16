@@ -1,0 +1,280 @@
+<div class="diary-container">
+  <h1 class="page-title">Diary</h1>
+  <p class="page-subtitle">Write freely in German and get AI feedback, corrections, and follow-up questions</p>
+
+  <div class="diary-layout">
+    <!-- Main column: input + feedback -->
+    <div class="main-column">
+      <!-- Input area -->
+      <div class="input-card">
+        <h2 class="section-title">Write your diary entry</h2>
+        <mat-form-field appearance="outline" class="entry-field">
+          <textarea
+            matInput
+            [(ngModel)]="entryInput"
+            placeholder="Write in German about your day, thoughts, plans..."
+            rows="6"
+            cdkTextareaAutosize
+            #autosize="cdkTextareaAutosize"
+          ></textarea>
+        </mat-form-field>
+        <div class="input-footer">
+          <span class="word-count">{{ wordCount() }} word{{ wordCount() !== 1 ? 's' : '' }}</span>
+          <button
+            class="submit-btn"
+            (click)="submitEntry()"
+            [disabled]="!entryInput().trim() || analyzing()"
+          >
+            @if (analyzing()) {
+              <mat-spinner diameter="20"></mat-spinner>
+              <span>Analyzing...</span>
+            } @else {
+              <mat-icon>send</mat-icon>
+              <span>Submit for Feedback</span>
+            }
+          </button>
+        </div>
+        @if (aiError()) {
+          <div class="ai-error">{{ aiError() }}</div>
+        }
+      </div>
+
+      <!-- Latest feedback -->
+      @if (latestFeedback(); as fb) {
+        <div class="feedback-card">
+          <div class="feedback-header">
+            <h2 class="section-title">AI Feedback</h2>
+            <span class="cefr-badge">CEFR: {{ fb.cefrEstimate }}</span>
+          </div>
+
+          <div class="feedback-section">
+            <p class="feedback-overall">{{ fb.overall }}</p>
+          </div>
+
+          @if (fb.corrections.length > 0) {
+            <div class="feedback-section">
+              <h3 class="subsection-title">
+                <mat-icon>edit</mat-icon>
+                Corrections ({{ fb.corrections.length }})
+              </h3>
+              <div class="corrections-list">
+                @for (corr of fb.corrections; track corr.startIndex) {
+                  <div class="correction-item">
+                    <div class="correction-original">
+                      <span class="label">Original:</span>
+                      <span class="text strikethrough">{{ corr.original }}</span>
+                    </div>
+                    <div class="correction-corrected">
+                      <span class="label">Corrected:</span>
+                      <span class="text corrected-text">{{ corr.corrected }}</span>
+                    </div>
+                    <div class="correction-explanation">{{ corr.explanation }}</div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="feedback-section">
+            <h3 class="subsection-title">
+              <mat-icon>auto_fix_high</mat-icon>
+              Improved Version
+            </h3>
+            <div class="corrected-text-block">{{ fb.correctedText }}</div>
+          </div>
+
+          @if (fb.suggestions.length > 0) {
+            <div class="feedback-section">
+              <h3 class="subsection-title">
+                <mat-icon>lightbulb</mat-icon>
+                Study Suggestions
+              </h3>
+              <ul class="suggestions-list">
+                @for (s of fb.suggestions; track s) {
+                  <li>{{ s }}</li>
+                }
+              </ul>
+            </div>
+          }
+
+          @if (fb.unknownWords.length > 0) {
+            <div class="feedback-section">
+              <h3 class="subsection-title">
+                <mat-icon>playlist_add</mat-icon>
+                Unknown Words
+              </h3>
+              <div class="unknown-words-row">
+                <span class="unknown-words-text">
+                  <strong>{{ fb.unknownWords.join(', ') }}</strong>
+                </span>
+                <button
+                  class="add-words-btn"
+                  [disabled]="analyzingWords()"
+                  (click)="analyzeUnknownWords()"
+                >
+                  @if (analyzingWords()) {
+                    <mat-spinner diameter="16"></mat-spinner>
+                    <span>Analyzing...</span>
+                  } @else {
+                    <mat-icon>playlist_add</mat-icon>
+                    <span>Add to vocabulary</span>
+                  }
+                </button>
+              </div>
+            </div>
+          }
+
+          @if (fb.followUpQuestions.length > 0) {
+            <div class="feedback-section">
+              <h3 class="subsection-title">
+                <mat-icon>question_answer</mat-icon>
+                Follow-up Questions
+              </h3>
+              <p class="section-hint">Click a question to use it as your next entry</p>
+              <div class="questions-list">
+                @for (q of fb.followUpQuestions; track q.de) {
+                  <button class="question-chip" (click)="useQuestion(q.de)">
+                    <span class="question-de">{{ q.de }}</span>
+                    <span class="question-en">{{ q.en }}</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="feedback-section">
+            <p class="encouragements">{{ fb.encouragements }}</p>
+          </div>
+        </div>
+      }
+
+      <!-- Add Words Preview Dialog -->
+      @if (pendingWords(); as words) {
+        <div class="add-words-overlay" (click)="cancelAddWords()">
+          <div class="add-words-preview" (click)="$event.stopPropagation()">
+            <div class="preview-header">
+              <h3>Add words to vocabulary</h3>
+              <button class="preview-close-btn" (click)="cancelAddWords()">
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+            <div class="preview-list">
+              @for (pw of words; track pw.word) {
+                <div class="preview-item" [class.is-duplicate]="pw.isDuplicate">
+                  <div class="preview-item-row">
+                    @if (!pw.isDuplicate) {
+                      <mat-checkbox
+                        [checked]="selectedPendingWords().has(pw.word)"
+                        (change)="togglePendingWord(pw.word)"
+                        color="primary"
+                        class="preview-checkbox"
+                      ></mat-checkbox>
+                    }
+                    <div class="preview-item-body">
+                      <div class="preview-word">{{ pw.word }}</div>
+                      @if (pw.isDuplicate) {
+                        <div class="preview-status">
+                          <mat-icon class="duplicate-icon">check_circle</mat-icon>
+                          <span>Already in vocabulary as <strong>{{ pw.duplicateOf }}</strong></span>
+                        </div>
+                      } @else {
+                        <div class="preview-details">
+                          <span class="preview-pos">{{ pw.suggestion.partOfSpeech }}</span>
+                          @if (pw.suggestion.gender) {
+                            <span class="preview-gender">{{ pw.suggestion.gender }}</span>
+                          }
+                          <span class="preview-level">{{ pw.suggestion.level }}</span>
+                        </div>
+                        <div class="preview-translations">
+                          <span>{{ pw.suggestion.translationEn }}</span>
+                          <span class="preview-ru">{{ pw.suggestion.translationRu }}</span>
+                        </div>
+                        @if (pw.storeAs !== pw.word) {
+                          <div class="preview-normalized">
+                            Will be saved as: <strong>{{ pw.storeAs }}</strong>
+                          </div>
+                        }
+                      }
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+            <div class="preview-actions">
+              <button mat-button (click)="cancelAddWords()">Cancel</button>
+              <button
+                mat-raised-button
+                color="primary"
+                [disabled]="addingWords() || selectedPendingWords().size === 0"
+                (click)="confirmAddWords()"
+              >
+                @if (addingWords()) {
+                  <mat-spinner diameter="16"></mat-spinner>
+                  <span>Adding...</span>
+                } @else {
+                  <span>Add {{ selectedPendingWords().size }} selected word{{ selectedPendingWords().size !== 1 ? 's' : '' }}</span>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Side column: history -->
+    <div class="side-column">
+      <h2 class="section-title">History</h2>
+      @if (entries().length === 0) {
+        <div class="history-empty">
+          <mat-icon>book</mat-icon>
+          <p>No diary entries yet. Write your first one!</p>
+        </div>
+      }
+      <div class="history-list">
+        @for (entry of entries(); track entry.id) {
+          <div class="history-card" [class.expanded]="expandedEntryId() === entry.id">
+            <div class="history-card-header" (click)="toggleExpanded(entry.id)">
+              <div class="history-meta">
+                <span class="history-date">{{ formatDate(entry.timestamp) }}</span>
+                <span class="history-level">{{ entry.feedback.cefrEstimate }}</span>
+              </div>
+              <div class="history-preview">{{ entry.text.slice(0, 80) }}{{ entry.text.length > 80 ? '...' : '' }}</div>
+              <div class="history-actions">
+                <button class="delete-btn" (click)="deleteEntry(entry.id); $event.stopPropagation()" title="Delete entry">
+                  <mat-icon>delete</mat-icon>
+                </button>
+                <mat-icon class="expand-icon">{{ expandedEntryId() === entry.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+              </div>
+            </div>
+            @if (expandedEntryId() === entry.id) {
+              <div class="history-detail">
+                <div class="detail-section">
+                  <strong>Original:</strong>
+                  <p>{{ entry.text }}</p>
+                </div>
+                <div class="detail-section">
+                  <strong>Corrected:</strong>
+                  <p>{{ entry.feedback.correctedText }}</p>
+                </div>
+                <div class="detail-section">
+                  <strong>Feedback:</strong>
+                  <p>{{ entry.feedback.overall }}</p>
+                </div>
+                @if (entry.feedback.suggestions.length > 0) {
+                  <div class="detail-section">
+                    <strong>Suggestions:</strong>
+                    <ul>
+                      @for (s of entry.feedback.suggestions; track s) {
+                        <li>{{ s }}</li>
+                      }
+                    </ul>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+</div>

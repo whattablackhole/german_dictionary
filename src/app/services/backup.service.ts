@@ -17,6 +17,9 @@ const BACKUP_KEYS: string[] = [
   'german-dictionary-translation-language',
   'german-dictionary-show-article-practice',
   'german-dictionary-tts-engine',
+  'german-dictionary-tts-model',
+  'german-dictionary-tts-voice',
+  'german-dictionary-lookup-modifier',
   'german-dictionary-openrouter-key',
 ];
 
@@ -95,8 +98,37 @@ export class BackupService {
             return;
           }
 
+          const STORIES_KEY = 'german-dictionary-stories';
+
           for (const [key, value] of Object.entries(parsed.data)) {
-            localStorage.setItem(key, value);
+            // TTS audio is stored in IndexedDB now, not localStorage. Strip any
+            // embedded base64 audioUrl blobs from restored stories so an old
+            // backup can't re-bloat storage past the quota.
+            let finalValue = value;
+            if (key === STORIES_KEY) {
+              try {
+                const stories = JSON.parse(value) as Array<Record<string, unknown>>;
+                if (Array.isArray(stories)) {
+                  finalValue = JSON.stringify(
+                    stories.map(({ audioUrl, ...rest }) => rest)
+                  );
+                }
+              } catch {
+                // If the stored value isn't valid JSON, keep it as-is; the
+                // app's story service will fall back to seed data anyway.
+              }
+            }
+
+            try {
+              localStorage.setItem(key, finalValue);
+            } catch (err) {
+              resolve({
+                ok: false,
+                error:
+                  'Quota exceeded while restoring. Some data may not have been restored. Free up space in your browser and try again.',
+              });
+              return;
+            }
           }
           resolve({ ok: true });
         } catch {
