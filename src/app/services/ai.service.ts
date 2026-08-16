@@ -57,6 +57,38 @@ export interface GeneratedWordExercise {
   grammarTopics: string[];
 }
 
+export interface GeneratedPrepositionExercise {
+  sentenceWithBlank: string;
+  correctPreposition: string;
+  correctCase: 'accusative' | 'dative' | 'genitive' | 'nominative';
+  hintEn: string;
+  hintRu: string;
+  explanation: string;
+  options: string[];
+}
+
+export interface GeneratedDeclensionExercise {
+  sentenceWithBlank: string;
+  correctAnswer: string;
+  caseReq: 'nominative' | 'accusative' | 'dative' | 'genitive';
+  genderLabel: string;
+  focusType: 'article' | 'adjective' | 'noun' | 'phrase';
+  baseForm?: string;
+  hintEn: string;
+  hintRu: string;
+  explanation: string;
+  note?: string;
+  options: string[];
+}
+
+export interface DeclensionAnswerResult {
+  correct: boolean;
+  expectedAnswer: string;
+  explanation: string;
+  alternative?: string;
+  score: number;
+}
+
 const API_KEY_STORAGE = 'german-dictionary-openrouter-key';
 
 @Injectable({ providedIn: 'root' })
@@ -71,6 +103,174 @@ export class AiService {
 
   setApiKey(key: string): void {
     localStorage.setItem(API_KEY_STORAGE, key.trim());
+  }
+
+  /**
+   * Classify multiple German words in a single API call.
+   * Returns AiSuggestion objects in the same order as the input array.
+   */
+  async analyzeWordsBatch(germanWords: string[]): Promise<AiSuggestion[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error(
+        'No API key set. Add your OpenRouter API key in the AI Assistant field above.'
+      );
+    }
+
+    const wordsJson = JSON.stringify(germanWords);
+
+    const prompt = `You are a German language expert. Given an array of German words or phrases, classify each one and respond with JSON only (no markdown) as an object with a single key "words" containing an array of objects. Each object must correspond to the word at the same index in the input array.
+
+Each object must have exactly these fields:
+- "german": the original German word (copy it exactly from the input)
+- "translationEn": the English translation
+- "translationRu": the Russian translation
+- "partOfSpeech": exactly one of "noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection", "numeral" or "phrase"
+- "gender": exactly one of "der", "die" or "das", OR null if the word is NOT a noun
+- "level": exactly one of "A1", "A2", "B1", "B2" or "C1"
+- "baseForm": the dictionary/base form of the word. For declined/inflected forms (e.g. "seine" → "sein", "gute" → "gut", "hat" → "haben", "schmeckt" → "schmecken"), provide the base form. If the input is already the base form, set this to the same value as the input word.
+- "verbType": (only if partOfSpeech is "verb") exactly one of "strong", "weak" or "mixed". For other parts of speech, set to null.
+- "infinitive": (only if partOfSpeech is "verb") the infinitive form. For other parts of speech, set to null.
+- "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense. For other parts of speech, set to null.
+- "simplePast": (only if partOfSpeech is "verb") the simple past (Präteritum) form. For other parts of speech, set to null.
+- "pastParticiple": (only if partOfSpeech is "verb") the past participle (Partizip II) form. For other parts of speech, set to null.
+- "pluralForm": (only if partOfSpeech is "noun") the plural form. For other parts of speech, set to null.
+- "pluralFormation": (only if partOfSpeech is "noun") the plural formation pattern, exactly one of "-e", "-en", "-er", "-s", "-n", "-", "umlaut", "umlaut + -e", "umlaut + -er", "umlaut + -en" or "foreign". For other parts of speech, set to null.
+
+Rules:
+- For nouns: gender is required. If the noun is plural-only, gender is "die". For compound nouns, use the gender of the last component.
+- For nouns: always provide the pluralForm and pluralFormation.
+- For any non-noun (verb, adjective, adverb, etc.): gender MUST be null.
+- For verb infinitives (e.g. "gehen", "essen"), partOfSpeech is "verb".
+- For adjectives (e.g. "schnell", "schön"), partOfSpeech is "adjective".
+- Capitalize translations properly (nouns in English are lowercase, but proper names are capitalized).
+- Common everyday words are typically A1-A2, less common words are B1-B2, specialized/formal words are C1.
+- If the input is not a recognizable German word, still provide your best guess for all fields.
+- IMPORTANT: If the input is a conjugated verb form (e.g. "schmeckt", "geht", "ist"), set "infinitive" to the infinitive form (e.g. "schmecken", "gehen", "sein").
+- IMPORTANT: The output array MUST have exactly the same number of items as the input array, in the same order.
+
+Input words: ${wordsJson}
+
+Example response format:
+{"words":[{"german":"Botschaft","translationEn":"message","translationRu":"посольство","partOfSpeech":"noun","gender":"die","level":"A2","baseForm":"Botschaft","verbType":null,"infinitive":null,"presentThirdPerson":null,"simplePast":null,"pastParticiple":null,"pluralForm":"Botschaften","pluralFormation":"-en"}]}`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error(
+          'API key rejected. Check your OpenRouter key at openrouter.ai/keys.'
+        );
+      }
+      if (response.status === 402) {
+        throw new Error(
+          'OpenRouter account has insufficient credits. Add credits at openrouter.ai.'
+        );
+      }
+      if (response.status === 429) {
+        throw new Error('Rate limit reached. Try again in a moment.');
+      }
+      throw new Error(`AI request failed (HTTP ${response.status})`);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    interface BatchWordItem {
+      german?: string;
+      translationEn?: string;
+      translationRu?: string;
+      partOfSpeech?: string;
+      gender?: string | null;
+      level?: string;
+      baseForm?: string | null;
+      verbType?: string | null;
+      infinitive?: string | null;
+      presentThirdPerson?: string | null;
+      simplePast?: string | null;
+      pastParticiple?: string | null;
+      pluralForm?: string | null;
+      pluralFormation?: string | null;
+    }
+
+    let parsed: { words?: BatchWordItem[] };
+    try {
+      parsed = JSON.parse(jsonText) as typeof parsed;
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const rawWords = parsed.words;
+    if (!Array.isArray(rawWords) || rawWords.length !== germanWords.length) {
+      throw new Error(
+        `AI returned ${rawWords?.length ?? 0} results, expected ${germanWords.length}.`
+      );
+    }
+
+    const validParts: PartOfSpeech[] = [
+      'noun', 'verb', 'adjective', 'adverb', 'pronoun',
+      'preposition', 'conjunction', 'interjection', 'numeral', 'phrase',
+    ];
+    const validGender = ['der', 'die', 'das'];
+    const validLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
+    const validVerbTypes = ['strong', 'weak', 'mixed'];
+    const validPluralFormations = ['-e', '-en', '-er', '-s', '-n', '-', 'umlaut', 'umlaut + -e', 'umlaut + -er', 'umlaut + -en', 'foreign'];
+
+    return rawWords.map((item) => {
+      const rawPart = (item.partOfSpeech ?? '').trim().toLowerCase() as PartOfSpeech;
+      const partOfSpeech = validParts.includes(rawPart) ? rawPart : 'noun';
+      const isNoun = partOfSpeech === 'noun';
+      const isVerb = partOfSpeech === 'verb';
+
+      const genderRaw = item.gender ? String(item.gender).trim() : '';
+      const gender: Gender | null =
+        isNoun && validGender.includes(genderRaw)
+          ? (genderRaw as Gender)
+          : null;
+
+      const level = (item.level ?? '').trim().toUpperCase() as DifficultyLevel;
+      const finalLevel = validLevels.includes(level) ? level : 'A1';
+
+      const verbTypeRaw = (item.verbType ?? '').trim().toLowerCase();
+      const verbType = isVerb && validVerbTypes.includes(verbTypeRaw) ? verbTypeRaw as 'strong' | 'weak' | 'mixed' : undefined;
+
+      const pluralFormationRaw = (item.pluralFormation ?? '').trim();
+      const pluralFormation = isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
+
+      return {
+        baseForm: (item.baseForm ?? '').trim() || undefined,
+        translationEn: (item.translationEn ?? '').trim(),
+        translationRu: (item.translationRu ?? '').trim(),
+        partOfSpeech,
+        gender,
+        level: finalLevel,
+        verbType,
+        infinitive: isVerb ? ((item.infinitive ?? '').trim() || undefined) : undefined,
+        presentThirdPerson: isVerb ? ((item.presentThirdPerson ?? '').trim() || undefined) : undefined,
+        simplePast: isVerb ? ((item.simplePast ?? '').trim() || undefined) : undefined,
+        pastParticiple: isVerb ? ((item.pastParticiple ?? '').trim() || undefined) : undefined,
+        pluralForm: isNoun ? ((item.pluralForm ?? '').trim() || undefined) : undefined,
+        pluralFormation,
+      };
+    });
   }
 
   async analyzeWord(german: string): Promise<AiSuggestion> {
@@ -743,6 +943,327 @@ Generate exactly ${config.sentenceCount} sentences.`;
       german: parsed.german,
       translationEn: parsed.translationEn,
       translationRu: parsed.translationRu,
+    };
+  }
+
+  async generatePrepositionExercise(
+    ruleId: string,
+    ruleName: string,
+    rulePrepositions: string[],
+    knownWords: string[],
+    level: DifficultyLevel
+  ): Promise<GeneratedPrepositionExercise> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const wordsList =
+      knownWords.length > 0
+        ? knownWords.slice(0, 40).join(', ')
+        : 'common German words';
+    const prepositionsList = rulePrepositions.join(', ');
+
+    const prompt = `You are a German language teacher. Generate ONE German sentence that practices this grammar rule:
+Rule: "${ruleName}"
+Relevant prepositions: ${prepositionsList}
+
+Respond with JSON only (no markdown) using exactly these fields:
+- "sentenceWithBlank": the full German sentence where the preposition is replaced by "___" (e.g. "Ich warte ___ den Bus."). The blank must ONLY replace the preposition, not the article after it.
+- "correctPreposition": the preposition that fills the blank (lowercase, e.g. "auf")
+- "correctCase": the grammatical case this preposition governs, exactly one of "accusative", "dative", "genitive", "nominative"
+- "hintEn": the English translation of the full sentence (the blank as "(preposition)")
+- "hintRu": the Russian translation of the full sentence (the blank as "(предлог)")
+- "explanation": a short English explanation of WHY this preposition + case is used here, including a note if the preposition is omitted or different in Russian
+- "options": an array of exactly 4 strings of possible prepositions including the correct one (e.g. ["auf", "an", "mit", "für"])
+
+Rules:
+- The sentence must be natural and realistic for CEFR level ${level}.
+- Keep the sentence concise (5-15 words).
+- Prioritize using words from this list: ${wordsList}
+- Use a preposition from the listed relevant prepositions.
+- The blank MUST exactly replace a single preposition word (including contractions if applicable like "im", "am", "zum").
+- The options array must be 4 items and include the correct preposition.
+- The explanation should highlight when the preposition is invisible/different in Russian (e.g. "warten auf" = «ждать» with no preposition in Russian).
+- Respond with valid JSON only.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.5,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: Partial<GeneratedPrepositionExercise>;
+    try {
+      parsed = JSON.parse(jsonText) as Partial<GeneratedPrepositionExercise>;
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const validCases = ['accusative', 'dative', 'genitive', 'nominative'];
+    const correctCase = validCases.includes(parsed.correctCase ?? '')
+      ? (parsed.correctCase as GeneratedPrepositionExercise['correctCase'])
+      : 'accusative';
+
+    return {
+      sentenceWithBlank: parsed.sentenceWithBlank ?? '',
+      correctPreposition: (parsed.correctPreposition ?? '').trim(),
+      correctCase,
+      hintEn: parsed.hintEn ?? '',
+      hintRu: parsed.hintRu ?? '',
+      explanation: parsed.explanation ?? '',
+      options:
+        Array.isArray(parsed.options) && parsed.options.length === 4
+          ? parsed.options.map((o) => String(o).trim())
+          : [this.extractPrepositionFromBlank(parsed.sentenceWithBlank ?? ''), 'an', 'in', 'für'],
+    };
+  }
+
+  /** Best-effort extraction of the preposition from a blanked sentence like "Ich warte ___ den Bus." */
+  private extractPrepositionFromBlank(sentence: string): string {
+    // We cannot know the correct preposition; fall back to a common one.
+    return 'auf';
+  }
+
+  // ── DECLENSION EXERCISES ──
+
+  /**
+   * Generate declension exercises using AI.
+   * The AI creates sentences with blanks targeting article/adjective/noun/phrase declension.
+   */
+  async generateDeclensionExercises(config: {
+    questionType: 'article' | 'adjective' | 'noun' | 'phrase' | 'mixed';
+    selectedCases?: string[];
+    theme?: string;
+    count: number;
+  }): Promise<GeneratedDeclensionExercise[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const caseFilter = config.selectedCases && config.selectedCases.length > 0
+      ? `Only use these German cases: ${config.selectedCases.join(', ')}.`
+      : 'Use all four cases (nominative, accusative, dative, genitive).';
+
+    const typeInstruction = config.questionType === 'mixed'
+      ? 'Mix all types: articles, adjective endings, noun forms, and full phrases.'
+      : config.questionType === 'article'
+        ? 'Focus on article declension (der/die/das, ein/eine, kein/keine, mein/meine, dieser/diese/dieses).'
+        : config.questionType === 'adjective'
+          ? 'Focus on adjective endings (strong, weak, mixed declension).'
+          : config.questionType === 'noun'
+            ? 'Focus on noun forms (genitive -s/-es, dative plural -n, n-Deklination).'
+            : 'Focus on full phrases (article + adjective + noun together).';
+
+    const themeInstruction = config.theme && config.theme.trim()
+      ? `All sentences must be about the theme: "${config.theme.trim()}".`
+      : 'Vary the themes across sentences.';
+
+    const prompt = `You are a German language teacher. Generate ${config.count} German declension exercises (multiple choice).
+
+Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
+- "sentenceWithBlank": the German sentence with the target word replaced by "___" (e.g. "Ich sehe ___ Hund." for article exercise, "Ich sehe den groß___ Hund." for adjective exercise)
+- "correctAnswer": the correct word or ending that fills the blank (e.g. "den" for article, "großen" for adjective, "Hundes" for noun genitive, "den großen Hund" for phrase)
+- "caseReq": the grammatical case required, exactly one of "nominative", "accusative", "dative", "genitive"
+- "genderLabel": the gender label, exactly one of "Maskulin", "Feminin", "Neutrum", "Plural"
+- "focusType": the type of exercise, exactly one of "article", "adjective", "noun", "phrase"
+- "baseForm": (optional) the base form of the word being tested (e.g. "Hund" for noun, "groß" for adjective)
+- "hintEn": the English translation of the full sentence (the blank as "___")
+- "hintRu": the Russian translation of the full sentence (the blank as "___")
+- "explanation": a short English explanation of WHY this is the correct form, referencing the case, gender, and declension rule
+- "note": (optional) an additional grammar note or tip
+- "options": an array of exactly 4 strings of possible answers including the correct one (e.g. ["den", "dem", "der", "des"])
+
+Rules:
+- ${typeInstruction}
+- ${caseFilter}
+- ${themeInstruction}
+- Keep sentences concise (5-12 words) and natural.
+- The blank must be exactly one word or one phrase (for phrase exercises).
+- For article exercises: blank ONLY the article, not the noun after it.
+- For adjective exercises: blank the adjective WITH its ending (e.g. "großen" not just "en").
+- For noun exercises: blank ONLY the noun form.
+- For phrase exercises: blank the entire phrase (article + adjective + noun).
+- The options array must have exactly 4 items and include the correct answer.
+- The explanation should be helpful for a language learner.
+- Use realistic, everyday German sentences.
+- Vary the nouns, adjectives, and sentence structures across exercises.
+
+Generate exactly ${config.count} exercises.
+
+Example format:
+{"exercises":[{"sentenceWithBlank":"Ich sehe ___ Hund.","correctAnswer":"den","caseReq":"accusative","genderLabel":"Maskulin","focusType":"article","baseForm":"Hund","hintEn":"I see ___ dog.","hintRu":"Я вижу ___ собаку.","explanation":"'Hund' is masculine. After 'sehen' (to see) we use accusative. Masculine 'der' changes to 'den' in accusative.","note":"Only masculine changes in accusative.","options":["den","dem","der","des"]}]}`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.5,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: GeneratedDeclensionExercise[] | { exercises: GeneratedDeclensionExercise[] };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const exercises = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { exercises: GeneratedDeclensionExercise[] }).exercises ?? [];
+
+    if (!Array.isArray(exercises) || exercises.length === 0) {
+      throw new Error('AI could not generate exercises. Try again.');
+    }
+
+    const validCases = ['nominative', 'accusative', 'dative', 'genitive'];
+    const validFocusTypes = ['article', 'adjective', 'noun', 'phrase'];
+
+    return exercises.slice(0, config.count).map((e) => ({
+      sentenceWithBlank: e.sentenceWithBlank ?? '',
+      correctAnswer: (e.correctAnswer ?? '').trim(),
+      caseReq: validCases.includes(e.caseReq ?? '') ? e.caseReq as GeneratedDeclensionExercise['caseReq'] : 'nominative',
+      genderLabel: e.genderLabel ?? '',
+      focusType: validFocusTypes.includes(e.focusType ?? '') ? e.focusType as GeneratedDeclensionExercise['focusType'] : 'article',
+      baseForm: e.baseForm?.trim(),
+      hintEn: e.hintEn ?? '',
+      hintRu: e.hintRu ?? '',
+      explanation: e.explanation ?? '',
+      note: e.note?.trim(),
+      options: Array.isArray(e.options) && e.options.length >= 2
+        ? e.options.map((o) => String(o).trim())
+        : [e.correctAnswer ?? ''],
+    }));
+  }
+
+  /**
+   * Verify a user's answer to a declension exercise using AI.
+   * Returns detailed feedback including whether the answer is correct and an explanation.
+   */
+  async verifyDeclensionAnswer(
+    userAnswer: string,
+    correctAnswer: string,
+    context: {
+      sentenceWithBlank: string;
+      caseReq: string;
+      genderLabel: string;
+      focusType: string;
+      explanation: string;
+    }
+  ): Promise<DeclensionAnswerResult> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const prompt = `You are a German language teacher. A student answered a declension exercise. Evaluate their answer.
+
+Respond with JSON only (no markdown) using exactly these fields:
+- "correct": boolean — is the student's answer correct?
+- "expectedAnswer": string — the correct answer
+- "explanation": string — a helpful explanation in English explaining why the answer is right or wrong, referencing the case, gender, and declension rules
+- "alternative": string or null — if the student's answer is also acceptable (e.g. alternative form), provide it here. Otherwise null.
+- "score": number — 0-100, how accurate the answer is (100 for exact match, partial credit for close answers)
+
+Exercise context:
+- Sentence: "${context.sentenceWithBlank}"
+- Required case: ${context.caseReq}
+- Gender: ${context.genderLabel}
+- Focus type: ${context.focusType}
+- Correct answer: "${correctAnswer}"
+
+Student's answer: "${userAnswer}"
+
+Rules:
+- Be encouraging but honest.
+- If the answer is exactly correct, set correct to true and score to 100.
+- If the answer is close but has minor errors (e.g. wrong ending, wrong article), set correct to false but give partial score.
+- If the answer is completely wrong, set correct to false and score to 0.
+- The explanation should teach the student WHY their answer was right or wrong.
+- If the student's answer is an acceptable alternative (e.g. "dem" vs "den" in some dialects), set alternative to the student's answer.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: Partial<DeclensionAnswerResult>;
+    try {
+      parsed = JSON.parse(jsonText) as Partial<DeclensionAnswerResult>;
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    return {
+      correct: parsed.correct ?? false,
+      expectedAnswer: parsed.expectedAnswer ?? correctAnswer,
+      explanation: parsed.explanation ?? '',
+      alternative: parsed.alternative ?? undefined,
+      score: parsed.score ?? 0,
     };
   }
 

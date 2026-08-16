@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -82,7 +82,7 @@ export class ReviewComponent {
   });
 
   readonly wordsByGender = computed(() => {
-    const words = this.filteredWords();
+    const words = this.paginatedWords();
     const nouns = words.filter((w) => w.gender !== null);
     return {
       der: nouns.filter((w) => w.gender === 'der'),
@@ -103,6 +103,50 @@ export class ReviewComponent {
       this.masteryMax() !== null
   );
 
+  // Pagination
+  readonly page = signal(1);
+  readonly pageSize = signal(30);
+  readonly pageSizeOptions = [10, 30, 50, 100];
+
+  /** Toggle: when true, distribute words equally across columns instead of chunking chronologically */
+  readonly equalDistribution = signal(false);
+
+  readonly totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.filteredWords().length / this.pageSize()))
+  );
+
+  /** Words on the current page — either chronological slice or equally distributed */
+  readonly paginatedWords = computed(() => {
+    const words = this.filteredWords();
+    const size = this.pageSize();
+
+    if (!this.equalDistribution()) {
+      const start = (this.page() - 1) * size;
+      return words.slice(start, start + size);
+    }
+
+    // Equal distribution mode: split words into 4 gender pools, take evenly from each
+    const der = words.filter((w) => w.gender === 'der');
+    const die = words.filter((w) => w.gender === 'die');
+    const das = words.filter((w) => w.gender === 'das');
+    const other = words.filter((w) => w.gender === null);
+    const columns = [der, die, das, other];
+
+    // How many per column per page (round-robin: 8,8,7,7 for 30; 3,3,2,2 for 10)
+    const base = Math.floor(size / 4);
+    const firstNGetExtra = size % 4;
+    const perColumn = [0, 1, 2, 3].map((idx) => base + (idx < firstNGetExtra ? 1 : 0));
+
+    // For this page, skip (page-1) * perColumn[i] items from each pool
+    const prevPages = this.page() - 1;
+    const result: Word[] = [];
+    for (let i = 0; i < 4; i++) {
+      const skip = prevPages * perColumn[i];
+      result.push(...columns[i].slice(skip, skip + perColumn[i]));
+    }
+    return result;
+  });
+
   readonly expandedWordId = signal<string | null>(null);
 
   constructor(
@@ -110,7 +154,15 @@ export class ReviewComponent {
     private readonly settingsService: SettingsService,
     private readonly speechService: SpeechService,
     private readonly posService: PartOfSpeechService
-  ) {}
+  ) {
+    // Keep page in valid range when filters change the result count
+    effect(() => {
+      const total = this.totalPages();
+      if (this.page() > total) {
+        this.page.set(total);
+      }
+    });
+  }
 
   getTranslation(word: Word): string {
     return this.settingsService.getTranslation(word);
@@ -124,6 +176,29 @@ export class ReviewComponent {
     this.levelFilter.set('');
     this.masteryMin.set(null);
     this.masteryMax.set(null);
+    this.page.set(1);
+  }
+
+  setPage(p: number): void {
+    const clamped = Math.min(Math.max(1, p), this.totalPages());
+    this.page.set(clamped);
+  }
+
+  setPageSize(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(1);
+  }
+
+  pageRange(): number[] {
+    const total = this.totalPages();
+    const current = this.page();
+    const range: number[] = [];
+    const start = Math.max(1, current - 2);
+    const end = Math.min(total, current + 2);
+    for (let i = start; i <= end; i++) {
+      range.push(i);
+    }
+    return range;
   }
 
   speak(word: Word): void {

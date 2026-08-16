@@ -590,12 +590,43 @@
 }
 
 .plural-formation-badge {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 10px;
   background: #f3e5f5;
   color: #7b1fa2;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 0;
+  flex-wrap: wrap;
+}
+
+.pagination-info {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  .active-page {
+    background: var(--mat-sys-primary);
+    color: var(--mat-sys-on-primary);
+  }
+}
+
+.pagination-size {
+  min-width: 120px;
 }

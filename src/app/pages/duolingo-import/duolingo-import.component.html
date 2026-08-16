@@ -1,0 +1,142 @@
+<div class="import-container">
+  <h2>Import Duolingo Vocabulary</h2>
+
+  @if (!hasApiKey) {
+    <div class="warning">
+      ⚠️ No API key configured. Go to
+      <a routerLink="/settings">Settings</a>
+      to add your OpenRouter API key first.
+    </div>
+  }
+
+  <div class="info-box">
+    <p>
+      Paste your Duolingo vocabulary list below. You can get your vocabulary from
+      <a href="https://duome.eu/vocabulary/ru/de/skills" target="_blank" rel="noopener">duome.eu/vocabulary/ru/de/skills</a>
+      or other sources.
+    </p>
+    <p>
+      Each line should be in the format:
+      <code>GermanWord - RussianTranslation</code>
+    </p>
+    <p class="info-note">
+      Section headers (lines without <code> - </code>) are automatically skipped.
+    </p>
+  </div>
+
+  <textarea
+    [ngModel]="rawText()"
+    (ngModelChange)="onTextChange($event)"
+    placeholder="Botschaft - посольство&#10;Brieftasche - кошелёк, портмоне&#10;Nachname - фамилия&#10;..."
+    rows="12"
+    class="import-textarea"
+    [disabled]="isImporting()"
+  ></textarea>
+
+  <div class="controls-row">
+    <div class="chunk-size-control">
+      <label for="chunkSize">Words per AI request:</label>
+      <select
+        id="chunkSize"
+        [ngModel]="chunkSize()"
+        (ngModelChange)="onChunkSizeChange($event)"
+        [disabled]="isImporting()"
+      >
+        @for (opt of chunkSizeOptions; track opt) {
+          <option [value]="opt">{{ opt }}</option>
+        }
+      </select>
+      <span class="chunk-hint">Larger = fewer API calls, but slower per call</span>
+    </div>
+
+    <button
+      class="import-btn"
+      (click)="startImport()"
+      [disabled]="!rawText().trim() || isImporting() || !hasApiKey"
+    >
+      @if (isImporting()) {
+        Importing...
+      } @else {
+        Start Import
+      }
+    </button>
+  </div>
+
+  @if (isImporting() && importProgress(); as p) {
+    <div class="progress-bar-container">
+      <div class="progress-bar">
+        <div
+          class="progress-bar-fill"
+          [style.width.%]="(p.processedWords / p.totalWords) * 100"
+        ></div>
+      </div>
+      <div class="progress-text">
+        Chunk {{ p.currentChunk }}/{{ p.totalChunks }} —
+        {{ p.processedWords }}/{{ p.totalWords }} words
+      </div>
+    </div>
+  }
+
+  @if (progress() && !isImporting()) {
+    <div class="progress">
+      {{ progress() }}
+    </div>
+  }
+
+  @if (previewEntries().length > 0 && !isImporting() && !result()) {
+    <div class="preview">
+      <h3>Preview</h3>
+      <p class="preview-stats">
+        <strong>{{ previewEntries().length }}</strong> words parsed
+        @if (previewSkippedLines() > 0) {
+          · <strong>{{ previewSkippedLines() }}</strong> headers/section titles skipped
+        }
+      </p>
+      <div class="preview-list">
+        @for (entry of previewEntries().slice(0, 20); track $index) {
+          <div class="preview-item">
+            <span class="preview-german">{{ entry.german }}</span>
+            <span class="preview-sep">→</span>
+            <span class="preview-ru">{{ entry.translationRu }}</span>
+          </div>
+        }
+        @if (previewEntries().length > 20) {
+          <div class="preview-more">
+            … and {{ previewEntries().length - 20 }} more words
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (result(); as r) {
+    <div class="result">
+      <h3>Import Results</h3>
+      <div class="result-stats">
+        <div class="stat stat-added">
+          <span class="stat-value">{{ r.added }}</span>
+          <span class="stat-label">Added</span>
+        </div>
+        <div class="stat stat-skipped">
+          <span class="stat-value">{{ r.skipped }}</span>
+          <span class="stat-label">Skipped (already exist)</span>
+        </div>
+        <div class="stat stat-total">
+          <span class="stat-value">{{ r.total }}</span>
+          <span class="stat-label">Total parsed</span>
+        </div>
+      </div>
+
+      @if (r.errors.length > 0) {
+        <div class="errors">
+          <h4>Errors ({{ r.errors.length }})</h4>
+          <ul>
+            @for (err of r.errors; track $index) {
+              <li>{{ err }}</li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  }
+</div>

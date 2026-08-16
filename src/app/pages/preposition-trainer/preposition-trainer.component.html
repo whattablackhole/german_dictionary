@@ -1,0 +1,337 @@
+<div class="preposition-trainer">
+  <!-- Mode Tabs -->
+  <div class="mode-tabs">
+    <button
+      class="mode-tab"
+      [class.active]="mode() === 'rules'"
+      (click)="setMode('rules')"
+    >
+      <mat-icon>rule</mat-icon>
+      Preposition Rules
+    </button>
+    <button
+      class="mode-tab"
+      [class.active]="mode() === 'verbs'"
+      (click)="setMode('verbs')"
+    >
+      <mat-icon>psychology</mat-icon>
+      Verb + Preposition
+    </button>
+    <button
+      class="mode-tab"
+      [class.active]="mode() === 'ai'"
+      (click)="setMode('ai')"
+    >
+      <mat-icon>auto_awesome</mat-icon>
+      AI Exercises
+    </button>
+  </div>
+
+  <!-- Mastery summary -->
+  <div class="mastery-summary" *ngIf="masteredPairsCount() > 0">
+    <mat-icon>stars</mat-icon>
+    <span>{{ masteredPairsCount() }} verb-preposition pairs mastered</span>
+  </div>
+
+  <!-- ═══════════════ MODE: RULES ═══════════════ -->
+  @if (mode() === 'rules') {
+    <div class="rules-layout">
+      <!-- Rule list sidebar -->
+      <div class="rule-sidebar">
+        <h3>Choose a rule</h3>
+        @for (rule of rules(); track rule.id) {
+          <button
+            class="rule-item"
+            [class.selected]="selectedRuleId() === rule.id"
+            (click)="selectRule(rule.id)"
+          >
+            <mat-icon>{{ rule.iconName }}</mat-icon>
+            <span>{{ rule.name }}</span>
+          </button>
+        }
+      </div>
+
+      <!-- Rule detail -->
+      <div class="rule-detail">
+        @if (selectedRule(); as rule) {
+          <mat-card class="rule-card">
+            <mat-card-header>
+              <mat-card-title>{{ rule.name }}</mat-card-title>
+              <mat-card-subtitle>
+                {{ rule.prepositions.join(', ') }}
+              </mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <p class="rule-description">{{ rule.description }}</p>
+              <div class="rule-tips">
+                <mat-icon>lightbulb</mat-icon>
+                <span>{{ rule.tips }}</span>
+              </div>
+
+              <div class="rule-examples">
+                <h4>Examples</h4>
+                @for (ex of rule.examples; track ex.german) {
+                  <div class="example-item">
+                    <div class="example-german">{{ ex.german }}</div>
+                    <div class="example-translation">
+                      {{ getTranslationForExample(ex) }}
+                    </div>
+                  </div>
+                }
+              </div>
+            </mat-card-content>
+            <mat-card-actions>
+              <button mat-raised-button color="primary" (click)="startRuleSession()">
+                <mat-icon>quiz</mat-icon>
+                Start Quiz
+              </button>
+            </mat-card-actions>
+          </mat-card>
+        } @else {
+          <div class="empty-state">
+            <mat-icon>touch_app</mat-icon>
+            <p>Select a rule from the list to see examples and start a quiz.</p>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- ═══════════════ MODE: VERB + PREPOSITION ═══════════════ -->
+  @if (mode() === 'verbs') {
+    <div class="verbs-layout">
+      <!-- Left: pair list with mastery -->
+      <div class="pair-list">
+        <div class="pair-list-header">
+          <h3>Verb + Preposition Pairs</h3>
+          <mat-form-field appearance="outline" class="level-filter">
+            <mat-select
+              [(ngModel)]="selectedLevel"
+              placeholder="All levels"
+            >
+              <mat-option value="">All levels</mat-option>
+              @for (lvl of levels; track lvl) {
+                <mat-option [value]="lvl">{{ lvl }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        @for (item of pairList(); track item.pair.id) {
+          <div class="pair-row">
+            <div class="pair-main">
+              <span class="pair-verb">{{ item.pair.verb }}</span>
+              <span class="pair-prep">{{ item.pair.preposition }} + {{ getCaseLabel(item.pair.case) }}</span>
+              <span class="pair-translation">{{ getTranslationForExample(item.pair.example) }}</span>
+            </div>
+            <span class="mastery-bar" [class]="getMasteryClass(item.mastery)">
+              <span class="mastery-fill" [style.width.%]="item.mastery"></span>
+            </span>
+          </div>
+        }
+      </div>
+
+      <!-- Right: practice controls -->
+      <div class="verbs-practice">
+        <mat-card class="practice-card">
+          <mat-card-header>
+            <mat-card-title>Train Verb + Preposition</mat-card-title>
+            <mat-card-subtitle>
+              Recall the fixed preposition for each verb. Watch for prepositions that are
+              invisible in Russian.
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <button mat-raised-button color="primary" (click)="startVerbSession()">
+              <mat-icon>play_arrow</mat-icon>
+              Start Practice (10 cards)
+            </button>
+          </mat-card-content>
+        </mat-card>
+
+        <div class="translation-gap-info">
+          <mat-icon>warning</mat-icon>
+          <p>
+            Many German verbs need a preposition that <strong>disappears in Russian</strong>.
+            Example: <em>warten</em> <strong>auf</strong> = «ждать» (no preposition!).
+            This is why they are hard to notice while reading.
+          </p>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ═══════════════ MODE: AI EXERCISES ═══════════════ -->
+  @if (mode() === 'ai') {
+    <div class="ai-layout">
+      <!-- Existing AI exercise card -->
+      @if (aiExercise(); as ex) {
+        <mat-card class="ai-exercise-card">
+          <mat-card-header>
+            <mat-card-title>Fill in the preposition</mat-card-title>
+            <mat-card-subtitle>{{ sessionTitle() }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <p class="ai-sentence">{{ ex.sentenceWithBlank }}</p>
+            <div class="ai-hints">
+              <p class="ai-hint">🇬🇧 {{ ex.hintEn }}</p>
+              <p class="ai-hint">🇷🇺 {{ ex.hintRu }}</p>
+            </div>
+
+            @if (!aiResult()) {
+              <div class="ai-answer-row">
+                <mat-form-field appearance="outline">
+                  <mat-label>Preposition</mat-label>
+                  <input
+                    matInput
+                    [(ngModel)]="aiInput"
+                    placeholder="e.g. auf"
+                    (keyup.enter)="checkAiAnswer()"
+                  />
+                </mat-form-field>
+                <button mat-raised-button color="primary" (click)="checkAiAnswer()">
+                  Check
+                </button>
+              </div>
+            }
+
+            @if (aiResult(); as result) {
+              <div class="ai-result" [class.correct]="result.correct" [class.wrong]="!result.correct">
+                <mat-icon>{{ result.correct ? 'check_circle' : 'cancel' }}</mat-icon>
+                <span>{{ result.message }}</span>
+              </div>
+              <div class="ai-explanation" *ngIf="aiExercise()?.explanation">
+                <strong>Why?</strong> {{ aiExercise()?.explanation }}
+              </div>
+              <div class="ai-options" *ngIf="aiExercise()?.options?.length">
+                <span>Options:</span>
+                <span class="option-chip" *ngFor="let opt of aiExercise()!.options">
+                  {{ opt }}
+                </span>
+              </div>
+              <div class="ai-actions">
+                <button mat-raised-button color="primary" (click)="completeAiExercise()">
+                  Next exercise
+                </button>
+              </div>
+            }
+          </mat-card-content>
+        </mat-card>
+      } @else {
+        <mat-card class="ai-exercise-card">
+          <mat-card-header>
+            <mat-card-title>AI-Powered Preposition Exercises</mat-card-title>
+            <mat-card-subtitle>
+              AI generates a sentence with a missing preposition. You type it in.
+              Includes explanations of translation gaps.
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            @if (aiLoading()) {
+              <div class="ai-loading">
+                <mat-spinner diameter="32"></mat-spinner>
+                <p>Generating exercise...</p>
+              </div>
+            } @else {
+              <button mat-raised-button color="primary" (click)="startAiExercise()">
+                <mat-icon>auto_awesome</mat-icon>
+                Generate Exercise
+              </button>
+            }
+            @if (aiError()) {
+              <div class="ai-error">
+                <mat-icon>error</mat-icon>
+                <span>{{ aiError() }}</span>
+              </div>
+            }
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+  }
+
+  <!-- ═══════════════ ACTIVE SESSION (flashcards) ═══════════════ -->
+  @if (sessionActive() || sessionFinished()) {
+    <div class="session-overlay">
+      <mat-card class="session-card">
+        <mat-card-header>
+          <mat-card-title>{{ sessionTitle() }}</mat-card-title>
+          <mat-card-subtitle>
+            Card {{ currentNumber() }} / {{ totalCards() }}
+            · Correct: {{ correctCount() }}
+          </mat-card-subtitle>
+        </mat-card-header>
+
+        <mat-card-content>
+          @if (!sessionFinished()) {
+            @if (currentCard(); as item) {
+              <div class="flashcard">
+                <div class="flashcard-prompt">{{ item.card.prompt }}</div>
+
+                @if (!item.answered) {
+                  <div class="options-grid">
+                    @for (opt of item.card.prepositionOptions; track opt) {
+                      <button
+                        class="option-btn"
+                        (click)="selectOption(opt)"
+                      >
+                        {{ opt }}
+                      </button>
+                    }
+                  </div>
+                } @else {
+                  <div class="feedback" [class.correct]="item.correct" [class.wrong]="!item.correct">
+                    <mat-icon>{{ item.correct ? 'check_circle' : 'cancel' }}</mat-icon>
+                    <div>
+                      <strong>
+                        {{ item.correct ? 'Correct!' : 'Not quite.' }}
+                        Correct: "{{ item.card.correctPreposition }}"
+                      </strong>
+                      <span class="case-info">+ {{ getCaseLabel(item.card.correctCase) }}</span>
+                    </div>
+                  </div>
+
+                  <div class="example-block">
+                    <div class="example-german">{{ item.card.example.german }}</div>
+                    <div class="example-translation">
+                      {{ getTranslationForExample(item.card.example) }}
+                    </div>
+                  </div>
+
+                  @if (item.card.gapNote) {
+                    <div class="gap-note">
+                      <mat-icon>lightbulb</mat-icon>
+                      <span>{{ item.card.gapNote }}</span>
+                    </div>
+                  }
+
+                  <button mat-raised-button color="primary" class="next-btn" (click)="nextCard()">
+                    {{ currentNumber() >= totalCards() ? 'Finish' : 'Next' }}
+                  </button>
+                }
+              </div>
+            }
+          } @else {
+            <div class="session-results">
+              <mat-icon>emoji_events</mat-icon>
+              <h2>Session Complete!</h2>
+              <p class="score">
+                {{ correctCount() }} / {{ totalCards() }} correct
+                ({{ scorePercent() }}%)
+              </p>
+              <div class="results-actions">
+                <button mat-raised-button (click)="restartSession()">
+                  <mat-icon>replay</mat-icon>
+                  Practice Again
+                </button>
+                <button mat-raised-button color="primary" (click)="closeSession()">
+                  Back to Rules
+                </button>
+              </div>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
+  }
+</div>

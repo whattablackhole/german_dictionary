@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -69,6 +69,20 @@ export class ManageComponent {
     return words;
   });
 
+  // Pagination
+  readonly page = signal(1);
+  readonly pageSize = signal(30);
+  readonly pageSizeOptions = [10, 30, 50, 100];
+
+  readonly totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.words().length / this.pageSize()))
+  );
+
+  readonly paginatedWords = computed(() => {
+    const start = (this.page() - 1) * this.pageSize();
+    return this.words().slice(start, start + this.pageSize());
+  });
+
   readonly editingId = signal<string | null>(null);
   readonly germanInput = signal('');
   readonly partOfSpeechInput = signal<PartOfSpeech>('noun');
@@ -107,6 +121,14 @@ export class ManageComponent {
     this.partsOfSpeech = this.posService.getAll();
     this.apiKeyInput.set(this.aiService.getApiKey());
     this.apiKeySaved.set(this.aiService.hasApiKey());
+
+    // Keep page in valid range when filters change the result count
+    effect(() => {
+      const total = this.totalPages();
+      if (this.page() > total) {
+        this.page.set(total);
+      }
+    });
   }
 
   startAdd(): void {
@@ -313,5 +335,31 @@ export class ManageComponent {
 
   getTranslation(word: Word): string {
     return this.settingsService.getTranslation(word);
+  }
+
+  setPage(p: number): void {
+    const clamped = Math.min(Math.max(1, p), this.totalPages());
+    this.page.set(clamped);
+  }
+
+  setPageSize(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(1);
+  }
+
+  pageRange(): number[] {
+    const total = this.totalPages();
+    const current = this.page();
+    const range: number[] = [];
+    const start = Math.max(1, current - 2);
+    const end = Math.min(total, current + 2);
+    for (let i = start; i <= end; i++) {
+      range.push(i);
+    }
+    return range;
+  }
+
+  resetPage(): void {
+    this.page.set(1);
   }
 }

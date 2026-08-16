@@ -1,0 +1,215 @@
+<div class="declension-trainer">
+  <div class="mode-tabs">
+    <button class="mode-tab" [class.active]="mode() === 'practice'" (click)="setMode('practice')">
+      <mat-icon>quiz</mat-icon> Practice
+    </button>
+    <button class="mode-tab" [class.active]="mode() === 'reference'" (click)="setMode('reference')">
+      <mat-icon>table_chart</mat-icon> Reference Tables
+    </button>
+  </div>
+
+  @if (masteredCount() > 0) {
+    <div class="mastery-summary">
+      <mat-icon>stars</mat-icon>
+      <span>{{ masteredCount() }} declension patterns mastered</span>
+    </div>
+  }
+
+  @if (mode() === 'practice') {
+    <div class="practice-layout">
+      <mat-card class="filters-card">
+        <mat-card-header><mat-card-title>Practice Settings</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <div class="filter-group">
+            <label>Question type</label>
+            <mat-form-field appearance="outline">
+              <mat-select [(ngModel)]="questionType">
+                <mat-option value="mixed">Mixed (all types)</mat-option>
+                <mat-option value="article">Articles</mat-option>
+                <mat-option value="adjective">Adjective endings</mat-option>
+                <mat-option value="noun">Noun forms</mat-option>
+                <mat-option value="phrase">Full phrases</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          <div class="filter-group">
+            <label>Cases to practice</label>
+            <div class="case-chips">
+              @for (c of allCases; track c) {
+                <button class="case-chip" [class.selected]="selectedCases().includes(c)" (click)="toggleCase(c)">{{ getCaseLabel(c) }}</button>
+              }
+            </div>
+            @if (selectedCases().length > 0) {
+              <button mat-button color="warn" (click)="clearCases()">Clear all</button>
+            }
+          </div>
+          <div class="filter-group">
+            <label>Theme (optional)</label>
+            <mat-form-field appearance="outline">
+              <input matInput [(ngModel)]="theme" placeholder="e.g. Family, Travel, Food" />
+            </mat-form-field>
+          </div>
+          <button mat-raised-button color="primary" class="start-btn" (click)="startSession()" [disabled]="aiLoading()">
+            <mat-icon>play_arrow</mat-icon> Start Practice (10 questions)
+          </button>
+          @if (aiLoading()) {
+            <div class="ai-loading-inline">
+              <mat-spinner diameter="20"></mat-spinner>
+              <span>Generating exercises with AI...</span>
+            </div>
+          }
+          @if (aiError()) {
+            <div class="ai-error">
+              <mat-icon>error</mat-icon>
+              <span>{{ aiError() }}</span>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+      <div class="case-notes">
+        @for (c of allCases; track c) {
+          <div class="case-note">
+            <strong>{{ getCaseLabel(c) }}</strong>
+            <span class="ru-question">{{ getCaseQuestionRu(c) }}</span>
+            <p>{{ caseGapNotes[c] }}</p>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (mode() === 'reference') {
+    <div class="reference-layout">
+      @for (group of referenceGroups(); track group.id) {
+        <mat-card class="ref-card">
+          <mat-card-header>
+            <mat-card-title>{{ group.title }}</mat-card-title>
+            <mat-card-subtitle>{{ group.subtitle }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <table class="ref-table">
+              <thead><tr>@for (h of group.header; track h) { <th>{{ h }}</th> }</tr></thead>
+              <tbody>
+                @for (row of group.rows; track row.case) {
+                  <tr>
+                    <td class="case-cell">{{ row.caseLabel }}</td>
+                    @for (cell of row.cells; track cell) { <td>{{ cell }}</td> }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </mat-card-content>
+        </mat-card>
+      }
+      <mat-card class="ref-card">
+        <mat-card-header>
+          <mat-card-title>Example Nouns</mat-card-title>
+          <mat-card-subtitle>n-Deklination nouns change in all oblique cases</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="noun-grid">
+            @for (n of exampleNouns; track n.noun) {
+              <div class="noun-item">
+                <span class="noun-article">{{ n.article }}</span>
+                <span class="noun-word">{{ n.noun }}</span>
+                <span class="noun-plural">Pl: {{ n.plural }}</span>
+                @if (n.nDeklination) { <span class="noun-tag">n-Dekl.</span> }
+              </div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+      <mat-card class="ref-card">
+        <mat-card-header><mat-card-title>Example Adjectives</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <div class="adj-grid">
+            @for (a of exampleAdjectives; track a.base) {
+              <div class="adj-item">
+                <span class="adj-word">{{ a.base }}</span>
+                <span class="adj-translation">{{ getTranslation(a) }}</span>
+              </div>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  }
+
+  @if (sessionActive() || sessionFinished()) {
+    <div class="session-overlay">
+      <mat-card class="session-card">
+        <mat-card-header class="session-header">
+          <mat-card-title>Declension Practice</mat-card-title>
+          <mat-card-subtitle>Question {{ currentNumber() }} / {{ totalQuestions() }} · Correct: {{ correctCount() }}</mat-card-subtitle>
+          <button
+            mat-icon-button
+            class="quit-btn"
+            (click)="closeSession()"
+            title="Quit exercise"
+            aria-label="Quit exercise"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </mat-card-header>
+        <mat-card-content>
+          @if (!sessionFinished()) {
+            @if (currentQuestion(); as item) {
+              <div class="question-card">
+                <div class="question-prompt">{{ item.exercise.sentenceWithBlank }}</div>
+                @if (item.exercise.hintEn || item.exercise.hintRu) {
+                  <div class="context-sentence">
+                    <p class="context-de">{{ item.exercise.hintEn }}</p>
+                    <p class="context-ru">{{ item.exercise.hintRu }}</p>
+                  </div>
+                }
+                @if (!item.answered && !aiVerifying()) {
+                  <div class="options-grid">
+                    @for (opt of item.exercise.options; track opt) {
+                      <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
+                    }
+                  </div>
+                }
+                @if (aiVerifying()) {
+                  <div class="verifying-indicator">
+                    <mat-spinner diameter="20"></mat-spinner>
+                    <span>Verifying your answer...</span>
+                  </div>
+                }
+                @if (item.answered) {
+                  <div class="feedback" [class.correct]="item.correct" [class.wrong]="!item.correct">
+                    <mat-icon>{{ item.correct ? 'check_circle' : 'cancel' }}</mat-icon>
+                    <div>
+                      <strong>{{ item.correct ? 'Correct!' : 'Not quite.' }}</strong>
+                      @if (!item.correct) {
+                        <span> Answer: "{{ item.exercise.correctAnswer }}"</span>
+                      }
+                    </div>
+                  </div>
+                  @if (item.feedback) {
+                    <div class="explanation">
+                      <mat-icon>lightbulb</mat-icon>
+                      <span>{{ item.feedback.explanation }}</span>
+                    </div>
+                  }
+                  <button mat-raised-button color="primary" class="next-btn" (click)="nextQuestion()">
+                    {{ currentNumber() >= totalQuestions() ? 'Finish' : 'Next' }}
+                  </button>
+                }
+              </div>
+            }
+          } @else {
+            <div class="session-results">
+              <mat-icon>emoji_events</mat-icon>
+              <h2>Session Complete!</h2>
+              <p class="score">{{ correctCount() }} / {{ totalQuestions() }} correct ({{ scorePercent() }}%)</p>
+              <div class="results-actions">
+                <button mat-raised-button (click)="restart()"><mat-icon>replay</mat-icon> Practice Again</button>
+                <button mat-raised-button color="primary" (click)="closeSession()">Back to Settings</button>
+              </div>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
+  }
+</div>

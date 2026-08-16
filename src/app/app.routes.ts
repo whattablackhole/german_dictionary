@@ -63,4 +63,25 @@ export const routes: Routes = [
         (m) => m.SettingsComponent
       ),
   },
+  {
+    path: 'import',
+    loadComponent: () =>
+      import('./pages/duolingo-import/duolingo-import.component').then(
+        (m) => m.DuolingoImportComponent
+      ),
+  },
+  {
+    path: 'prepositions',
+    loadComponent: () =>
+      import('./pages/preposition-trainer/preposition-trainer.component').then(
+        (m) => m.PrepositionTrainerComponent
+      ),
+  },
+  {
+    path: 'declension',
+    loadComponent: () =>
+      import('./pages/declension-trainer/declension-trainer.component').then(
+        (m) => m.DeclensionTrainerComponent
+      ),
+  },
 ];

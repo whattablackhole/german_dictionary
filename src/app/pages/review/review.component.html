@@ -229,4 +229,82 @@
       }
     </section>
   </div>
+
+  @if (filteredWords().length > pageSize()) {
+    <div class="pagination-bar">
+      <div class="pagination-info">
+        Page {{ page() }} of {{ totalPages() }}
+        ({{ filteredWords().length }} total words)
+      </div>
+      <div class="distribution-toggle">
+        <button
+          mat-stroked-button
+          [class.active-toggle]="equalDistribution()"
+          (click)="equalDistribution.set(!equalDistribution()); page.set(1)"
+          title="When enabled, words are distributed equally across the 4 columns on every page"
+        >
+          <mat-icon>balance</mat-icon>
+          {{ equalDistribution() ? 'Equal distribution: ON' : 'Equal distribution: OFF' }}
+        </button>
+      </div>
+      <div class="pagination-controls">
+        <button
+          mat-icon-button
+          [disabled]="page() <= 1"
+          (click)="setPage(1)"
+          aria-label="First page"
+        >
+          <mat-icon>first_page</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          [disabled]="page() <= 1"
+          (click)="setPage(page() - 1)"
+          aria-label="Previous page"
+        >
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+
+        @for (p of pageRange(); track p) {
+          <button
+            mat-icon-button
+            [class.active-page]="p === page()"
+            (click)="setPage(p)"
+          >
+            {{ p }}
+          </button>
+        }
+
+        <button
+          mat-icon-button
+          [disabled]="page() >= totalPages()"
+          (click)="setPage(page() + 1)"
+          aria-label="Next page"
+        >
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          [disabled]="page() >= totalPages()"
+          (click)="setPage(totalPages())"
+          aria-label="Last page"
+        >
+          <mat-icon>last_page</mat-icon>
+        </button>
+      </div>
+      <div class="pagination-size">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Per page</mat-label>
+          <mat-select
+            [value]="pageSize()"
+            (valueChange)="setPageSize($event)"
+          >
+            @for (size of pageSizeOptions; track size) {
+              <mat-option [value]="size">{{ size }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+    </div>
+  }
 </div>
