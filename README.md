@@ -7,13 +7,15 @@ An interactive German language learning application built with [Angular CLI](htt
 - **Word Management** — Add, edit, and organize German vocabulary with translations, parts of speech, gender, verb forms, and difficulty levels
 - **AI-Powered Analysis** — Uses OpenRouter AI to analyze German words (translation, gender, part of speech, verb conjugation types, CEFR level)
 - **Sentence Generation** — Generate practice sentences at your CEFR level (A1-C1) with specific word types and grammar topics
-- **Fill-in-the-Blank Exercises** — AI-generated cloze exercises targeting specific words with smart blank ranges (nouns exclude articles, separable verbs split into two blanks)
+- **Fill-in-the-Blank Exercises** — AI-generated cloze exercises targeting specific words with smart blank ranges (nouns exclude articles, separable verbs split into two blanks); supports forced word selection and adjustable sentence count
 - **Translation Verification** — Get AI feedback on your translations with error highlighting and scoring
 - **Local Translation** — Optional LibreTranslate integration for on-the-fly translations
-- **Text-to-Speech** — Two TTS engines:
+- **Text-to-Speech** — Multiple TTS options:
   - **Browser SpeechSynthesis** — free, works offline
   - **Microsoft MAI-Voice-2 Flash** — natural German voice via OpenRouter (requires API key with credits)
-- **Story Generator** — Generate cohesive German stories with AI, listen with word-by-word highlighting, progress slider, speed control, and pause/resume
+  - **OpenAI GPT-Audio** — additional neural voices via OpenRouter
+  - Audio is cached in IndexedDB to avoid re-generating repeated phrases
+- **Story Generator** — Generate cohesive German stories with AI, listen with word-by-word highlighting, progress slider, speed control, and pause/resume; includes search filters (theme, level, word types, grammar topics, sentence count)
 - **Word Lookup Mode** — Click any word in a story to see its translation, part of speech, verb forms, hear pronunciation, and add to dictionary (conjugated verbs auto-convert to infinitive)
 - **Grammar Notes** — AI-generated grammar explanations with examples and related topics
 - **Sentence Builder** — Practice writing German sentences by picking a grammar pattern and building sentences from your word box, with:
@@ -23,10 +25,21 @@ An interactive German language learning application built with [Angular CLI](htt
   - Smart normalization — verbs auto-convert to their infinitive (e.g., "hat" → "haben") and declined forms to their base form (e.g., "seine" → "sein")
   - Confirmation dialog with per-word checkboxes and duplicate detection (checks verb forms already in vocabulary)
   - Per-pattern history stored in localStorage
-- **Word Practice** — Practice words with cloze-style sentence completion
+- **Diary** — Freestyle German writing with AI feedback:
+  - Corrections with character-level highlighting (original → corrected with explanation)
+  - Full corrected version of your entry
+  - Study suggestions and a rough CEFR level estimate
+  - Follow-up questions (German + English) that you can click to use as the next entry
+  - Unknown word detection with one-click add to vocabulary
+  - Entry history stored in localStorage, with expandable details and delete
+- **Preposition Trainer** — AI-generated multiple-choice exercises for German prepositions with case selection (accusative/dative/genitive), hints in English/Russian, and rule explanations
+- **Declension Trainer** — AI-generated declension exercises for articles, adjective endings, nouns, and full phrases across all four cases, with AI-verified answers
+- **Word Practice** — Practice words with cloze-style sentence completion (optionally forced to selected words)
 - **Review** — Flashcard-style review of learned words with mastery tracking
 - **Word Matching Game** — Match German words with their translations in a timed game
-- **Settings** — Configure translation language (English/Russian), article display in practice, and TTS engine
+- **Duolingo Import** — Import vocabulary from a Duolingo export file
+- **Backup & Export** — Export/import all app data (vocabulary, stories, diary, grammar notes, sentence history) as a JSON backup
+- **Settings** — Configure translation language (English/Russian), article display, TTS engine, and AI API key
 
 ## Prerequisites
 
@@ -44,7 +57,7 @@ npm install
 
 ### 2. Get an OpenRouter API Key
 
-The application uses OpenRouter AI to analyze words, generate sentences, create stories, and verify translations. You need an API key:
+The application uses OpenRouter AI to analyze words, generate sentences, create stories, verify translations, and provide diary feedback. You need an API key:
 
 1. Go to [openrouter.ai/keys](https://openrouter.ai/keys)
 2. Sign up or log in
@@ -126,26 +139,34 @@ Uses the [Vitest](https://vitest.dev/) test runner.
 ```
 src/
 ├── app/
-│   ├── models/           # Data models (Word, Story, GrammarNote, etc.)
+│   ├── models/           # Data models (Word, Story, GrammarNote, SentencePattern, PrepositionRule, CaseDeclension, Diary)
 │   ├── pages/            # Page components
-│   │   ├── exercise/     # Fill-in-the-blank exercises
-│   │   ├── game/         # Word matching game
-│   │   ├── grammar-notes/ # AI-generated grammar explanations
-│   │   ├── manage/       # Word CRUD management
-│   │   ├── practice-word/ # Word practice with cloze sentences
-│   │   ├── review/       # Flashcard review with mastery tracking
-│   │   ├── sentence-builder/ # Practice writing sentences with grammar patterns
-│   │   ├── settings/     # Settings (API key, language, TTS engine)
-│   │   └── stories/      # AI story generator with TTS playback
+│   │   ├── review/             # Flashcard review with mastery tracking
+│   │   ├── game/               # Word matching game
+│   │   ├── exercise/           # Fill-in-the-blank exercises
+│   │   ├── practice-word/      # Word practice with cloze sentences
+│   │   ├── sentence-builder/   # Practice writing sentences with grammar patterns
+│   │   ├── diary/              # Freestyle German writing diary with AI feedback
+│   │   ├── grammar-notes/      # AI-generated grammar explanations
+│   │   ├── stories/            # AI story generator with TTS playback
+│   │   ├── preposition-trainer/ # AI-generated preposition exercises
+│   │   ├── declension-trainer/  # AI-generated declension exercises
+│   │   ├── duolingo-import/    # Import vocabulary from Duolingo exports
+│   │   ├── manage/             # Word CRUD management
+│   │   └── settings/           # Settings (API key, language, TTS engine)
 │   ├── pipes/            # Custom pipes (markdown rendering)
 │   ├── services/         # Application services
-│   │   ├── ai.service.ts           # OpenRouter AI integration
-│   │   ├── translation.service.ts  # LibreTranslate integration
-│   │   ├── speech.service.ts       # Text-to-speech (browser + word boundary events)
-│   │   ├── word.service.ts         # Word data management (localStorage)
-│   │   ├── story.service.ts        # Story data management (localStorage)
+│   │   ├── ai.service.ts            # OpenRouter AI integration
+│   │   ├── translation.service.ts   # LibreTranslate integration
+│   │   ├── speech.service.ts        # Text-to-speech (browser + word boundary events)
+│   │   ├── word.service.ts          # Word data management (localStorage)
+│   │   ├── story.service.ts         # Story data management (localStorage)
+│   │   ├── diary.service.ts         # Diary entry management (localStorage)
 │   │   ├── grammar-notes.service.ts # Grammar notes management (localStorage)
-│   │   ├── settings.service.ts     # User settings (language, TTS, article display)
+│   │   ├── sentence-pattern.service.ts # Pattern history & mastery tracking
+│   │   ├── settings.service.ts      # User settings (language, TTS, article display)
+│   │   ├── backup.service.ts        # Export/import all app data as JSON
+│   │   ├── tts-cache.service.ts     # IndexedDB audio cache for TTS
 │   │   └── ...
 │   ├── app.ts            # Root component
 │   └── app.config.ts     # Angular app configuration
