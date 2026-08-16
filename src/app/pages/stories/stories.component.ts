@@ -92,6 +92,7 @@ export class StoriesComponent implements OnDestroy {
   readonly isSeeking = signal(false);
   private isIntentionallyStopping = false;
 
+
   // Word lookup
   readonly wordLookupEnabled = signal(false);
   readonly selectedLookupWord = signal<string | null>(null);
@@ -99,6 +100,11 @@ export class StoriesComponent implements OnDestroy {
   readonly wordLookupLoading = signal(false);
   readonly popupPosition = signal<PopupPosition>({ x: 0, y: 0 });
   readonly wordAddedFeedback = signal(false);
+
+  // AI classification correction feedback
+  readonly correctionHint = signal('');
+  readonly correctionLoading = signal(false);
+  readonly correctionError = signal('');
 
   // Multi-word selection via right-click
   readonly contextMenuVisible = signal(false);
@@ -122,6 +128,64 @@ export class StoriesComponent implements OnDestroy {
     const story = this.selectedStory();
     if (!story) return [];
     return this.tokenize(story.german);
+  });
+
+  /** Extra per-word padding (in "weight units") to slow down word transitions.
+   *  Each word gets this much extra weight on top of its character length,
+   *  which gives short words (ich, und, der) proportionally more time.
+   *  Higher = slower transitions between words. */
+  private readonly WORD_PADDING = 10;
+
+  /** Extra pause after a sentence-ending period in seconds (real time, not a weight). */
+  private readonly SENTENCE_PAUSE = 1;
+
+  /**
+   * Builds a cumulative time map for each word token using character-length
+   * weighting with per-word padding. Longer words take proportionally more time
+   * to speak, and every word gets a base padding so short words don't fly by.
+   * After words ending with a period, an extra SENTENCE_PAUSE is added in real seconds.
+   * The total duration is scaled to match the actual audio duration.
+   */
+  readonly wordTimeMap = computed<{ wordIndex: number; startTime: number; endTime: number }[]>(() => {
+    const tokens = this.wordTokens();
+    const duration = this.audioDuration();
+    if (tokens.length === 0 || duration <= 0) return [];
+
+    // Calculate total weight (character length + padding per word)
+    const totalWeight = tokens.reduce((sum, t) => sum + t.text.length + this.WORD_PADDING, 0);
+    if (totalWeight === 0) return [];
+
+    // Calculate total sentence pause time
+    const totalSentencePause = tokens.filter(t => t.text.endsWith('.')).length * this.SENTENCE_PAUSE;
+
+    // Available time for word-weighted distribution (audio duration minus sentence pauses)
+    const availableTime = duration - totalSentencePause;
+    if (availableTime <= 0) return [];
+
+    const map: { wordIndex: number; startTime: number; endTime: number }[] = [];
+    let accumulated = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      const weight = tokens[i].text.length + this.WORD_PADDING;
+      const startTime = (accumulated / totalWeight) * availableTime;
+      accumulated += weight;
+      const endTime = (accumulated / totalWeight) * availableTime;
+      map.push({ wordIndex: i, startTime, endTime });
+    }
+
+    // Add sentence pauses after period-ending words by shifting subsequent words
+    let pauseOffset = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      map[i] = {
+        wordIndex: i,
+        startTime: map[i].startTime + pauseOffset,
+        endTime: map[i].endTime + pauseOffset,
+      };
+      if (tokens[i].text.endsWith('.')) {
+        pauseOffset += this.SENTENCE_PAUSE;
+      }
+    }
+
+    return map;
   });
 
   readonly highlightedGerman = computed(() => {
@@ -340,16 +404,13 @@ export class StoriesComponent implements OnDestroy {
       audio.playbackRate = this.playbackSpeed();
       this.audioElement.set(audio);
 
-      const totalChars = story.german.length;
-
       // If resuming, seek to saved position
       const resumePos = this.resumePosition();
       if (resumePos > 0) {
         // We need metadata first to seek
         audio.addEventListener('loadedmetadata', () => {
           audio.currentTime = resumePos;
-          const progress = resumePos / audio.duration;
-          this.currentCharIndex.set(Math.floor(progress * totalChars));
+          this.updateCharIndexFromTime(resumePos);
         }, { once: true });
       } else {
         this.currentCharIndex.set(0);
@@ -363,9 +424,19 @@ export class StoriesComponent implements OnDestroy {
         if (this.isSeeking()) return;
         this.audioCurrentTime.set(audio.currentTime);
         if (audio.duration) {
-          const progress = audio.currentTime / audio.duration;
-          const charIndex = Math.floor(progress * totalChars);
-          this.currentCharIndex.set(charIndex);
+          // Use linear time map to find which word should be highlighted
+          const timeMap = this.wordTimeMap();
+          const currentTime = audio.currentTime;
+          for (let i = 0; i < timeMap.length; i++) {
+            if (currentTime >= timeMap[i].startTime && currentTime < timeMap[i].endTime) {
+              const tokens = this.wordTokens();
+              const token = tokens[timeMap[i].wordIndex];
+              if (token) {
+                this.currentCharIndex.set(token.start);
+              }
+              break;
+            }
+          }
         }
       });
 
@@ -436,11 +507,31 @@ export class StoriesComponent implements OnDestroy {
     audio.currentTime = seekTime;
     this.audioCurrentTime.set(seekTime);
 
-    // Update char index
-    const story = this.selectedStory();
-    if (story) {
-      const progress = seekTime / audio.duration;
-      this.currentCharIndex.set(Math.floor(progress * story.german.length));
+    // Update char index using word-weighted time map
+    this.updateCharIndexFromTime(seekTime);
+  }
+
+  /** Updates currentCharIndex based on the word-weighted time map for a given time position. */
+  private updateCharIndexFromTime(time: number): void {
+    const timeMap = this.wordTimeMap();
+    for (let i = 0; i < timeMap.length; i++) {
+      if (time >= timeMap[i].startTime && time < timeMap[i].endTime) {
+        const tokens = this.wordTokens();
+        const token = tokens[timeMap[i].wordIndex];
+        if (token) {
+          this.currentCharIndex.set(token.start);
+        }
+        return;
+      }
+    }
+    // If past the last word, highlight the last word
+    if (timeMap.length > 0) {
+      const lastEntry = timeMap[timeMap.length - 1];
+      const tokens = this.wordTokens();
+      const token = tokens[lastEntry.wordIndex];
+      if (token) {
+        this.currentCharIndex.set(token.start);
+      }
     }
   }
 
@@ -596,11 +687,36 @@ export class StoriesComponent implements OnDestroy {
     setTimeout(() => this.wordAddedFeedback.set(false), 2000);
   }
 
+  /** Re-run the AI analysis with a user-provided hint to correct the classification. */
+  async reanalyzeWithHint(): Promise<void> {
+    const word = this.selectedLookupWord();
+    const hint = this.correctionHint().trim();
+    if (!word || !hint) return;
+
+    this.correctionLoading.set(true);
+    this.correctionError.set('');
+
+    try {
+      const suggestion = await this.aiService.reanalyzeWord(word, hint);
+      this.wordSuggestion.set(suggestion);
+      this.correctionHint.set('');
+    } catch (err) {
+      this.correctionError.set(
+        err instanceof Error ? err.message : 'Re-analysis failed.'
+      );
+    } finally {
+      this.correctionLoading.set(false);
+    }
+  }
+
   closeWordPopup(): void {
     this.selectedLookupWord.set(null);
     this.wordSuggestion.set(null);
     this.wordLookupLoading.set(false);
     this.wordAddedFeedback.set(false);
+    this.correctionHint.set('');
+    this.correctionLoading.set(false);
+    this.correctionError.set('');
   }
 
   // ── Right-click context menu for multi-word selection ──

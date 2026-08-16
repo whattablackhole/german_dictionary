@@ -227,7 +227,7 @@
             } @else if (phraseSuggestion(); as s) {
               <div class="popup-translation">{{ phraseTranslation() }}</div>
 
-              @if (s.partOfSpeech === 'verb' && (s.verbType || s.presentThirdPerson || s.simplePast || s.pastParticiple)) {
+            @if (s.partOfSpeech === 'verb' && (s.verbType || s.presentThirdPerson || s.simplePast || s.pastParticiple)) {
                 <div class="popup-verb-forms">
                   @if (s.verbType) {
                     <span class="verb-form">{{ s.verbType }} verb</span>
@@ -315,6 +315,33 @@
                   }
                 </div>
               }
+
+              <!-- AI Classification Correction -->
+              <div class="correction-section">
+                <div class="correction-row">
+                  <input
+                    class="correction-input"
+                    [(ngModel)]="correctionHint"
+                    placeholder="Wrong? Tell AI what it is (e.g. „it's a verb“)"
+                    (keyup.enter)="reanalyzeWithHint()"
+                  />
+                  <button
+                    class="correction-btn"
+                    (click)="reanalyzeWithHint()"
+                    [disabled]="correctionLoading() || !correctionHint().trim()"
+                    title="Re-analyze with hint"
+                  >
+                    @if (correctionLoading()) {
+                      <mat-spinner diameter="14" />
+                    } @else {
+                      <mat-icon>refresh</mat-icon>
+                    }
+                  </button>
+                </div>
+                @if (correctionError()) {
+                  <div class="correction-error">{{ correctionError() }}</div>
+                }
+              </div>
             }
 
             <div class="popup-actions">

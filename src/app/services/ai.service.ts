@@ -274,6 +274,150 @@ Example response format:
     });
   }
 
+  /**
+   * Re-analyze a German word with a user-provided hint to correct the AI's classification.
+   * The hint is included in the prompt to guide the AI toward the correct result.
+   */
+  async reanalyzeWord(german: string, hint: string): Promise<AiSuggestion> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error(
+        'No API key set. Add your OpenRouter API key in the AI Assistant field above.'
+      );
+    }
+
+    const prompt = `You are a German language expert. A user has provided a hint about the word "${german}" to help you classify it correctly.
+
+User's hint: "${hint}"
+
+Please re-analyze the word "${german}" with this hint in mind. Respond with JSON only (no markdown) using exactly these fields:
+- "translationEn": the English translation
+- "translationRu": the Russian translation
+- "partOfSpeech": the part of speech, exactly one of "noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection", "numeral" or "phrase"
+- "gender": the grammatical gender, exactly one of "der", "die" or "das", OR null if the word is NOT a noun
+- "level": the CEFR difficulty level, exactly one of "A1", "A2", "B1", "B2" or "C1"
+- "baseForm": the dictionary/base form of the word
+- "verbType": (only if partOfSpeech is "verb") exactly one of "strong", "weak" or "mixed". For other parts of speech, set to null.
+- "infinitive": (only if partOfSpeech is "verb") the infinitive form. For other parts of speech, set to null.
+- "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense. For other parts of speech, set to null.
+- "simplePast": (only if partOfSpeech is "verb") the simple past (Präteritum) form. For other parts of speech, set to null.
+- "pastParticiple": (only if partOfSpeech is "verb") the past participle (Partizip II) form. For other parts of speech, set to null.
+- "pluralForm": (only if partOfSpeech is "noun") the plural form. For other parts of speech, set to null.
+- "pluralFormation": (only if partOfSpeech is "noun") the plural formation pattern. For other parts of speech, set to null.
+
+IMPORTANT: Consider the user's hint carefully. If the hint says "it's a verb" or similar, prioritize classifying it as a verb with appropriate verb fields.
+
+Word: "${german}"`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('API key rejected. Check your OpenRouter key at openrouter.ai/keys.');
+      }
+      if (response.status === 402) {
+        throw new Error('OpenRouter account has insufficient credits. Add credits at openrouter.ai.');
+      }
+      if (response.status === 429) {
+        throw new Error('Rate limit reached. Try again in a moment.');
+      }
+      throw new Error(`AI request failed (HTTP ${response.status})`);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: {
+      translationEn?: string;
+      translationRu?: string;
+      partOfSpeech?: string;
+      gender?: string | null;
+      level?: string;
+      baseForm?: string | null;
+      verbType?: string | null;
+      infinitive?: string | null;
+      presentThirdPerson?: string | null;
+      simplePast?: string | null;
+      pastParticiple?: string | null;
+      pluralForm?: string | null;
+      pluralFormation?: string | null;
+    };
+    try {
+      parsed = JSON.parse(jsonText) as typeof parsed;
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const translationEn = parsed.translationEn?.trim() ?? '';
+    const translationRu = parsed.translationRu?.trim() ?? '';
+    const rawPart = (parsed.partOfSpeech ?? '').trim().toLowerCase() as PartOfSpeech;
+    const genderRaw = parsed.gender ? String(parsed.gender).trim() : '';
+    const level = (parsed.level ?? '').trim().toUpperCase() as DifficultyLevel;
+
+    if (!translationEn || !translationRu) {
+      throw new Error('AI could not classify this word. Try another hint.');
+    }
+
+    const validParts: PartOfSpeech[] = [
+      'noun', 'verb', 'adjective', 'adverb', 'pronoun',
+      'preposition', 'conjunction', 'interjection', 'numeral', 'phrase',
+    ];
+    const partOfSpeech = validParts.includes(rawPart) ? rawPart : 'noun';
+
+    const validGender = ['der', 'die', 'das'];
+    const isNoun = partOfSpeech === 'noun';
+    const gender: Gender | null =
+      isNoun && validGender.includes(genderRaw)
+        ? (genderRaw as Gender)
+        : null;
+
+    const validLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
+    const finalLevel = validLevels.includes(level) ? level : 'A1';
+
+    const isVerb = partOfSpeech === 'verb';
+    const validVerbTypes = ['strong', 'weak', 'mixed'];
+    const verbTypeRaw = parsed.verbType?.trim().toLowerCase() ?? '';
+    const verbType = isVerb && validVerbTypes.includes(verbTypeRaw) ? verbTypeRaw as 'strong' | 'weak' | 'mixed' : undefined;
+
+    const validPluralFormations = ['-e', '-en', '-er', '-s', '-n', '-', 'umlaut', 'umlaut + -e', 'umlaut + -er', 'umlaut + -en', 'foreign'];
+    const pluralFormationRaw = parsed.pluralFormation?.trim() ?? '';
+    const pluralFormation = isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
+
+    return {
+      baseForm: parsed.baseForm?.trim() || undefined,
+      translationEn,
+      translationRu,
+      partOfSpeech,
+      gender,
+      level: finalLevel,
+      verbType,
+      infinitive: isVerb ? (parsed.infinitive?.trim() || undefined) : undefined,
+      presentThirdPerson: isVerb ? (parsed.presentThirdPerson?.trim() || undefined) : undefined,
+      simplePast: isVerb ? (parsed.simplePast?.trim() || undefined) : undefined,
+      pastParticiple: isVerb ? (parsed.pastParticiple?.trim() || undefined) : undefined,
+      pluralForm: isNoun ? (parsed.pluralForm?.trim() || undefined) : undefined,
+      pluralFormation,
+    };
+  }
+
   async analyzeWord(german: string): Promise<AiSuggestion> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
