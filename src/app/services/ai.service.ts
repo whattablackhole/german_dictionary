@@ -49,12 +49,11 @@ export interface GeneratedWordExercise {
   fullSentence: string;
   targetWord: string;
   wordHint: string;
-  /** Zero-based word indices in fullSentence that should be blanked.
-   *  Each index points to a word when the sentence is split by whitespace.
-   *  For a single noun: [5] means the 6th word is blanked.
-   *  For a separable verb like "abholen" in "Ich hole dich ab": [1, 3] means
-   *  the 2nd word ("hole") and 4th word ("ab") are blanked. */
-  blankWordIndices: number[];
+  /** The exact word(s) from fullSentence that should be blanked.
+   *  Each entry is a substring of fullSentence (preserving case and punctuation).
+   *  For a single noun like "Schuhe" in "Ich möchte die Schuhe anprobieren": ["Schuhe"]
+   *  For a separable verb like "abholen" in "Ich hole dich ab": ["hole", "ab"] */
+  blankWords: string[];
   /** Whether the blanked part is preceded by an article (der/die/das) */
   hasArticle: boolean;
   level: DifficultyLevel;
@@ -700,7 +699,7 @@ Respond with JSON only (no markdown) as an object with a single key "exercises" 
 - "fullSentence": the complete German sentence without blanks
 - "targetWord": the German word(s) the student must type (WITHOUT the article for nouns, e.g. "Hund"; for separable verbs the full verb form, e.g. "abholen")
 - "wordHint": the English translation of the target word (for the student to know what word to fill in)
-- "blankWordIndices": array of zero-based word indices in fullSentence that must be blanked. Split the sentence by whitespace to get the word list. For a single word like "Hund" in "Der Hund bellt": [1] means the 2nd word is blanked. For a separable verb like "abholen" in "Ich hole dich ab": [1, 3] means the 2nd word ("hole") and 4th word ("ab") are blanked. Count character punctuation like commas as separate words only if they are separated by spaces.
+- "blankWords": array of the EXACT substrings from fullSentence that should be replaced with "___". Each entry must be a verbatim substring of fullSentence (preserving case and any surrounding punctuation). For a single noun like "Schuhe" in "Ich möchte die Schuhe anprobieren": ["Schuhe"]. For a separable verb like "abholen" in "Ich hole dich ab": ["hole", "ab"]. For a verb like "sieht aus" in "Er sieht gut aus": ["sieht", "aus"]. NEVER include the article.
 - "hasArticle": boolean — true ONLY if there is a German article (der/die/das, or declined form like dem/den/ein/eine) immediately before the blanked noun in the sentence
 - "level": "${level}"
 - "domain": the topic domain (e.g. "Family", "Travel", "Food", "Work", "Nature", "Education", "Technology")
@@ -708,10 +707,10 @@ Respond with JSON only (no markdown) as an object with a single key "exercises" 
 
 Rules:
 - Each exercise must target exactly one word from this list: ${wordsJson}
-- For nouns: blankWordIndices covers ONLY the noun, never the article. hasArticle is true if an article precedes it.
-- For separable verbs: blankWordIndices covers BOTH parts (the conjugated part and the separable prefix). hasArticle is always false.
-- For other verbs/adjectives/adverbs: blankWordIndices covers the single word. hasArticle is always false.
-- Important: multiple blankWordIndices does NOT automatically mean gender+noun. hasArticle explicitly tells us whether an article is present before the noun.
+- For nouns: blankWords contains ONLY the noun string, never the article. hasArticle is true if an article precedes it.
+- For separable verbs: blankWords contains BOTH parts (the conjugated part and the separable prefix). hasArticle is always false.
+- For other verbs/adjectives/adverbs: blankWords contains the single word string. hasArticle is always false.
+- Important: multiple blankWords does NOT automatically mean gender+noun. hasArticle explicitly tells us whether an article is present before the noun.
 - The wordHint must be the English translation of the target word.
 - Sentences should be realistic and natural for ${level} level.
 - Keep sentences concise (5-15 words).
