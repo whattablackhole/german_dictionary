@@ -786,7 +786,8 @@ Example format:
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
 
-    const vocabJson = JSON.stringify(vocabList.map((v: { german: string }) => v.german.toLowerCase()));
+    const vocabListLimited = vocabList.slice(0, 40);
+    const vocabJson = JSON.stringify(vocabListLimited.map((v: { german: string }) => v.german.toLowerCase()));
 
     const prompt = `You are a German language teacher. A student has written a German sentence to practice a specific grammar pattern.
 
@@ -871,8 +872,6 @@ Rules:
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
 
-    const vocabJson = JSON.stringify(vocabList.map((v) => v.german.toLowerCase()));
-
     const prompt = `You are a German language teacher. A student has written a free-form diary entry in German as a language learning exercise.
 
 Analyze the diary entry and respond with JSON only (no markdown) using exactly these fields:
@@ -886,7 +885,7 @@ Analyze the diary entry and respond with JSON only (no markdown) using exactly t
   Empty array if there are no errors.
 - "correctedText": string — the FULL corrected version of the diary entry (same content, with all corrections applied and natural phrasing preserved). If no corrections, this equals the original text.
 - "suggestions": array of strings — 2-4 actionable study suggestions based on errors or patterns noticed (e.g. "Review dative prepositions", "Practice separable verb word order"). Empty array if nothing to suggest.
-- "unknownWords": array of strings — any words in the entry NOT in the student's known vocabulary list (case-insensitive). Include conjugated verb forms but list the base/infinitive form. Empty array if all known.
+- "unknownWords": array of strings — any words in the entry that are uncommon or likely unknown to a learner at the student's level. Include conjugated verb forms but list the base/infinitive form. Empty array if all words are common.
 - "followUpQuestions": array of objects, each with:
   - "de": string — a follow-up question in German encouraging the student to continue writing (natural, level-appropriate)
   - "en": string — the English translation of the question
@@ -894,7 +893,6 @@ Analyze the diary entry and respond with JSON only (no markdown) using exactly t
 - "cefrEstimate": string — the rough CEFR level of the writing, exactly one of "A1", "A2", "B1", "B2" or "C1"
 - "encouragements": string — a final encouraging sentence in English, celebrating what the student did well
 
-Student's known vocabulary (for unknownWords detection only): ${vocabJson}
 Diary entry: "${text}"
 
 Rules:
@@ -902,7 +900,7 @@ Rules:
 - Only flag genuinely incorrect German (grammar, word choice, spelling, word order). Do NOT correct stylistic preferences.
 - For correction indices, count characters carefully against the ORIGINAL text.
 - "correctedText" must preserve the student's meaning and natural voice, while fixing all flagged errors.
-- Detect words not in the vocabulary by comparing lowercase forms; allow conjugated forms of known verbs (e.g. "ging" for "gehen", "hatte" for "haben"). If a conjugated form is unknown but its base form is in the vocabulary, do NOT list it.
+- For "unknownWords": flag any words that are uncommon or likely beyond A2/B1 level. Use your judgement as a German teacher. Allow conjugated forms of common verbs. Empty array if all words are common.
 - Follow-up questions should be simple enough for the student to answer at their level, and should relate to the content of the entry (e.g. ask for more details about what they wrote about).
 - The cefrEstimate should be based on sentence complexity, vocabulary range, and error frequency.`;
  

@@ -494,29 +494,30 @@ export class PracticeWordComponent {
           levelRange
         );
 
-      // Map AI output to WordExercise objects, using the AI's word indices
-      // to compute character ranges. This is far more reliable than character
-      // indices, which the AI frequently gets wrong.
+      // Map AI output to WordExercise objects, using the AI's blankWords
+      // (exact substrings) to compute character ranges. Matching by string
+      // content is far more reliable than word indices, which the AI
+      // frequently gets wrong due to tokenization differences.
       const exercises = generated
         .map((g) => {
           const matchedWord = combinedWords.find((w) =>
             g.targetWord.toLowerCase() === w.german.toLowerCase()
           );
 
-          // Convert word indices to character ranges by splitting the sentence
-          const words = g.fullSentence.split(/\s+/);
+          // Find each blank word in the sentence by searching for the exact string
           const blankRanges: BlankRange[] = [];
-          for (const idx of g.blankWordIndices) {
-            if (idx < 0 || idx >= words.length) continue;
-            // Find the character position of this word in the full sentence
-            let charPos = 0;
-            for (let i = 0; i < idx; i++) {
-              charPos += words[i].length + 1; // +1 for the space
+          let searchFrom = 0;
+          for (const bw of g.blankWords) {
+            const found = g.fullSentence.indexOf(bw, searchFrom);
+            if (found === -1) {
+              // Word not found — skip this exercise entirely
+              return null;
             }
             blankRanges.push({
-              start: charPos,
-              end: charPos + words[idx].length,
+              start: found,
+              end: found + bw.length,
             });
+            searchFrom = found + bw.length;
           }
 
           // Skip if no valid blank ranges were produced
