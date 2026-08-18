@@ -3,11 +3,29 @@
   <p class="page-subtitle">Write freely in German and get AI feedback, corrections, and follow-up questions</p>
 
   <div class="diary-layout">
-    <!-- Main column: input + feedback -->
+    <!-- Main column: input + conversation -->
     <div class="main-column">
+      <!-- Active entry indicator -->
+      @if (activeEntry(); as entry) {
+        <div class="active-entry-bar">
+          <mat-icon>forum</mat-icon>
+          <span>Continuing entry from <strong>{{ formatDate(entry.timestamp) }}</strong></span>
+          <button class="new-entry-btn" (click)="startNewEntry()">
+            <mat-icon>add</mat-icon>
+            <span>New Entry</span>
+          </button>
+        </div>
+      }
+
       <!-- Input area -->
       <div class="input-card">
-        <h2 class="section-title">Write your diary entry</h2>
+        <h2 class="section-title">
+          @if (activeEntry()) {
+            Continue the conversation
+          } @else {
+            Write your diary entry
+          }
+        </h2>
         <mat-form-field appearance="outline" class="entry-field">
           <textarea
             matInput
@@ -39,112 +57,135 @@
         }
       </div>
 
-      <!-- Latest feedback -->
-      @if (latestFeedback(); as fb) {
-        <div class="feedback-card">
-          <div class="feedback-header">
-            <h2 class="section-title">AI Feedback</h2>
-            <span class="cefr-badge">CEFR: {{ fb.cefrEstimate }}</span>
-          </div>
-
-          <div class="feedback-section">
-            <p class="feedback-overall">{{ fb.overall }}</p>
-          </div>
-
-          @if (fb.corrections.length > 0) {
-            <div class="feedback-section">
-              <h3 class="subsection-title">
-                <mat-icon>edit</mat-icon>
-                Corrections ({{ fb.corrections.length }})
-              </h3>
-              <div class="corrections-list">
-                @for (corr of fb.corrections; track corr.startIndex) {
-                  <div class="correction-item">
-                    <div class="correction-original">
-                      <span class="label">Original:</span>
-                      <span class="text strikethrough">{{ corr.original }}</span>
+      <!-- Conversation thread -->
+      @if (activeMessages(); as messages) {
+        <div class="conversation-thread">
+          @for (msg of messages; track msg.timestamp; let i = $index) {
+            @if (msg.role === 'user') {
+              <div class="message user-message">
+                <div class="message-header">
+                  <mat-icon>person</mat-icon>
+                  <span class="message-label">You</span>
+                  <span class="message-time">{{ formatDate(msg.timestamp) }}</span>
+                </div>
+                <div class="message-text">{{ msg.text }}</div>
+              </div>
+            } @else {
+              <div class="message assistant-message">
+                <div class="message-header">
+                  <mat-icon>auto_awesome</mat-icon>
+                  <span class="message-label">AI Teacher</span>
+                  <span class="message-time">{{ formatDate(msg.timestamp) }}</span>
+                </div>
+                @if (msg.feedback; as fb) {
+                  <div class="feedback-card">
+                    <div class="feedback-header">
+                      <span class="cefr-badge">CEFR: {{ fb.cefrEstimate }}</span>
                     </div>
-                    <div class="correction-corrected">
-                      <span class="label">Corrected:</span>
-                      <span class="text corrected-text">{{ corr.corrected }}</span>
+
+                    <div class="feedback-section">
+                      <p class="feedback-overall">{{ fb.overall }}</p>
                     </div>
-                    <div class="correction-explanation">{{ corr.explanation }}</div>
+
+                    @if (fb.corrections.length > 0) {
+                      <div class="feedback-section">
+                        <h3 class="subsection-title">
+                          <mat-icon>edit</mat-icon>
+                          Corrections ({{ fb.corrections.length }})
+                        </h3>
+                        <div class="corrections-list">
+                          @for (corr of fb.corrections; track corr.startIndex) {
+                            <div class="correction-item">
+                              <div class="correction-original">
+                                <span class="label">Original:</span>
+                                <span class="text strikethrough">{{ corr.original }}</span>
+                              </div>
+                              <div class="correction-corrected">
+                                <span class="label">Corrected:</span>
+                                <span class="text corrected-text">{{ corr.corrected }}</span>
+                              </div>
+                              <div class="correction-explanation">{{ corr.explanation }}</div>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    }
+
+                    <div class="feedback-section">
+                      <h3 class="subsection-title">
+                        <mat-icon>auto_fix_high</mat-icon>
+                        Improved Version
+                      </h3>
+                      <div class="corrected-text-block">{{ fb.correctedText }}</div>
+                    </div>
+
+                    @if (fb.suggestions.length > 0) {
+                      <div class="feedback-section">
+                        <h3 class="subsection-title">
+                          <mat-icon>lightbulb</mat-icon>
+                          Study Suggestions
+                        </h3>
+                        <ul class="suggestions-list">
+                          @for (s of fb.suggestions; track s) {
+                            <li>{{ s }}</li>
+                          }
+                        </ul>
+                      </div>
+                    }
+
+                    @if (fb.unknownWords.length > 0) {
+                      <div class="feedback-section">
+                        <h3 class="subsection-title">
+                          <mat-icon>playlist_add</mat-icon>
+                          Unknown Words
+                        </h3>
+                        <div class="unknown-words-row">
+                          <span class="unknown-words-text">
+                            <strong>{{ fb.unknownWords.join(', ') }}</strong>
+                          </span>
+                          <button
+                            class="add-words-btn"
+                            [disabled]="analyzingWords()"
+                            (click)="analyzeUnknownWords()"
+                          >
+                            @if (analyzingWords()) {
+                              <mat-spinner diameter="16"></mat-spinner>
+                              <span>Analyzing...</span>
+                            } @else {
+                              <mat-icon>playlist_add</mat-icon>
+                              <span>Add to vocabulary</span>
+                            }
+                          </button>
+                        </div>
+                      </div>
+                    }
+
+                    @if (fb.followUpQuestions.length > 0) {
+                      <div class="feedback-section">
+                        <h3 class="subsection-title">
+                          <mat-icon>question_answer</mat-icon>
+                          Follow-up Questions
+                        </h3>
+                        <p class="section-hint">Click a question to continue the conversation</p>
+                        <div class="questions-list">
+                          @for (q of fb.followUpQuestions; track q.de) {
+                            <button class="question-chip" (click)="useQuestion(q.de)">
+                              <span class="question-de">{{ q.de }}</span>
+                              <span class="question-en">{{ q.en }}</span>
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    }
+
+                    <div class="feedback-section">
+                      <p class="encouragements">{{ fb.encouragements }}</p>
+                    </div>
                   </div>
                 }
               </div>
-            </div>
+            }
           }
-
-          <div class="feedback-section">
-            <h3 class="subsection-title">
-              <mat-icon>auto_fix_high</mat-icon>
-              Improved Version
-            </h3>
-            <div class="corrected-text-block">{{ fb.correctedText }}</div>
-          </div>
-
-          @if (fb.suggestions.length > 0) {
-            <div class="feedback-section">
-              <h3 class="subsection-title">
-                <mat-icon>lightbulb</mat-icon>
-                Study Suggestions
-              </h3>
-              <ul class="suggestions-list">
-                @for (s of fb.suggestions; track s) {
-                  <li>{{ s }}</li>
-                }
-              </ul>
-            </div>
-          }
-
-          @if (fb.unknownWords.length > 0) {
-            <div class="feedback-section">
-              <h3 class="subsection-title">
-                <mat-icon>playlist_add</mat-icon>
-                Unknown Words
-              </h3>
-              <div class="unknown-words-row">
-                <span class="unknown-words-text">
-                  <strong>{{ fb.unknownWords.join(', ') }}</strong>
-                </span>
-                <button
-                  class="add-words-btn"
-                  [disabled]="analyzingWords()"
-                  (click)="analyzeUnknownWords()"
-                >
-                  @if (analyzingWords()) {
-                    <mat-spinner diameter="16"></mat-spinner>
-                    <span>Analyzing...</span>
-                  } @else {
-                    <mat-icon>playlist_add</mat-icon>
-                    <span>Add to vocabulary</span>
-                  }
-                </button>
-              </div>
-            </div>
-          }
-
-          @if (fb.followUpQuestions.length > 0) {
-            <div class="feedback-section">
-              <h3 class="subsection-title">
-                <mat-icon>question_answer</mat-icon>
-                Follow-up Questions
-              </h3>
-              <p class="section-hint">Click a question to use it as your next entry</p>
-              <div class="questions-list">
-                @for (q of fb.followUpQuestions; track q.de) {
-                  <button class="question-chip" (click)="useQuestion(q.de)">
-                    <span class="question-de">{{ q.de }}</span>
-                    <span class="question-en">{{ q.en }}</span>
-                  </button>
-                }
-              </div>
-            </div>
-          }
-
-          <div class="feedback-section">
-            <p class="encouragements">{{ fb.encouragements }}</p>
-          </div>
         </div>
       }
 
@@ -232,14 +273,23 @@
       }
       <div class="history-list">
         @for (entry of entries(); track entry.id) {
-          <div class="history-card" [class.expanded]="expandedEntryId() === entry.id">
+          <div class="history-card" [class.expanded]="expandedEntryId() === entry.id" [class.active]="activeEntryId() === entry.id">
             <div class="history-card-header" (click)="toggleExpanded(entry.id)">
               <div class="history-meta">
                 <span class="history-date">{{ formatDate(entry.timestamp) }}</span>
                 <span class="history-level">{{ entry.feedback.cefrEstimate }}</span>
+                @if (entry.messages.length > 0) {
+                  <span class="history-message-count" title="Follow-up messages">
+                    <mat-icon>chat</mat-icon>
+                    {{ entry.messages.length / 2 }}
+                  </span>
+                }
               </div>
               <div class="history-preview">{{ entry.text.slice(0, 80) }}{{ entry.text.length > 80 ? '...' : '' }}</div>
               <div class="history-actions">
+                <button class="continue-btn" (click)="continueEntry(entry.id); $event.stopPropagation()" title="Continue this conversation">
+                  <mat-icon>forum</mat-icon>
+                </button>
                 <button class="delete-btn" (click)="deleteEntry(entry.id); $event.stopPropagation()" title="Delete entry">
                   <mat-icon>delete</mat-icon>
                 </button>
@@ -268,6 +318,12 @@
                         <li>{{ s }}</li>
                       }
                     </ul>
+                  </div>
+                }
+                @if (entry.messages.length > 0) {
+                  <div class="detail-section">
+                    <strong>Follow-up messages:</strong>
+                    <p>{{ entry.messages.length / 2 }} exchanges</p>
                   </div>
                 }
               </div>

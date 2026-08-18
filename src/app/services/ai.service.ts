@@ -865,12 +865,17 @@ Rules:
    */
   async analyzeDiaryEntry(
     text: string,
-    vocabList: { german: string; translationEn: string; translationRu: string }[]
+    vocabList: { german: string; translationEn: string; translationRu: string }[],
+    conversationHistory?: { role: 'user' | 'assistant'; text: string }[]
   ): Promise<DiaryFeedback> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
+
+    const historyBlock = conversationHistory && conversationHistory.length > 0
+      ? `\n\nThis is a continuation of a conversation. Here is the history so far:\n${conversationHistory.map((m) => `[${m.role === 'user' ? 'Student' : 'Teacher'}]: ${m.text}`).join('\n')}\n\nThe student's new message above is a response to the teacher's last question. Analyze it in the context of this ongoing conversation.`
+      : '';
 
     const prompt = `You are a German language teacher. A student has written a free-form diary entry in German as a language learning exercise.
 
@@ -893,7 +898,7 @@ Analyze the diary entry and respond with JSON only (no markdown) using exactly t
 - "cefrEstimate": string — the rough CEFR level of the writing, exactly one of "A1", "A2", "B1", "B2" or "C1"
 - "encouragements": string — a final encouraging sentence in English, celebrating what the student did well
 
-Diary entry: "${text}"
+Diary entry: "${text}"${historyBlock}
 
 Rules:
 - Be encouraging above all. The goal is to motivate the student to keep writing, not to overwhelm with corrections.
@@ -1668,6 +1673,183 @@ Rules:
       );
     }
     throw new Error(`${label} request failed (HTTP ${response.status})`);
+  }
+
+  /**
+   * Corrects misheard words in live caption text.
+   * Parses raw caption text (with timestamps), identifies likely mishearings,
+   * and returns corrected text with explanations for each correction.
+   */
+  async correctCaptions(rawText: string): Promise<{
+    correctedText: string;
+    corrections: { original: string; corrected: string; explanation: string }[];
+    segments: { timestamp: string; text: string }[];
+  }> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const prompt = `You are a German language expert. Below is raw live caption text from a German streamer. The captions may contain misheard words (e.g. "stehe" instead of "stelle").
+
+Your task:
+1. Parse the text into segments based on timestamps (lines starting with [YYYY-MM-DD HH:MM:SS.mmm]).
+2. Identify and correct any misheard or incorrectly transcribed words/phrases.
+3. Provide a brief explanation for each correction in English.
+
+Respond with JSON only (no markdown) as an object with these fields:
+- "correctedText": the FULL corrected version of the entire caption text, preserving timestamps and line structure
+- "corrections": an array of objects, each with:
+  - "original": the original misheard word/phrase
+  - "corrected": the corrected word/phrase
+  - "explanation": a brief English explanation of why the correction was made (e.g. "Misheard 'stehe' as 'stelle' — 'stellen' means 'to put/place'")
+- "segments": an array of objects, each with:
+  - "timestamp": the timestamp string (e.g. "[2026-08-17 14:57:55.618]")
+  - "text": the corrected text for that segment (without the timestamp)
+
+Rules:
+- Preserve ALL timestamps exactly as they appear.
+- Only correct genuine mishearings or transcription errors. Do NOT change grammar or style.
+- If a word is already correct, leave it unchanged.
+- The "correctedText" must include all timestamps and line breaks, same as the input.
+- Empty array for corrections if no changes are needed.
+
+Raw caption text:
+${rawText}`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_tokens: 8192,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const finishReason: string | undefined = data.choices?.[0]?.finish_reason;
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    if (finishReason === 'length') {
+      throw new Error(
+        'The caption text is too long for the AI to process in one request. Try splitting it into smaller parts.'
+      );
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: {
+      correctedText?: string;
+      corrections?: { original: string; corrected: string; explanation: string }[];
+      segments?: { timestamp: string; text: string }[];
+    };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    return {
+      correctedText: parsed.correctedText ?? rawText,
+      corrections: Array.isArray(parsed.corrections) ? parsed.corrections : [],
+      segments: Array.isArray(parsed.segments) ? parsed.segments : [],
+    };
+  }
+
+  /**
+   * Explains the grammar and structure of a selected German text segment.
+   * Returns translation, sentence structure breakdown, grammar notes, and word-level explanations.
+   */
+  async explainGrammar(text: string): Promise<{
+    translation: string;
+    sentenceStructure: string;
+    grammarNotes: string[];
+    wordExplanations: { word: string; explanation: string }[];
+  }> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const prompt = `You are a German language teacher. A student has selected the following German text and wants a detailed grammar explanation.
+
+Selected text: "${text}"
+
+Respond with JSON only (no markdown) as an object with these fields:
+- "translation": the full English translation of the selected text
+- "sentenceStructure": a breakdown of the sentence structure in English (e.g. "Main clause with verb in position 2, followed by a subordinate clause with verb at the end", "Question with verb first", "Modal verb construction with infinitive at the end")
+- "grammarNotes": an array of strings, each explaining a specific grammar point visible in the text (e.g. "The verb 'stellen' is a weak verb — 'ich stelle' is correct present tense conjugation", "The accusative object 'mein iPad' shows the direct object", "The preposition 'mit' requires the dative case — 'mit Musik' not 'mit Musik'")
+- "wordExplanations": an array of objects, each with:
+  - "word": the German word (or short phrase)
+  - "explanation": a brief explanation including part of speech, meaning, and any relevant grammar (e.g. "stellen — verb, 'to put/place', regular conjugation", "das iPad — noun, neuter, 'the iPad'")
+
+Rules:
+- Be thorough but accessible for a language learner.
+- Focus on grammar patterns that are visible in the selected text.
+- If the text contains multiple sentences, explain each one.
+- Include case information for nouns (nominative/accusative/dative/genitive).
+- Include verb position information (position 2, end of clause, etc.).
+- If the text is a single word, explain its meaning, part of speech, and any grammatical properties.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: environment.openRouterModel,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const resultText: string | undefined = data.choices?.[0]?.message?.content;
+    if (!resultText) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = resultText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : resultText;
+
+    let parsed: {
+      translation?: string;
+      sentenceStructure?: string;
+      grammarNotes?: string[];
+      wordExplanations?: { word: string; explanation: string }[];
+    };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    return {
+      translation: parsed.translation ?? '',
+      sentenceStructure: parsed.sentenceStructure ?? '',
+      grammarNotes: Array.isArray(parsed.grammarNotes) ? parsed.grammarNotes : [],
+      wordExplanations: Array.isArray(parsed.wordExplanations) ? parsed.wordExplanations : [],
+    };
   }
 
   private handleError(response: Response): never {

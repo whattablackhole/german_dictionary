@@ -43,6 +43,9 @@ export class DiaryComponent {
   readonly latestFeedback = signal<DiaryFeedback | null>(null);
   readonly expandedEntryId = signal<string | null>(null);
 
+  /** The entry currently being continued (null = new entry) */
+  readonly activeEntryId = signal<string | null>(null);
+
   // Unknown words → add to vocabulary
   readonly pendingWords = signal<PendingWord[] | null>(null);
   readonly selectedPendingWords = signal<Set<string>>(new Set());
@@ -54,11 +57,51 @@ export class DiaryComponent {
     this.entryInput().trim() ? this.entryInput().trim().split(/\s+/).length : 0
   );
 
+  /** The active entry object (for display) */
+  readonly activeEntry = computed(() => {
+    const id = this.activeEntryId();
+    return id ? this.diaryService.getEntry(id) ?? null : null;
+  });
+
+  /** All messages for the active entry (initial + follow-ups) */
+  readonly activeMessages = computed(() => {
+    const entry = this.activeEntry();
+    if (!entry) return [];
+    const messages: { role: 'user' | 'assistant'; text: string; feedback?: DiaryFeedback; timestamp: number }[] = [
+      { role: 'user', text: entry.text, timestamp: entry.timestamp },
+      { role: 'assistant', text: '', feedback: entry.feedback, timestamp: entry.timestamp },
+    ];
+    for (const m of entry.messages) {
+      messages.push(m);
+    }
+    return messages;
+  });
+
   constructor(
     private readonly diaryService: DiaryService,
     private readonly wordService: WordService,
     private readonly aiService: AiService
   ) {}
+
+  /** Start a new entry (clear active entry) */
+  startNewEntry(): void {
+    this.activeEntryId.set(null);
+    this.entryInput.set('');
+    this.latestFeedback.set(null);
+    this.aiError.set('');
+    this.pendingWords.set(null);
+    this.selectedPendingWords.set(new Set());
+  }
+
+  /** Continue an existing entry from history */
+  continueEntry(entryId: string): void {
+    this.activeEntryId.set(entryId);
+    this.entryInput.set('');
+    this.latestFeedback.set(null);
+    this.aiError.set('');
+    this.pendingWords.set(null);
+    this.selectedPendingWords.set(new Set());
+  }
 
   async submitEntry(): Promise<void> {
     const text = this.entryInput().trim();
@@ -78,9 +121,42 @@ export class DiaryComponent {
         translationRu: w.translationRu,
       }));
 
-      const feedback = await this.aiService.analyzeDiaryEntry(text, vocabList);
-      this.diaryService.addEntry(text, feedback);
-      this.latestFeedback.set(feedback);
+      const activeId = this.activeEntryId();
+
+      if (activeId) {
+        // Continuing an existing conversation
+        const entry = this.diaryService.getEntry(activeId);
+        if (!entry) throw new Error('Entry not found.');
+
+        // Build conversation history from the entry
+        const conversationHistory: { role: 'user' | 'assistant'; text: string }[] = [
+          { role: 'user', text: entry.text },
+          { role: 'assistant', text: entry.feedback.overall },
+        ];
+        for (const m of entry.messages) {
+          conversationHistory.push({ role: m.role, text: m.text });
+        }
+
+        // Add the user's new message to history
+        this.diaryService.addMessage(activeId, 'user', text);
+
+        const feedback = await this.aiService.analyzeDiaryEntry(
+          text,
+          vocabList,
+          conversationHistory
+        );
+
+        // Add the AI response as an assistant message
+        this.diaryService.addMessage(activeId, 'assistant', feedback.overall, feedback);
+        this.latestFeedback.set(feedback);
+      } else {
+        // New entry
+        const feedback = await this.aiService.analyzeDiaryEntry(text, vocabList);
+        const entry = this.diaryService.addEntry(text, feedback);
+        this.activeEntryId.set(entry.id);
+        this.latestFeedback.set(feedback);
+      }
+
       this.entryInput.set('');
     } catch (err) {
       this.aiError.set(err instanceof Error ? err.message : 'Failed to analyze diary entry.');
@@ -90,13 +166,17 @@ export class DiaryComponent {
   }
 
   useQuestion(de: string): void {
-    const current = this.entryInput().trim();
-    this.entryInput.set(current ? `${current} ${de} ` : `${de} `);
-    this.latestFeedback.set(null);
+    this.entryInput.set(de);
+    // Auto-submit the follow-up question
+    this.submitEntry();
   }
 
   deleteEntry(id: string): void {
     this.diaryService.deleteEntry(id);
+    if (this.activeEntryId() === id) {
+      this.activeEntryId.set(null);
+      this.latestFeedback.set(null);
+    }
     if (this.expandedEntryId() === id) {
       this.expandedEntryId.set(null);
     }

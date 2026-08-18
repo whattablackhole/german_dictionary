@@ -33,6 +33,14 @@ An interactive German language learning application built with [Angular CLI](htt
   - Follow-up questions (German + English) that you can click to use as the next entry
   - Unknown word detection with one-click add to vocabulary
   - Entry history stored in localStorage, with expandable details and delete
+  - Conversation mode — continue an existing entry with follow-up messages and AI responses
+- **Captions** — AI-powered correction of live stream captions:
+  - Paste raw caption text with timestamps (e.g., from Chrome Live Caption capture tool)
+  - AI identifies and fixes misheard words and phrases (e.g., "stehe" → "stelle")
+  - Diff-style correction list with explanations for each fix
+  - Segment-by-segment view with timestamped corrected text
+  - Save corrected dialogues to IndexedDB for later reading and translation
+  - Grammar Explanation Mode toggle — select any text and Alt+Click to open a popup with translation, sentence structure breakdown, grammar notes, and word-level analysis
 - **Preposition Trainer** — AI-generated multiple-choice exercises for German prepositions with case selection (accusative/dative/genitive), hints in English/Russian, and rule explanations
 - **Declension Trainer** — AI-generated declension exercises for articles, adjective endings, nouns, and full phrases across all four cases, with AI-verified answers
 - **Word Practice** — Practice words with cloze-style sentence completion (optionally forced to selected words)
@@ -140,7 +148,7 @@ Uses the [Vitest](https://vitest.dev/) test runner.
 ```
 src/
 ├── app/
-│   ├── models/           # Data models (Word, Story, GrammarNote, SentencePattern, PrepositionRule, CaseDeclension, Diary)
+│   ├── models/           # Data models (Word, Story, GrammarNote, SentencePattern, PrepositionRule, CaseDeclension, Diary, Captions)
 │   ├── pages/            # Page components
 │   │   ├── review/             # Flashcard review with mastery tracking
 │   │   ├── game/               # Word matching game
@@ -148,6 +156,7 @@ src/
 │   │   ├── practice-word/      # Word practice with cloze sentences
 │   │   ├── sentence-builder/   # Practice writing sentences with grammar patterns
 │   │   ├── diary/              # Freestyle German writing diary with AI feedback
+│   │   ├── captions/           # Live captions AI correction with grammar explanation
 │   │   ├── grammar-notes/      # AI-generated grammar explanations
 │   │   ├── stories/            # AI story generator with TTS playback
 │   │   ├── preposition-trainer/ # AI-generated preposition exercises
@@ -163,6 +172,7 @@ src/
 │   │   ├── word.service.ts          # Word data management (localStorage)
 │   │   ├── story.service.ts         # Story data management (localStorage)
 │   │   ├── diary.service.ts         # Diary entry management (localStorage)
+│   │   ├── captions.service.ts      # Captions data management (IndexedDB)
 │   │   ├── grammar-notes.service.ts # Grammar notes management (localStorage)
 │   │   ├── sentence-pattern.service.ts # Pattern history & mastery tracking
 │   │   ├── settings.service.ts      # User settings (language, TTS, article display)

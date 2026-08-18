@@ -17,10 +17,36 @@ export class DiaryService {
       timestamp: Date.now(),
       text,
       feedback,
+      messages: [],
     };
     this.entries.update((entries) => [entry, ...entries]);
     this.save();
     return entry;
+  }
+
+  getEntry(id: string): DiaryEntry | undefined {
+    return this.entries().find((e) => e.id === id);
+  }
+
+  addMessage(
+    entryId: string,
+    role: 'user' | 'assistant',
+    text: string,
+    feedback?: DiaryFeedback
+  ): void {
+    this.entries.update((entries) =>
+      entries.map((e) => {
+        if (e.id !== entryId) return e;
+        return {
+          ...e,
+          messages: [
+            ...e.messages,
+            { role, text, feedback, timestamp: Date.now() },
+          ],
+        };
+      })
+    );
+    this.save();
   }
 
   deleteEntry(id: string): void {

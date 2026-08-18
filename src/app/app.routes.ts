@@ -89,4 +89,11 @@ export const routes: Routes = [
         (m) => m.DeclensionTrainerComponent
       ),
   },
+  {
+    path: 'captions',
+    loadComponent: () =>
+      import('./pages/captions/captions.component').then(
+        (m) => m.CaptionsComponent
+      ),
+  },
 ];

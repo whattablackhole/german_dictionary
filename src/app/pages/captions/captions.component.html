@@ -1,0 +1,227 @@
+<div class="captions-page">
+  <h1>Live Captions</h1>
+
+  <!-- Input Section -->
+  <section class="input-section">
+    <h2>Paste Raw Captions</h2>
+    <p class="hint">
+      Paste the raw caption text with timestamps (e.g. <code>[2026-08-17 14:57:55.618]</code>).
+      The AI will correct misheard words and phrases.
+    </p>
+    <mat-form-field appearance="outline" class="full-width">
+      <textarea
+        matInput
+        [ngModel]="rawInput()"
+        (ngModelChange)="rawInput.set($event)"
+        placeholder="[2026-08-17 14:57:55.618] fangen einfach an mit den Schubladen..."
+        rows="8"
+      ></textarea>
+    </mat-form-field>
+
+    <div class="actions">
+      <button
+        mat-raised-button
+        color="primary"
+        [disabled]="!rawInput().trim() || correcting()"
+        (click)="correctCaptions()"
+      >
+        @if (correcting()) {
+          <mat-spinner diameter="20" />
+          <span>Correcting...</span>
+        } @else {
+          <ng-container>
+            <mat-icon>auto_fix_high</mat-icon>
+            <span>Correct with AI</span>
+          </ng-container>
+        }
+      </button>
+    </div>
+
+    @if (aiError()) {
+      <div class="error-message">
+        <mat-icon color="warn">error</mat-icon>
+        <span>{{ aiError() }}</span>
+      </div>
+    }
+  </section>
+
+  <!-- Correction Result -->
+  @if (currentResult(); as result) {
+    <section class="result-section">
+      <h2>Correction Result</h2>
+
+      <!-- Corrections list -->
+      @if (result.corrections.length > 0) {
+        <div class="corrections-list">
+          <h3>Corrections Made</h3>
+          @for (correction of result.corrections; track correction.original) {
+            <div class="correction-item">
+              <div class="correction-original">
+                <span class="label">Original:</span>
+                <span class="strikethrough">{{ correction.original }}</span>
+              </div>
+              <div class="correction-corrected">
+                <span class="label">Corrected:</span>
+                <span class="corrected-text">{{ correction.corrected }}</span>
+              </div>
+              <div class="correction-explanation">
+                <mat-icon>info</mat-icon>
+                {{ correction.explanation }}
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="no-corrections">
+          <mat-icon>check_circle</mat-icon>
+          <span>No corrections needed — the captions appear accurate.</span>
+        </div>
+      }
+
+      <!-- Corrected text display -->
+      <div class="corrected-display">
+        <h3>Corrected Text</h3>
+        <div
+          class="corrected-text-content"
+          [class.grammar-mode]="grammarMode()"
+          (click)="onAltClick($event)"
+        >
+          <pre>{{ result.correctedText }}</pre>
+        </div>
+        @if (grammarMode()) {
+          <div class="grammar-hint">
+            <mat-icon>info</mat-icon>
+            <span>Grammar mode active — select text and Alt+Click for explanation</span>
+          </div>
+        }
+      </div>
+
+      <!-- Segments view -->
+      @if (result.segments.length > 0) {
+        <div class="segments-view">
+          <h3>Segments</h3>
+          <div class="segments-list">
+            @for (segment of result.segments; track segment.timestamp) {
+              <div class="segment-item">
+                <span class="segment-timestamp">{{ segment.timestamp }}</span>
+                <span class="segment-text">{{ segment.text }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Save / Discard -->
+      <div class="result-actions">
+        <button mat-raised-button color="primary" (click)="saveCurrent()">
+          <mat-icon>save</mat-icon>
+          Save as Dialogue
+        </button>
+        <button mat-button (click)="discardCurrent()">
+          <mat-icon>close</mat-icon>
+          Discard
+        </button>
+      </div>
+    </section>
+  }
+
+  <!-- Grammar Mode Toggle -->
+  <section class="grammar-toggle-section">
+    <mat-slide-toggle [checked]="grammarMode()" (change)="grammarMode.set($event.checked)">
+      Grammar Explanation Mode
+    </mat-slide-toggle>
+    @if (grammarMode()) {
+      <p class="grammar-description">
+        Highlight any text in the corrected view and <strong>Alt+Click</strong> to open a grammar explanation popup with translation, sentence structure, and word-level analysis.
+      </p>
+    }
+  </section>
+
+  <!-- Saved Dialogues -->
+  <section class="saved-section">
+    <h2>Saved Dialogues</h2>
+
+    @if (loadingSaved()) {
+      <div class="loading">
+        <mat-spinner diameter="24" />
+      </div>
+    } @else if (savedCaptions().length === 0) {
+      <div class="empty-state">
+        <mat-icon>chat</mat-icon>
+        <p>No saved dialogues yet. Correct and save your first caption above.</p>
+      </div>
+    } @else {
+      <!-- Viewing a saved dialogue -->
+      @if (viewingCaption(); as caption) {
+        <div class="viewing-caption">
+          <div class="viewing-header">
+            <h3>Dialogue from {{ formatDate(caption.timestamp) }}</h3>
+            <button mat-icon-button (click)="closeView()" matTooltip="Close">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+
+          @if (caption.corrections.length > 0) {
+            <div class="corrections-list">
+              <h4>Corrections</h4>
+              @for (correction of caption.corrections; track correction.original) {
+                <div class="correction-item">
+                  <div class="correction-original">
+                    <span class="label">Original:</span>
+                    <span class="strikethrough">{{ correction.original }}</span>
+                  </div>
+                  <div class="correction-corrected">
+                    <span class="label">Corrected:</span>
+                    <span class="corrected-text">{{ correction.corrected }}</span>
+                  </div>
+                  <div class="correction-explanation">
+                    <mat-icon>info</mat-icon>
+                    {{ correction.explanation }}
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          <div class="corrected-display">
+            <h4>Corrected Text</h4>
+            <div
+              class="corrected-text-content"
+              [class.grammar-mode]="grammarMode()"
+              (click)="onAltClick($event)"
+            >
+              <pre>{{ caption.correctedText }}</pre>
+            </div>
+          </div>
+
+          <button mat-button color="warn" (click)="deleteCaption(caption.id)">
+            <mat-icon>delete</mat-icon>
+            Delete
+          </button>
+        </div>
+      }
+
+      <!-- Saved list -->
+      <div class="saved-list">
+        @for (caption of savedCaptions(); track caption.id) {
+          <div
+            class="saved-item"
+            [class.active]="viewingId() === caption.id"
+            (click)="viewCaption(caption.id)"
+          >
+            <div class="saved-item-header">
+              <mat-icon>chat</mat-icon>
+              <span class="saved-date">{{ formatDate(caption.timestamp) }}</span>
+              <span class="correction-count">
+                {{ caption.corrections.length }} correction{{ caption.corrections.length !== 1 ? 's' : '' }}
+              </span>
+            </div>
+            <div class="saved-preview">
+              {{ caption.correctedText.slice(0, 120) }}{{ caption.correctedText.length > 120 ? '...' : '' }}
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </section>
+</div>

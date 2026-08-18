@@ -24,9 +24,17 @@ export interface DiaryFeedback {
   encouragements: string;
 }
 
+export interface DiaryMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  feedback?: DiaryFeedback;
+  timestamp: number;
+}
+
 export interface DiaryEntry {
   id: string;
   timestamp: number;
   text: string;
   feedback: DiaryFeedback;
+  messages: DiaryMessage[];
 }

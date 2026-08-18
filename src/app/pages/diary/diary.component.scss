@@ -649,6 +649,160 @@
   }
 }
 
+// ── Active entry bar ──
+
+.active-entry-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #e3f2fd;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #1565c0;
+
+  mat-icon {
+    font-size: 1.2rem;
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+}
+
+.new-entry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid #1565c0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1565c0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #bbdefb;
+  }
+
+  mat-icon {
+    font-size: 1rem;
+    width: 1rem;
+    height: 1rem;
+  }
+}
+
+// ── Conversation thread ──
+
+.conversation-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.message {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+}
+
+.message-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.message-time {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: #aaa;
+}
+
+.user-message {
+  border-left: 3px solid #1976d2;
+
+  .message-header mat-icon {
+    color: #1976d2;
+  }
+}
+
+.assistant-message {
+  border-left: 3px solid #43a047;
+
+  .message-header mat-icon {
+    color: #43a047;
+  }
+}
+
+.message-text {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #333;
+}
+
+// ── History enhancements ──
+
+.history-card {
+  &.active {
+    border-color: #1976d2;
+    background: #f5f9ff;
+  }
+}
+
+.continue-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #bbb;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+
+  &:hover {
+    color: #1976d2;
+    background: #e3f2fd;
+  }
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+}
+
+.history-message-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.75rem;
+  color: #1976d2;
+  font-weight: 500;
+
+  mat-icon {
+    font-size: 0.85rem;
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+}
+
 // ── Responsive ──
 
 @media (max-width: 768px) {
