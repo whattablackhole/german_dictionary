@@ -115,6 +115,25 @@ html {
   --mat-sys-level3: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
+// Date picker popup background fix
+.mat-datepicker-content {
+  background-color: #fff !important;
+  border-radius: var(--mat-sys-corner-large) !important;
+}
+
+.dark-theme .mat-datepicker-content {
+  background-color: #2a2a2a !important;
+}
+
+// Select panel background fix
+div.mat-mdc-select-panel {
+  background-color: #fff !important;
+}
+
+.dark-theme div.mat-mdc-select-panel {
+  background-color: #2a2a2a !important;
+}
+
 body {
   // Material 3 CSS variables
   background-color: var(--mat-sys-surface);
