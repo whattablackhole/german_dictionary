@@ -1,29 +1,62 @@
-<header class="app-header">
-  <span class="app-title">German Dictionary</span>
-  <nav class="app-nav">
-    <a
-      routerLink="/review"
-      routerLinkActive="active"
-      [routerLinkActiveOptions]="{ exact: true }"
-    >
-      Review
-    </a>
-    <a routerLink="/game" routerLinkActive="active">Gender Game</a>
-    <a routerLink="/exercise" routerLinkActive="active">Translation Exercise</a>
-    <a routerLink="/practice-word" routerLinkActive="active">Word Practice</a>
-    <a routerLink="/sentence-builder" routerLinkActive="active">Sentence Builder</a>
-    <a routerLink="/diary" routerLinkActive="active">Diary</a>
-    <a routerLink="/captions" routerLinkActive="active">Captions</a>
-    <a routerLink="/grammar-notes" routerLinkActive="active">Grammar Notes</a>
-    <a routerLink="/prepositions" routerLinkActive="active">Prepositions</a>
-    <a routerLink="/declension" routerLinkActive="active">Declension</a>
-    <a routerLink="/stories" routerLinkActive="active">Stories</a>
-    <a routerLink="/manage" routerLinkActive="active">Manage Word Collection</a>
-    <a routerLink="/import" routerLinkActive="active">Import Duolingo</a>
-    <a routerLink="/settings" routerLinkActive="active">Settings</a>
-  </nav>
-</header>
+<div class="app-shell">
+  <!-- Sidebar -->
+  <aside class="app-sidebar" [class.open]="sidenavOpened()">
+    <div class="sidenav-brand">
+      <span class="app-title">German Dictionary</span>
+    </div>
 
-<main class="app-main">
-  <router-outlet />
-</main>
+    <nav class="sidenav-nav">
+      @for (item of navItems; track item.path; let i = $index) {
+        <a
+          class="nav-link"
+          routerLink="{{ item.path }}"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: item.path === '/review' }"
+          (click)="closeSidenav()"
+        >
+          <span class="nav-icon" [style.color]="getNavColor(i)">
+            <mat-icon>{{ item.icon }}</mat-icon>
+          </span>
+          <span class="nav-label">{{ item.label }}</span>
+        </a>
+      }
+    </nav>
+  </aside>
+
+  <!-- Right area: header + content -->
+  <div class="app-right">
+    <header class="app-header">
+      <div class="header-left">
+        <button
+          class="menu-toggle"
+          mat-icon-button
+          (click)="toggleSidenav()"
+          aria-label="Toggle navigation"
+        >
+          <mat-icon>menu</mat-icon>
+        </button>
+      </div>
+
+      <div class="header-right">
+        <button
+          class="dark-toggle"
+          mat-icon-button
+          (click)="toggleDarkMode()"
+          [attr.aria-label]="darkMode() ? 'Switch to light mode' : 'Switch to dark mode'"
+          matTooltip="{{ darkMode() ? 'Light mode' : 'Dark mode' }}"
+        >
+          <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+        </button>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <router-outlet />
+    </main>
+  </div>
+
+  <!-- Mobile overlay backdrop -->
+  @if (isMobile() && sidenavOpened()) {
+    <div class="sidenav-backdrop" (click)="closeSidenav()"></div>
+  }
+</div>
