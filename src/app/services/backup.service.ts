@@ -1,10 +1,16 @@
 import { Injectable } from '@angular/core';
+import { ImageCacheService, ImageEntry } from './image-cache.service';
+import { SentenceCacheService, SentenceEntry } from './sentence-cache.service';
 
 export interface BackupData {
   app: 'GermanDictionary';
   version: 1;
   exportedAt: string;
   data: Record<string, string>;
+  /** Optional: images stored in IndexedDB */
+  images?: ImageEntry[];
+  /** Optional: example sentences stored in IndexedDB */
+  sentences?: SentenceEntry[];
 }
 
 const BACKUP_KEYS: string[] = [
@@ -25,10 +31,15 @@ const BACKUP_KEYS: string[] = [
 
 @Injectable({ providedIn: 'root' })
 export class BackupService {
+  constructor(
+    private readonly imageCache: ImageCacheService,
+    private readonly sentenceCache: SentenceCacheService
+  ) {}
+
   /**
-   * Collects all known localStorage keys and triggers a JSON file download.
+   * Collects all known localStorage keys + IndexedDB images and triggers a JSON file download.
    */
-  exportBackup(): void {
+  async exportBackup(): Promise<void> {
     const data: Record<string, string> = {};
     for (const key of BACKUP_KEYS) {
       const value = localStorage.getItem(key);
@@ -37,11 +48,18 @@ export class BackupService {
       }
     }
 
+    // Include images from IndexedDB
+    const images = await this.imageCache.getAllEntries();
+    // Include sentences from IndexedDB
+    const sentences = await this.sentenceCache.getAllEntries();
+
     const backup: BackupData = {
       app: 'GermanDictionary',
       version: 1,
       exportedAt: new Date().toISOString(),
       data,
+      images: images.length > 0 ? images : undefined,
+      sentences: sentences.length > 0 ? sentences : undefined,
     };
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], {
@@ -57,8 +75,7 @@ export class BackupService {
   }
 
   /**
-   * Validates and restores a backup file into localStorage.
-   * Returns a promise resolving to true on success, or an error message on failure.
+   * Validates and restores a backup file into localStorage + IndexedDB images.
    */
   importBackup(
     file: File
@@ -67,16 +84,16 @@ export class BackupService {
       return Promise.resolve({ ok: false, error: 'No file selected.' });
     }
 
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > 50 * 1024 * 1024) {
       return Promise.resolve({
         ok: false,
-        error: 'File is too large (max 10 MB).',
+        error: 'File is too large (max 50 MB).',
       });
     }
 
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const parsed = JSON.parse(reader.result as string) as BackupData;
           if (parsed.app !== 'GermanDictionary') {
@@ -101,9 +118,6 @@ export class BackupService {
           const STORIES_KEY = 'german-dictionary-stories';
 
           for (const [key, value] of Object.entries(parsed.data)) {
-            // TTS audio is stored in IndexedDB now, not localStorage. Strip any
-            // embedded base64 audioUrl blobs from restored stories so an old
-            // backup can't re-bloat storage past the quota.
             let finalValue = value;
             if (key === STORIES_KEY) {
               try {
@@ -114,8 +128,7 @@ export class BackupService {
                   );
                 }
               } catch {
-                // If the stored value isn't valid JSON, keep it as-is; the
-                // app's story service will fall back to seed data anyway.
+                // keep as-is
               }
             }
 
@@ -130,6 +143,27 @@ export class BackupService {
               return;
             }
           }
+
+          // Restore images to IndexedDB
+          if (parsed.images && Array.isArray(parsed.images)) {
+            try {
+              await this.imageCache.restoreAll(parsed.images);
+            } catch (err) {
+              // Non-critical — images can be regenerated
+              console.warn('Failed to restore images:', err);
+            }
+          }
+
+          // Restore sentences to IndexedDB
+          if (parsed.sentences && Array.isArray(parsed.sentences)) {
+            try {
+              await this.sentenceCache.restoreAll(parsed.sentences);
+            } catch (err) {
+              // Non-critical — sentences can be regenerated
+              console.warn('Failed to restore sentences:', err);
+            }
+          }
+
           resolve({ ok: true });
         } catch {
           resolve({ ok: false, error: 'Invalid JSON file.' });

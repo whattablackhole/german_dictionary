@@ -1,0 +1,531 @@
+.session-container {
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+// ── Session Picker ──
+.session-picker {
+  text-align: center;
+  padding-top: 40px;
+
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    color: var(--mat-sys-on-surface-variant, #666);
+    margin-bottom: 32px;
+  }
+}
+
+.session-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.session-option {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  grid-template-rows: auto auto;
+  gap: 4px 16px;
+  align-items: start;
+  padding: 20px 24px;
+  border: 2px solid var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 16px;
+  background: var(--mat-sys-surface, #fff);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+
+  &:hover {
+    border-color: var(--mat-sys-primary, #58cc02);
+    background: color-mix(in srgb, var(--mat-sys-primary, #58cc02) 5%, transparent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.option-icon {
+  grid-row: 1 / -1;
+  font-size: 28px;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+}
+
+.due-option .option-icon {
+  color: #ff9800;
+  background: color-mix(in srgb, #ff9800 14%, transparent);
+}
+
+.new-option .option-icon {
+  color: #2196f3;
+  background: color-mix(in srgb, #2196f3 14%, transparent);
+}
+
+.all-option .option-icon {
+  color: #9c27b0;
+  background: color-mix(in srgb, #9c27b0 14%, transparent);
+}
+
+.option-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface, #111);
+}
+
+.option-count {
+  font-size: 14px;
+  color: var(--mat-sys-primary, #58cc02);
+  font-weight: 500;
+}
+
+.option-desc {
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant, #666);
+  grid-column: 2;
+}
+
+// ── Active Session ──
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.session-progress-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface-variant, #666);
+  white-space: nowrap;
+  min-width: 48px;
+}
+
+.session-progress-bar {
+  flex: 1;
+}
+
+.flashcard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+// ── Front of card ──
+.card-front {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 20px;
+  padding: 32px 28px 28px;
+  border: 1.5px solid var(--mat-sys-outline-variant, #e8e8e8);
+  border-radius: 24px;
+  background: var(--mat-sys-surface, #fff);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+
+  &:hover {
+    border-color: var(--mat-sys-primary, #58cc02);
+    box-shadow: 0 4px 16px rgba(88, 204, 2, 0.1);
+    transform: scale(1.01);
+  }
+}
+
+.card-german {
+  font-size: 36px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  line-height: 1.2;
+}
+
+.card-article {
+  font-weight: 500;
+  opacity: 0.75;
+  font-size: 30px;
+}
+
+.card-image {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--mat-sys-surface-variant, #f0f0f0) 40%, transparent);
+}
+
+.card-front-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.generate-image-btn,
+.generate-sentences-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border: 1.5px dashed var(--mat-sys-outline-variant, #d0d0d0);
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface-variant, #777);
+  transition: all 0.15s ease;
+  letter-spacing: 0.2px;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover {
+    border-color: var(--mat-sys-primary, #58cc02);
+    color: var(--mat-sys-primary, #58cc02);
+    background: color-mix(in srgb, var(--mat-sys-primary, #58cc02) 6%, transparent);
+    border-style: solid;
+  }
+}
+
+// ── Example sentences on card front ──
+.card-sentences {
+  width: 100%;
+  text-align: left;
+  margin-top: 4px;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--mat-sys-primary, #58cc02) 5%, var(--mat-sys-surface, #fff));
+  border: 1px solid color-mix(in srgb, var(--mat-sys-primary, #58cc02) 15%, transparent);
+  border-radius: 16px;
+}
+
+.sentences-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--mat-sys-primary, #58cc02);
+  margin-bottom: 10px;
+  display: block;
+}
+
+.card-sentence {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface, #2a2a2a);
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mat-sys-primary, #58cc02) 8%, transparent);
+  line-height: 1.5;
+
+  &:last-of-type {
+    border-bottom: none;
+  }
+}
+
+.gen-label {
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant, #888);
+  font-weight: 500;
+}
+
+// ── Card hint ──
+.card-hint {
+  color: var(--mat-sys-on-surface-variant, #bbb);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+// ── Back of card ──
+.card-back {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 36px 28px 28px;
+  border: 1.5px solid var(--mat-sys-outline-variant, #e8e8e8);
+  border-radius: 24px;
+  background: var(--mat-sys-surface, #fff);
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-back .card-german {
+  font-size: 28px;
+  margin-bottom: 2px;
+  justify-content: center;
+}
+
+.speak-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--mat-sys-primary, #58cc02);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+
+  mat-icon {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--mat-sys-primary, #58cc02) 10%, transparent);
+    color: var(--mat-sys-primary, #4aad00);
+  }
+}
+
+.card-translation {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface, #333);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.card-details {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.card-pos,
+.card-level,
+.card-verb-type {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: var(--mat-sys-surface-variant, #f0f0f0);
+  color: var(--mat-sys-on-surface-variant, #666);
+  font-weight: 600;
+}
+
+.card-noun-details,
+.card-verb-details {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  padding: 10px 0 4px;
+  flex-wrap: wrap;
+}
+
+.detail-label {
+  color: var(--mat-sys-on-surface-variant, #888);
+  font-weight: 500;
+}
+
+.detail-value {
+  font-weight: 600;
+  color: var(--mat-sys-on-surface, #333);
+
+  &.highlight {
+    color: var(--mat-sys-primary, #58cc02);
+  }
+}
+
+.detail-formation {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--mat-sys-primary, #58cc02) 10%, transparent);
+  color: var(--mat-sys-primary, #58cc02);
+  font-weight: 600;
+}
+
+// ── Grade section ──
+.grade-section {
+  margin-top: auto;
+  padding-top: 18px;
+  width: 100%;
+}
+
+.grade-label {
+  font-size: 14px;
+  color: var(--mat-sys-on-surface-variant, #666);
+  text-align: center;
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+
+.grade-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.grade-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 14px;
+  background: var(--mat-sys-surface, #fff);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+
+  &.grade-forgot {
+    border-color: #ef5350;
+    background: color-mix(in srgb, #ef5350 10%, transparent);
+    color: #c62828;
+
+    &:hover {
+      background: color-mix(in srgb, #ef5350 22%, transparent);
+      transform: scale(1.03);
+    }
+  }
+
+  &.grade-hard {
+    border-color: #ff9800;
+    background: color-mix(in srgb, #ff9800 10%, transparent);
+    color: #e65100;
+
+    &:hover {
+      background: color-mix(in srgb, #ff9800 22%, transparent);
+      transform: scale(1.03);
+    }
+  }
+
+  &.grade-good {
+    border-color: #2196f3;
+    background: color-mix(in srgb, #2196f3 10%, transparent);
+    color: #1565c0;
+
+    &:hover {
+      background: color-mix(in srgb, #2196f3 22%, transparent);
+      transform: scale(1.03);
+    }
+  }
+
+  &.grade-easy {
+    border-color: #4caf50;
+    background: color-mix(in srgb, #4caf50 10%, transparent);
+    color: #2e7d32;
+
+    &:hover {
+      background: color-mix(in srgb, #4caf50 22%, transparent);
+      transform: scale(1.03);
+    }
+  }
+}
+
+// ── After grading ──
+.grade-result {
+  margin-top: auto;
+  padding-top: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+}
+
+.grade-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+
+  &.forgot {
+    background: color-mix(in srgb, #ef5350 10%, transparent);
+    color: #c62828;
+  }
+
+  &.passed {
+    background: color-mix(in srgb, #4caf50 10%, transparent);
+    color: #2e7d32;
+  }
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+// ── Session Complete ──
+.session-complete {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 20px;
+  padding: 48px 24px;
+}
+
+.complete-icon {
+  font-size: 80px;
+  width: 80px;
+  height: 80px;
+  color: #4caf50;
+}
+
+.session-complete h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.complete-stats {
+  font-size: 16px;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.complete-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  width: 100%;
+  max-width: 300px;
+
+  button {
+    width: 100%;
+  }
+}

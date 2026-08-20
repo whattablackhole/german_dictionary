@@ -7,10 +7,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { CommonModule } from '@angular/common';
 import { WordService } from '../../services/word.service';
 import { SettingsService } from '../../services/settings.service';
 import { SpeechService } from '../../services/speech.service';
 import { PartOfSpeechService } from '../../services/part-of-speech.service';
+import { ImageCacheService } from '../../services/image-cache.service';
+import { ImageGenerationService } from '../../services/image-generation.service';
 import { DifficultyLevel, Gender, PartOfSpeech, VerbType, Word } from '../../models/word';
 
 @Component({
@@ -24,6 +28,8 @@ import { DifficultyLevel, Gender, PartOfSpeech, VerbType, Word } from '../../mod
     MatDatepickerModule,
     MatNativeDateModule,
     MatButtonModule,
+    MatProgressSpinnerModule,
+    CommonModule,
   ],
   templateUrl: './review.component.html',
   styleUrl: './review.component.scss',
@@ -45,6 +51,13 @@ export class ReviewComponent {
   readonly levelFilter = signal<DifficultyLevel | ''>('');
   readonly masteryMin = signal<number | null>(null);
   readonly masteryMax = signal<number | null>(null);
+
+  // Image generation state
+  readonly generatingImage = signal<Set<string>>(new Set());
+  readonly imageData = signal<Map<string, string>>(new Map());
+
+  // Full-size image modal
+  readonly fullSizeImage = signal<{ data: string; german: string } | null>(null);
 
   readonly dateFilteredWords = computed(() =>
     this.wordService.getWordsByDateRange(this.fromDate(), this.toDate())
@@ -108,14 +121,12 @@ export class ReviewComponent {
   readonly pageSize = signal(30);
   readonly pageSizeOptions = [10, 30, 50, 100];
 
-  /** Toggle: when true, distribute words equally across columns instead of chunking chronologically */
   readonly equalDistribution = signal(false);
 
   readonly totalPages = computed(() =>
     Math.max(1, Math.ceil(this.filteredWords().length / this.pageSize()))
   );
 
-  /** Words on the current page — either chronological slice or equally distributed */
   readonly paginatedWords = computed(() => {
     const words = this.filteredWords();
     const size = this.pageSize();
@@ -125,19 +136,16 @@ export class ReviewComponent {
       return words.slice(start, start + size);
     }
 
-    // Equal distribution mode: split words into 4 gender pools, take evenly from each
     const der = words.filter((w) => w.gender === 'der');
     const die = words.filter((w) => w.gender === 'die');
     const das = words.filter((w) => w.gender === 'das');
     const other = words.filter((w) => w.gender === null);
     const columns = [der, die, das, other];
 
-    // How many per column per page (round-robin: 8,8,7,7 for 30; 3,3,2,2 for 10)
     const base = Math.floor(size / 4);
     const firstNGetExtra = size % 4;
     const perColumn = [0, 1, 2, 3].map((idx) => base + (idx < firstNGetExtra ? 1 : 0));
 
-    // For this page, skip (page-1) * perColumn[i] items from each pool
     const prevPages = this.page() - 1;
     const result: Word[] = [];
     for (let i = 0; i < 4; i++) {
@@ -153,15 +161,48 @@ export class ReviewComponent {
     private readonly wordService: WordService,
     private readonly settingsService: SettingsService,
     private readonly speechService: SpeechService,
-    private readonly posService: PartOfSpeechService
+    private readonly posService: PartOfSpeechService,
+    private readonly imageCache: ImageCacheService,
+    private readonly imageGen: ImageGenerationService
   ) {
-    // Keep page in valid range when filters change the result count
+    // Keep page in valid range when filters change
     effect(() => {
       const total = this.totalPages();
       if (this.page() > total) {
         this.page.set(total);
       }
     });
+
+    // Preload image data for visible words
+    effect(async () => {
+      const words = this.paginatedWords();
+      const map = new Map<string, string>();
+      for (const w of words) {
+        const img = await this.imageCache.getImage(w.id);
+        if (img) map.set(w.id, img);
+      }
+      this.imageData.set(map);
+    });
+  }
+
+  async generateWordImage(word: Word): Promise<void> {
+    this.generatingImage.update((s) => new Set(s).add(word.id));
+    try {
+      const data = await this.imageGen.generateImage(word);
+      this.imageData.update((m) => {
+        const next = new Map(m);
+        next.set(word.id, data);
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to generate image:', err);
+    } finally {
+      this.generatingImage.update((s) => {
+        const next = new Set(s);
+        next.delete(word.id);
+        return next;
+      });
+    }
   }
 
   getTranslation(word: Word): string {
@@ -219,7 +260,6 @@ export class ReviewComponent {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
-    // Opacity scales from 0.05 (0%) to 0.30 (100%)
     const opacity = 0.05 + (mastery / 100) * 0.25;
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
   }
@@ -232,5 +272,13 @@ export class ReviewComponent {
     if (!type) return '';
     const labels: Record<VerbType, string> = { strong: 'stark', weak: 'schwach', mixed: 'gemischt' };
     return labels[type];
+  }
+
+  openFullSize(data: string, german: string): void {
+    this.fullSizeImage.set({ data, german });
+  }
+
+  closeFullSize(): void {
+    this.fullSizeImage.set(null);
   }
 }

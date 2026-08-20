@@ -70,6 +70,7 @@ html {
     (
       color: (
         primary: $green-palette,
+        secondary: $amber-palette,
         tertiary: $coral-palette,
       ),
       typography: (
@@ -108,11 +109,61 @@ html {
   --transition-speed: 0.2s;
 }
 
+// Define missing Material 3 surface/container color tokens
+// (Angular Material 22.x has a bug where custom palettes don't generate these properly)
+:root {
+  --mat-sys-surface: #ffffff;
+  --mat-sys-surface-container-low: #f5f5f5;
+  --mat-sys-surface-container: #eeeeee;
+  --mat-sys-surface-container-high: #e8e8e8;
+  --mat-sys-surface-container-highest: #dddddd;
+  --mat-sys-surface-container-lowest: #ffffff;
+  --mat-sys-surface-dim: #e0e0e0;
+  --mat-sys-surface-bright: #ffffff;
+  --mat-sys-on-surface: #1a1a1a;
+  --mat-sys-on-surface-variant: #444444;
+  --mat-sys-outline: #767676;
+  --mat-sys-outline-variant: #c4c4c4;
+  --mat-sys-background: #ffffff;
+  --mat-sys-on-background: #1a1a1a;
+  --mat-sys-error: #ba1a1a;
+  --mat-sys-error-container: #ffdad6;
+  --mat-sys-on-error: #ffffff;
+  --mat-sys-on-error-container: #410002;
+  --mat-sys-inverse-on-surface: #f2f2f2;
+  --mat-sys-inverse-surface: #2e2e2e;
+  --mat-sys-scrim: #000000;
+  --mat-sys-shadow: #000000;
+}
+
 // Dark theme overrides
 .dark-theme {
   --mat-sys-level1: 0 2px 8px rgba(0, 0, 0, 0.3);
   --mat-sys-level2: 0 4px 12px rgba(0, 0, 0, 0.4);
   --mat-sys-level3: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  --mat-sys-surface: #1a1a1a;
+  --mat-sys-surface-container-low: #242424;
+  --mat-sys-surface-container: #2a2a2a;
+  --mat-sys-surface-container-high: #2e2e2e;
+  --mat-sys-surface-container-highest: #383838;
+  --mat-sys-surface-container-lowest: #141414;
+  --mat-sys-surface-dim: #1a1a1a;
+  --mat-sys-surface-bright: #3a3a3a;
+  --mat-sys-on-surface: #e6e6e6;
+  --mat-sys-on-surface-variant: #c4c4c4;
+  --mat-sys-outline: #8f8f8f;
+  --mat-sys-outline-variant: #444444;
+  --mat-sys-background: #1a1a1a;
+  --mat-sys-on-background: #e6e6e6;
+  --mat-sys-error: #ffb4ab;
+  --mat-sys-error-container: #93000a;
+  --mat-sys-on-error: #690005;
+  --mat-sys-on-error-container: #ffdad6;
+  --mat-sys-inverse-on-surface: #1a1a1a;
+  --mat-sys-inverse-surface: #e6e6e6;
+  --mat-sys-scrim: #000000;
+  --mat-sys-shadow: #000000;
 }
 
 // Date picker popup background fix
@@ -148,6 +199,91 @@ body {
 
   // Smooth scrolling
   scroll-behavior: smooth;
+}
+
+// Dark theme: background image
+.dark-theme {
+  background: url('/background.jpg') center/cover fixed no-repeat !important;
+}
+
+// When dark theme is active, make body transparent so the html background shows through
+.dark-theme body {
+  background: transparent !important;
+}
+
+// Ensure content panels have a backdrop so text is readable over the background image
+.content-panel {
+  background: var(--mat-sys-surface);
+  backdrop-filter: blur(8px);
+  border-radius: var(--mat-sys-corner-large);
+}
+
+.dark-theme .content-panel {
+  background: rgba(26, 26, 26, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+// Dark mode: brighter page titles and subtitles
+.dark-theme .page-title,
+.dark-theme h1:not(.mat-h1):not([class*="mat-mdc"]) {
+  color: #f0f0f0 !important;
+}
+
+.dark-theme .page-subtitle,
+.dark-theme .sidebar-hint {
+  color: #b0b0b0 !important;
+}
+
+// Dark mode: caption text visibility
+.dark-theme .captions-page {
+  h1, h2, h3, h4,
+  .hint,
+  .segment-text,
+  .segment-timestamp,
+  .saved-date,
+  .saved-preview {
+    color: #e6e6e6 !important;
+  }
+
+  .hint code {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #e6e6e6 !important;
+  }
+
+  section,
+  .viewing-caption,
+  .corrected-text-content {
+    background: rgba(42, 42, 42, 0.92) !important;
+    border-color: #444 !important;
+  }
+
+  .saved-item {
+    background: rgba(42, 42, 42, 0.92) !important;
+    border-color: #444 !important;
+
+    &:hover {
+      border-color: #1976d2 !important;
+      background: rgba(25, 118, 210, 0.1) !important;
+    }
+
+    &.active {
+      border-color: #1976d2 !important;
+      background: rgba(25, 118, 210, 0.15) !important;
+    }
+  }
+
+  .correction-item {
+    background: rgba(42, 42, 42, 0.92) !important;
+    border-color: #444 !important;
+
+    .label {
+      color: #b0b0b0 !important;
+    }
+  }
+
+  .empty-state {
+    color: #b0b0b0 !important;
+  }
 }
 
 // ── Global utility classes ──

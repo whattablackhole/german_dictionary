@@ -113,8 +113,9 @@
 }
 
 .ai-suggest button {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 
   mat-icon {
@@ -124,7 +125,11 @@
   }
 
   mat-spinner {
-    margin-right: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    vertical-align: middle;
   }
 }
 
@@ -383,6 +388,19 @@
 
 .actions-header {
   text-align: right;
+}
+
+.word-table-image {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+  vertical-align: middle;
+}
+
+.image-spinner {
+  display: inline-flex;
+  margin: 0 4px;
 }
 
 /* Verb forms row (appears below the main form row when verb is selected) */

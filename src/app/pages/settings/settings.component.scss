@@ -16,6 +16,7 @@
 
 .settings-card {
   padding: 20px;
+  margin-bottom: 16px;
 }
 
 .settings-title {
@@ -53,6 +54,27 @@
   display: none;
 }
 
+.image-gen-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.batch-size-field {
+  width: 120px;
+}
+
+.image-gen-progress {
+  margin-top: 8px;
+}
+
+.image-gen-status {
+  font-size: 14px;
+  color: var(--mat-sys-on-surface-variant);
+  margin: 8px 0 0;
+}
+
 .backup-status {
   margin: 16px 0 0;
   color: var(--mat-sys-primary);
@@ -63,4 +85,25 @@
   margin: 16px 0 0;
   color: var(--mat-sys-error);
   font-size: 14px;
+}
+
+.ai-key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ai-key-field {
+  width: 320px;
+  max-width: 100%;
+}
+
+.ai-key-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mat-sys-primary);
+  font-size: 14px;
+  font-weight: 500;
 }

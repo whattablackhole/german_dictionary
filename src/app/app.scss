@@ -180,3 +180,53 @@ pp:host {
   background: #1b1b16;
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
+
+// ── Credit warning banner ──
+.credit-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #fff3cd;
+  border-bottom: 1px solid #ffc107;
+  color: #856404;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.credit-banner-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.credit-banner-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.credit-banner-link {
+  color: #856404;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.credit-banner-close {
+  color: #856404;
+  flex-shrink: 0;
+}
+
+:host-context(.dark-theme) .credit-banner {
+  background: #423f00;
+  border-bottom-color: #857400;
+  color: #ffe65d;
+}
+
+:host-context(.dark-theme) .credit-banner-link {
+  color: #ffe65d;
+}
+
+:host-context(.dark-theme) .credit-banner-close {
+  color: #ffe65d;
+}

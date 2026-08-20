@@ -2,35 +2,6 @@
   <h1 class="page-title">Manage Words</h1>
   <p class="page-subtitle">Add, edit, and delete German words</p>
 
-  <div class="form-card ai-card">
-    <h2 class="form-title">AI Assistant</h2>
-  <p class="ai-description">
-      Let DeepSeek (via OpenRouter) translate, classify the part of speech, and
-      detect the gender of nouns for you. Get an API key at
-      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">
-        openrouter.ai/keys
-      </a>.
-    </p>
-    <div class="ai-key-row">
-      <mat-form-field appearance="outline" class="ai-key-field">
-        <mat-label>OpenRouter API key</mat-label>
-        <input
-          matInput
-          type="password"
-          [(ngModel)]="apiKeyInput"
-          placeholder="sk-or-v1-..."
-        />
-      </mat-form-field>
-      <button mat-stroked-button (click)="saveApiKey()">Save key</button>
-      @if (apiKeySaved()) {
-        <span class="ai-key-saved">
-          <mat-icon>check_circle</mat-icon>
-          Key saved
-        </span>
-      }
-    </div>
-  </div>
-
   <div class="form-card">
     <h2 class="form-title">
       {{ editingId() ? 'Edit Word' : 'Add New Word' }}
@@ -376,6 +347,26 @@
               <span class="level-cell">{{ word.level }}</span>
               <span class="date-cell">{{ formatDate(word.createdAt) }}</span>
               <span class="actions-cell">
+                @if (!generatingImage().has(word.id)) {
+                  @if (imageData().has(word.id)) {
+                    <img
+                      class="word-table-image"
+                      [src]="imageData().get(word.id)"
+                      alt="Image for {{ word.german }}"
+                      title="Word image"
+                    />
+                  } @else {
+                    <button
+                      mat-icon-button
+                      aria-label="Generate image for {{ word.german }}"
+                      (click)="generateWordImage(word)"
+                    >
+                      <mat-icon>image</mat-icon>
+                    </button>
+                  }
+                } @else {
+                  <mat-spinner diameter="18" class="image-spinner" />
+                }
                 <button
                   mat-icon-button
                   color="primary"

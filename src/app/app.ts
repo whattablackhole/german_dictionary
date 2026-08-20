@@ -1,9 +1,10 @@
-import { Component, signal, effect } from '@angular/core';
+import { Component, signal, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { AiService } from './services/ai.service';
 
 const DARK_MODE_KEY = 'german-dictionary-dark-mode';
 
@@ -29,6 +30,8 @@ export interface NavItem {
   styleUrl: './app.scss',
 })
 export class App {
+  readonly aiService = inject(AiService);
+
   readonly darkMode = signal<boolean>(
     (() => {
       try {
@@ -44,6 +47,7 @@ export class App {
 
   readonly navItems: NavItem[] = [
     { path: '/review', label: 'Review', icon: 'repeat' },
+    { path: '/review-session', label: 'SRS Review', icon: 'psychology' },
     { path: '/game', label: 'Gender Game', icon: 'sports_esports' },
     { path: '/exercise', label: 'Exercise', icon: 'edit_note' },
     { path: '/practice-word', label: 'Word Practice', icon: 'spellcheck' },
@@ -101,10 +105,14 @@ export class App {
     }
   }
 
+  dismissCreditWarning(): void {
+    this.aiService.dismissCreditError();
+  }
 
   getNavColor(index: number): string {
     const colors = [
       '#58cc02', // green - review
+      '#ab47bc', // purple - SRS review
       '#ff9600', // orange - game
       '#3b82f6', // blue - exercise
       '#06b6d4', // cyan - word practice

@@ -16,6 +16,59 @@
   </mat-card>
 
   <mat-card class="settings-card">
+    <h2 class="settings-title">AI Assistant</h2>
+    <p class="settings-description">
+      Let DeepSeek (via OpenRouter) translate, classify the part of speech, and
+      detect the gender of nouns for you. Get an API key at
+      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">
+        openrouter.ai/keys
+      </a>.
+    </p>
+    <div class="ai-key-row">
+      <mat-form-field appearance="outline" class="ai-key-field">
+        <mat-label>OpenRouter API key</mat-label>
+        <input
+          matInput
+          type="password"
+          [(ngModel)]="apiKeyInput"
+          placeholder="sk-or-v1-..."
+        />
+      </mat-form-field>
+      <button mat-stroked-button (click)="saveApiKey()">Save key</button>
+      @if (apiKeySaved()) {
+        <span class="ai-key-saved">
+          <mat-icon>check_circle</mat-icon>
+          Key saved
+        </span>
+      }
+    </div>
+  </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Translation Engine</h2>
+    <p class="settings-description">
+      Choose the LibreTranslate API endpoint for sentence translations.
+      You can use a local instance, a public endpoint, or a custom one.
+    </p>
+    <mat-form-field appearance="outline" class="tts-select">
+      <mat-label>Translation API URL</mat-label>
+      <input
+        matInput
+        type="url"
+        [ngModel]="translationApiUrlInput()"
+        (ngModelChange)="translationApiUrlInput.set($event); settingsService.setTranslationApiUrl($event)"
+        [matAutocomplete]="autoTranslate"
+        placeholder="http://localhost:5000/translate"
+      />
+      <mat-autocomplete #autoTranslate="matAutocomplete">
+        @for (url of translationPresets; track url) {
+          <mat-option [value]="url">{{ url }}</mat-option>
+        }
+      </mat-autocomplete>
+    </mat-form-field>
+  </mat-card>
+
+  <mat-card class="settings-card">
     <h2 class="settings-title">Word Practice</h2>
     <mat-slide-toggle
       [checked]="settingsService.showArticleInPractice()"
@@ -88,6 +141,204 @@
           }
         </mat-select>
       </mat-form-field>
+    }
+  </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Text Generation Model</h2>
+    <p class="settings-description">
+      Choose which AI model to use for text generation (word analysis, sentence generation, stories, etc.).
+      Models are fetched from OpenRouter when you open this page. Free models marked with "(Free)" work without credits.
+    </p>
+    @if (modelsLoading()) {
+      <p class="settings-description" style="font-style: italic; color: #666;">
+        Loading models from OpenRouter...
+      </p>
+    }
+    <mat-form-field appearance="outline" class="tts-select">
+      <mat-label>Text model</mat-label>
+      <mat-select
+        [value]="settingsService.textModel()"
+        (valueChange)="settingsService.setTextModel($event)"
+      >
+        @for (model of dynamicTextModels(); track model.id) {
+          <mat-option [value]="model.id">{{ model.label }} — {{ model.description }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Image Generation</h2>
+    <p class="settings-description">
+      Choose the AI model and visual style for word images. The model and style apply to all new image generations.
+      Existing images are not affected. Switch to Gemini Lite for the cheapest option (~$0.00003/image).
+    </p>
+    <mat-form-field appearance="outline" class="tts-select">
+      <mat-label>Image model</mat-label>
+      <mat-select
+        [value]="settingsService.imageModel()"
+        (valueChange)="settingsService.setImageModel($event)"
+      >
+        @for (model of presetImageModels; track model.id) {
+          <mat-option [value]="model.id">{{ model.label }} — {{ model.description }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="tts-select">
+      <mat-label>Image style</mat-label>
+      <mat-select
+        [value]="settingsService.imageStyle()"
+        (valueChange)="settingsService.setImageStyle($event)"
+      >
+        @for (style of presetImageStyles; track style.id) {
+          <mat-option [value]="style.id">{{ style.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    @if (settingsService.imageStyle() === 'custom') {
+      <mat-form-field appearance="outline" class="tts-select">
+        <mat-label>Custom style description</mat-label>
+        <input
+          matInput
+          [value]="settingsService.imageStyleCustom()"
+          (change)="settingsService.setImageStyleCustom($any($event.target).value)"
+          placeholder="e.g. In the style of Van Gogh, with thick brush strokes"
+        />
+      </mat-form-field>
+    }
+  </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">SRS Example Sentences</h2>
+    <p class="settings-description">
+      When enabled, AI-generated example sentences will appear on the front of SRS flashcards alongside the word.
+      Generate sentences for words that don't have them yet using the button below.
+    </p>
+    <mat-slide-toggle
+      [checked]="settingsService.showSentencesInSrs()"
+      (toggleChange)="settingsService.setShowSentencesInSrs(!settingsService.showSentencesInSrs())"
+    >
+      Show example sentences on SRS cards
+    </mat-slide-toggle>
+    @if (!sentenceGenRunning()) {
+      <div class="image-gen-controls" style="margin-top: 16px;">
+        <mat-form-field appearance="outline" class="batch-size-field">
+          <mat-label>Batch size</mat-label>
+          <input
+            matInput
+            type="number"
+            min="1"
+            max="100"
+            [value]="sentenceGenBatchSize()"
+            (change)="sentenceGenBatchSize.set($any($event.target).value)"
+          />
+        </mat-form-field>
+        <button
+          mat-raised-button
+          color="primary"
+          (click)="batchGenerateSentences()"
+          [disabled]="sentenceGenRunning()"
+        >
+          Generate Sentences
+        </button>
+      </div>
+    }
+    @if (sentenceGenRunning()) {
+      <div class="image-gen-progress" style="margin-top: 16px;">
+        <mat-progress-bar
+          mode="determinate"
+          [value]="(sentenceGenProgress() / sentenceGenTotal()) * 100"
+        ></mat-progress-bar>
+        <p class="image-gen-status">{{ sentenceGenStatus() }}</p>
+      </div>
+    }
+    @if (sentenceGenStatus() && !sentenceGenRunning()) {
+      <p class="backup-status">{{ sentenceGenStatus() }}</p>
+    }
+    @if (sentenceGenError()) {
+      <p class="backup-error">{{ sentenceGenError() }}</p>
+    }
+  </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Fix Missing Plural Forms</h2>
+    <p class="settings-description">
+      Scans all nouns in your vocabulary and fills in missing plural forms
+      (e.g. "Hunde" for "Hund", "Katze" for "Katzen") using AI.
+      Useful if you have nouns from an earlier version that lack plural data.
+      Requires an OpenRouter API key.
+    </p>
+    @if (pluralFixRunning()) {
+      <div class="plural-fix-progress">
+        <mat-progress-bar
+          mode="determinate"
+          [value]="(pluralFixProgress() / pluralFixTotal()) * 100"
+        ></mat-progress-bar>
+        <p class="plural-fix-status">{{ pluralFixStatus() }}</p>
+      </div>
+    } @else {
+      <button
+        mat-raised-button
+        color="primary"
+        (click)="fixMissingPlurals()"
+        [disabled]="pluralFixRunning()"
+      >
+        Fix Plural Forms
+      </button>
+    }
+    @if (pluralFixStatus() && !pluralFixRunning()) {
+      <p class="backup-status">{{ pluralFixStatus() }}</p>
+    }
+    @if (pluralFixError()) {
+      <p class="backup-error">{{ pluralFixError() }}</p>
+    }
+  </mat-card>
+
+  <mat-card class="settings-card">
+    <h2 class="settings-title">Generate Word Images</h2>
+    <p class="settings-description">
+      Generates AI images for words that don't have one yet using Flux Schnell via OpenRouter.
+      Images are stored in IndexedDB and included in backups.
+      Each image costs ~$0.003 (0.3¢). Requires an OpenRouter API key with credits.
+    </p>
+    @if (!imageGenRunning()) {
+      <div class="image-gen-controls">
+        <mat-form-field appearance="outline" class="batch-size-field">
+          <mat-label>Batch size</mat-label>
+          <input
+            matInput
+            type="number"
+            min="1"
+            max="100"
+            [value]="imageGenBatchSize()"
+            (change)="setImageGenBatchSize($any($event.target).value)"
+          />
+        </mat-form-field>
+        <button
+          mat-raised-button
+          color="primary"
+          (click)="batchGenerateImages()"
+          [disabled]="imageGenRunning()"
+        >
+          Generate Images
+        </button>
+      </div>
+    }
+    @if (imageGenRunning()) {
+      <div class="image-gen-progress">
+        <mat-progress-bar
+          mode="determinate"
+          [value]="(imageGenProgress() / imageGenTotal()) * 100"
+        ></mat-progress-bar>
+        <p class="image-gen-status">{{ imageGenStatus() }}</p>
+      </div>
+    }
+    @if (imageGenStatus() && !imageGenRunning()) {
+      <p class="backup-status">{{ imageGenStatus() }}</p>
+    }
+    @if (imageGenError()) {
+      <p class="backup-error">{{ imageGenError() }}</p>
     }
   </mat-card>
 

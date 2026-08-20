@@ -217,6 +217,88 @@ export class StoriesComponent implements OnDestroy {
     return s.gender + ' ';
   }
 
+  lookupDisplayWord(): string {
+    const word = this.selectedLookupWord();
+    const s = this.wordSuggestion();
+    if (!word) return '';
+    // For verbs, show the infinitive (if available) with the original word in parentheses
+    if (s?.partOfSpeech === 'verb' && s.infinitive && s.infinitive !== word) {
+      return `${s.infinitive} (${word})`;
+    }
+    // For nouns, show the base form (singular) with the original word in parentheses.
+    // The article is already prefixed via lookupGenderArticle() in the template.
+    if (s?.partOfSpeech === 'noun' && s.baseForm && s.baseForm !== word) {
+      return `${s.baseForm} (${word})`;
+    }
+    // For any other part of speech (e.g. pronoun, adjective), show the base form if it differs
+    if (s?.baseForm && s.baseForm !== word) {
+      return `${s.baseForm} (${word})`;
+    }
+    return word;
+  }
+
+  /** Returns the German word form for a numeric string like "1949" or null if not a number. */
+  numberSpokenForm(): string | null {
+    const word = this.selectedLookupWord();
+    if (!word) return null;
+    const n = Number(word.replace(/[.,\s]/g, ''));
+    if (!Number.isFinite(n) || n < 0 || n > 999999999 || !/^[\d.,\s]+$/.test(word)) {
+      return null;
+    }
+    return this.numberToGermanWords(n);
+  }
+
+  private numberToGermanWords(n: number): string {
+    if (n === 0) return 'null';
+
+    const ones = ['', 'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun'];
+    const teens = ['zehn', 'elf', 'zwölf', 'dreizehn', 'vierzehn', 'fünfzehn', 'sechzehn', 'siebzehn', 'achtzehn', 'neunzehn'];
+    const tens = ['', '', 'zwanzig', 'dreißig', 'vierzig', 'fünfzig', 'sechzig', 'siebzig', 'achtzig', 'neunzig'];
+
+    function threeDigits(num: number): string {
+      const parts: string[] = [];
+      const h = Math.floor(num / 100);
+      const rest = num % 100;
+      if (h > 0) {
+        parts.push(ones[h] + 'hundert');
+      }
+      if (rest > 0) {
+        if (rest < 10) {
+          parts.push(rest === 1 && num >= 100 ? 'eins' : ones[rest]);
+        } else if (rest < 20) {
+          parts.push(teens[rest - 10]);
+        } else {
+          const t = Math.floor(rest / 10);
+          const o = rest % 10;
+          if (o === 1) parts.push('einund' + tens[t]);
+          else if (o > 0) parts.push(ones[o] + 'und' + tens[t]);
+          else parts.push(tens[t]);
+        }
+      }
+      return parts.join('');
+    }
+
+    const milliarden = Math.floor(n / 1_000_000_000);
+    const millionen = Math.floor((n % 1_000_000_000) / 1_000_000);
+    const tausender = Math.floor((n % 1_000_000) / 1_000);
+    const rest = n % 1_000;
+
+    const parts: string[] = [];
+    if (milliarden > 0) {
+      parts.push((milliarden === 1 ? 'eine' : threeDigits(milliarden)) + ' Milliarde' + (milliarden > 1 ? 'n' : ''));
+    }
+    if (millionen > 0) {
+      parts.push((millionen === 1 ? 'eine' : threeDigits(millionen)) + ' Million' + (millionen > 1 ? 'en' : ''));
+    }
+    if (tausender > 0) {
+      parts.push((tausender === 1 ? 'eintausend' : threeDigits(tausender) + 'tausend'));
+    }
+    if (rest > 0) {
+      parts.push(threeDigits(rest));
+    }
+    return parts.join(' ');
+  }
+
   readonly isWordAlreadyInDictionary = computed(() => {
     const word = this.selectedLookupWord();
     const suggestion = this.wordSuggestion();
@@ -717,6 +799,7 @@ export class StoriesComponent implements OnDestroy {
     this.correctionHint.set('');
     this.correctionLoading.set(false);
     this.correctionError.set('');
+    this.selectedWordIndices.set(new Set());
   }
 
   // ── Right-click context menu for multi-word selection ──

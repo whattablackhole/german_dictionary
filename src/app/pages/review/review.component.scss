@@ -1,5 +1,6 @@
 .review-container {
-  max-width: 1200px;
+  width: 100%;
+  box-sizing: border-box;
   padding: 24px;
 }
 
@@ -62,6 +63,73 @@
   }
 }
 
+/* Full-size image overlay */
+.fullsize-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.fullsize-modal {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--mat-sys-surface-container-high);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+
+  img {
+    max-width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    border-radius: 8px;
+  }
+}
+
+.fullsize-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  z-index: 1;
+  transition: background 0.2s;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.75);
+  }
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.fullsize-caption {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface);
+}
+
 .other-column {
   border-top-color: var(--mat-sys-on-surface-variant);
   --gender-color: var(--mat-sys-on-surface-variant);
@@ -114,11 +182,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   background: var(--mastery-bg, var(--mat-sys-surface));
   border-radius: 8px;
   padding: 10px 14px;
   border-left: 3px solid var(--gender-color);
+  flex-wrap: wrap;
   transition:
     filter 0.15s,
     background 0.2s;
@@ -131,7 +200,8 @@
 .word-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .speak-button {
@@ -226,6 +296,45 @@
 }
 
 /* Verb details */
+.image-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--mat-sys-primary, #58cc02);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  font-size: 18px;
+
+  mat-icon {
+    font-size: 18px;
+  }
+
+  &:hover {
+    color: var(--mat-sys-primary, #4aad00);
+  }
+}
+
+.image-spinner {
+  display: inline-flex;
+  margin: 0 4px;
+}
+
+.word-thumbnail {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+  cursor: pointer;
+  transition: transform 0.15s;
+
+  &:hover {
+    transform: scale(1.5);
+    z-index: 10;
+    position: relative;
+  }
+}
+
 .verb-details-item {
   list-style: none;
   margin: 0;

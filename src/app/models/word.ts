@@ -31,6 +31,12 @@ export type PartOfSpeech =
   | 'numeral'
   | 'phrase';
 
+export interface ExampleSentence {
+  german: string;
+  translationEn: string;
+  translationRu: string;
+}
+
 export interface Word {
   id: string;
   german: string;
@@ -50,4 +56,9 @@ export interface Word {
   // Noun-specific fields (optional)
   pluralForm?: string;
   pluralFormation?: PluralFormation;
+  // Spaced repetition (SRS) fields
+  srsInterval: number;
+  srsNextReview: string;
+  srsEase: number;
+  srsConsecutiveCorrect: number;
 }

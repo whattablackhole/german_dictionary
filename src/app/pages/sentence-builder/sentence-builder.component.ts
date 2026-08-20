@@ -7,11 +7,14 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { WordService } from '../../services/word.service';
 import { AiService, AiSuggestion } from '../../services/ai.service';
 import { SentencePatternService } from '../../services/sentence-pattern.service';
 import { SentencePattern, PatternHistory, SentenceFeedback } from '../../models/sentence-pattern';
 import { PluralFormation } from '../../models/word';
+import { TtsCacheService } from '../../services/tts-cache.service';
+import { SettingsService } from '../../services/settings.service';
 
 interface ChatMessage {
   type: 'user' | 'ai';
@@ -41,6 +44,7 @@ interface PendingWord {
     MatFormFieldModule,
     MatInputModule,
     MatCheckboxModule,
+    MatTooltipModule,
   ],
   templateUrl: './sentence-builder.component.html',
   styleUrl: './sentence-builder.component.scss',
@@ -69,10 +73,14 @@ export class SentenceBuilderComponent {
     return id ? this.patternService.getHistory(id) : null;
   });
 
+  readonly playingAudio = signal<string | null>(null);
+
   constructor(
     private readonly wordService: WordService,
     private readonly aiService: AiService,
-    readonly patternService: SentencePatternService
+    readonly patternService: SentencePatternService,
+    private readonly ttsCache: TtsCacheService,
+    private readonly settingsService: SettingsService
   ) {
     this.patterns = this.patternService.getAllPatterns();
     this.reseedWords();
@@ -145,20 +153,27 @@ export class SentenceBuilderComponent {
     this.userInput.set('');
 
     try {
-      const words = this.wordService.getWords();
-      const vocabList = words.map((w) => ({
-        german: w.german,
-        translationEn: w.translationEn,
-        translationRu: w.translationRu,
-      }));
-
-      const feedback = await this.aiService.verifySentenceWriting(
+      // AI only checks the grammar pattern. We check vocabulary locally.
+      const aiFeedback = await this.aiService.verifySentenceWriting(
         sentence,
         pattern.id,
         pattern.description,
-        pattern.tips,
-        vocabList
+        pattern.tips
       );
+
+      // Local vocabulary check — determine which words are not in the user's vocabulary
+      const knownForms = this.buildKnownWordForms();
+      const tokenized = sentence
+        .toLowerCase()
+        .split(/[^a-zäöüß]+/i)
+        .filter((w) => w.length > 0);
+      const unknownWords = [...new Set(tokenized.filter((w) => !knownForms.has(w)))];
+
+      const feedback: SentenceFeedback = {
+        ...aiFeedback,
+        vocabCorrect: unknownWords.length === 0,
+        unknownWords,
+      };
 
       // Save submission
       const submission = this.patternService.addSubmission(pattern.id, feedback);
@@ -334,6 +349,35 @@ export class SentenceBuilderComponent {
       }
       return updated;
     });
+  }
+
+  async playVerbAudio(text: string): Promise<void> {
+    if (this.playingAudio() === text) {
+      this.playingAudio.set(null);
+      return;
+    }
+
+    this.playingAudio.set(text);
+    try {
+      const ttsOptions = {
+        model: this.settingsService.ttsModel(),
+        voice: this.settingsService.ttsVoice(),
+      };
+      const cached = await this.ttsCache.getAudio(text, ttsOptions);
+      let dataUrl: string;
+      if (cached) {
+        dataUrl = cached;
+      } else {
+        dataUrl = await this.aiService.generateSpeech(text, ttsOptions);
+        await this.ttsCache.setAudio(text, dataUrl, ttsOptions);
+      }
+      const audio = new Audio(dataUrl);
+      audio.onended = () => this.playingAudio.set(null);
+      audio.onerror = () => this.playingAudio.set(null);
+      await audio.play();
+    } catch {
+      this.playingAudio.set(null);
+    }
   }
 
   getMasteryClass(mastery: number): string {

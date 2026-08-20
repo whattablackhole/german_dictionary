@@ -7,9 +7,43 @@ const TTS_ENGINE_KEY = 'german-dictionary-tts-engine';
 const TTS_MODEL_KEY = 'german-dictionary-tts-model';
 const TTS_VOICE_KEY = 'german-dictionary-tts-voice';
 const LOOKUP_MODIFIER_KEY = 'german-dictionary-lookup-modifier';
+const IMAGE_STYLE_KEY = 'german-dictionary-image-style';
+const IMAGE_MODEL_KEY = 'german-dictionary-image-model';
+const TEXT_MODEL_KEY = 'german-dictionary-text-model';
+const SHOW_SENTENCES_KEY = 'german-dictionary-show-sentences-srs';
+const TRANSLATION_API_URL_KEY = 'german-dictionary-translation-api-url';
 
 export type TtsEngine = 'browser' | 'openai';
 export type LookupModifier = 'alt' | 'ctrl' | 'meta' | 'shift';
+
+export const PRESET_IMAGE_MODELS = [
+  { id: 'google/gemini-3.1-flash-lite-image', label: 'Google Gemini 3.1 Flash Lite Image', description: 'Cheapest (~$0.00003/image), fast, good quality' },
+  { id: 'black-forest-labs/flux.2-klein-4b', label: 'Black Forest Labs FLUX.2 Klein 4B', description: '~$0.014/image, good for flashcard illustrations' },
+  { id: 'openai/gpt-image-1-mini', label: 'OpenAI GPT Image 1 Mini', description: '~$0.004/image, high quality, supports streaming' },
+];
+
+export const PRESET_TEXT_MODELS = [
+  { id: 'google/gemma-4-31b-it:free', label: 'Google Gemma 4 31B (Free)', description: 'Free model, good for text generation' },
+  { id: 'nvidia/llama-3.3-nemotron-super-49b-v1:free', label: 'NVIDIA Nemotron 49B (Free)', description: 'Free NVIDIA model, strong reasoning' },
+  { id: 'deepseek/deepseek-chat-v3-0324:free', label: 'DeepSeek V3 (Free)', description: 'Free DeepSeek model, good for German' },
+  { id: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B (Free)', description: 'Free Alibaba model, strong multilingual support' },
+  { id: 'microsoft/phi-4-mini-instruct:free', label: 'Microsoft Phi-4 Mini (Free)', description: 'Free Microsoft model, efficient' },
+  { id: 'google/gemini-3.1-flash-lite:free', label: 'Google Gemini 3.1 Flash Lite (Free)', description: 'Gemini 3.1 Flash Lite, free tier available' },
+];
+
+export const PRESET_IMAGE_STYLES = [
+  { id: 'none', label: 'No style (default minimal)', prompt: 'Minimalist cartoon style, white or light background, no text, suitable for a flashcard.' },
+  { id: 'simpsons', label: 'Simpsons-like', prompt: 'In the style of The Simpsons cartoon, bright yellow skin tones, bold outlines, simple backgrounds, no text.' },
+  { id: 'watercolor', label: 'Watercolor painting', prompt: 'Watercolor painting style, soft colors, artistic brush strokes, no text.' },
+  { id: 'pixel-art', label: 'Pixel art (8-bit)', prompt: 'Pixel art style, 8-bit video game look, blocky pixels, retro gaming aesthetic, no text.' },
+  { id: 'ukiyo-e', label: 'Japanese woodblock (Ukiyo-e)', prompt: 'In the style of Japanese Ukiyo-e woodblock prints, flat colors, bold outlines, Hokusai-inspired, no text.' },
+  { id: 'line-art', label: 'Line art / coloring book', prompt: 'Simple black and white line art, coloring book style, clean outlines, no shading, no text.' },
+  { id: 'vintage', label: 'Vintage engraving', prompt: '19th century vintage engraving style, crosshatch shading, sepia tones, antique print look, no text.' },
+  { id: 'studio-ghibli', label: 'Studio Ghibli-inspired', prompt: 'In the style of Studio Ghibli anime, soft pastel colors, dreamy backgrounds, whimsical and warm atmosphere, no text.' },
+  { id: 'minimalist-flat', label: 'Flat vector minimal', prompt: 'Flat vector illustration style, solid colors, geometric shapes, modern minimalist design, no text.' },
+  { id: 'sketch', label: 'Pencil sketch', prompt: 'Hand-drawn pencil sketch style, rough lines, shading with graphite, study drawing, no text.' },
+  { id: 'custom', label: 'Custom style (type below)', prompt: '' },
+];
 
 export interface TtsModelOption {
   id: string;
@@ -105,6 +139,46 @@ export class SettingsService {
     (localStorage.getItem(LOOKUP_MODIFIER_KEY) as LookupModifier) ?? 'alt'
   );
 
+  /** The selected image style preset ID. 'none' = default minimal style. 'custom' = custom text. */
+  readonly imageStyle = signal<string>(
+    localStorage.getItem(IMAGE_STYLE_KEY) ?? 'none'
+  );
+
+  /** Custom style prompt text (only used when imageStyle === 'custom') */
+  readonly imageStyleCustom = signal<string>(
+    localStorage.getItem(IMAGE_STYLE_KEY + '-custom') ?? ''
+  );
+
+  /** The selected image generation model */
+  readonly imageModel = signal<string>(
+    localStorage.getItem(IMAGE_MODEL_KEY) ?? 'google/gemini-3.1-flash-lite-image'
+  );
+
+  /** The selected text generation model (for AI chat, word analysis, etc.) */
+  readonly textModel = signal<string>(
+    localStorage.getItem(TEXT_MODEL_KEY) ?? 'google/gemma-4-31b-it:free'
+  );
+
+  /** The LibreTranslate API endpoint URL */
+  readonly translationApiUrl = signal<string>(
+    localStorage.getItem(TRANSLATION_API_URL_KEY) ?? 'http://localhost:5000/translate'
+  );
+
+  setTranslationApiUrl(url: string): void {
+    this.translationApiUrl.set(url);
+    this.safeWrite(TRANSLATION_API_URL_KEY, url);
+  }
+
+  setImageModel(model: string): void {
+    this.imageModel.set(model);
+    this.safeWrite(IMAGE_MODEL_KEY, model);
+  }
+
+  setTextModel(model: string): void {
+    this.textModel.set(model);
+    this.safeWrite(TEXT_MODEL_KEY, model);
+  }
+
   setTranslationLanguage(language: TranslationLanguage): void {
     this.translationLanguage.set(language);
     this.safeWrite(LANGUAGE_STORAGE_KEY, language);
@@ -123,7 +197,6 @@ export class SettingsService {
   setTtsModel(model: string): void {
     this.ttsModel.set(model);
     this.safeWrite(TTS_MODEL_KEY, model);
-    // Reset voice to the new model's default when switching models
     const found = TTS_MODELS.find((m) => m.id === model);
     if (found && found.voices.length > 0) {
       this.setTtsVoice(found.voices[0].id);
@@ -138,6 +211,38 @@ export class SettingsService {
   setLookupModifierKey(modifier: LookupModifier): void {
     this.lookupModifierKey.set(modifier);
     this.safeWrite(LOOKUP_MODIFIER_KEY, modifier);
+  }
+
+  /** Whether to show example sentences on SRS card front */
+  readonly showSentencesInSrs = signal<boolean>(
+    localStorage.getItem(SHOW_SENTENCES_KEY) !== 'false'
+  );
+
+  setShowSentencesInSrs(show: boolean): void {
+    this.showSentencesInSrs.set(show);
+    this.safeWrite(SHOW_SENTENCES_KEY, String(show));
+  }
+
+  setImageStyle(style: string): void {
+    this.imageStyle.set(style);
+    this.safeWrite(IMAGE_STYLE_KEY, style);
+  }
+
+  setImageStyleCustom(text: string): void {
+    this.imageStyleCustom.set(text);
+    this.safeWrite(IMAGE_STYLE_KEY + '-custom', text);
+  }
+
+  /** Returns the full style prompt to inject into image generation */
+  getImageStylePrompt(): string {
+    const id = this.imageStyle();
+    if (id === 'none') return '';
+    const preset = PRESET_IMAGE_STYLES.find((s) => s.id === id);
+    if (id === 'custom') {
+      const custom = this.imageStyleCustom().trim();
+      return custom ? `${custom}. No text in the image.` : '';
+    }
+    return preset?.prompt ?? '';
   }
 
   getTranslation(word: Word): string {

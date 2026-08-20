@@ -1,0 +1,219 @@
+<div class="session-container">
+  @if (sessionFinished()) {
+    <!-- Session Complete -->
+    <div class="session-complete">
+      <mat-icon class="complete-icon">check_circle</mat-icon>
+      <h1>Session Complete!</h1>
+      <p class="complete-stats">
+        You reviewed {{ reviewedCount() }} {{ reviewedCount() === 1 ? 'word' : 'words' }}.
+      </p>
+      <div class="complete-actions">
+        <button mat-raised-button color="primary" (click)="restart()">
+          <mat-icon>refresh</mat-icon>
+          Start New Session
+        </button>
+        <button mat-stroked-button (click)="goToReviewPage()">
+          <mat-icon>repeat</mat-icon>
+          Browse All Words
+        </button>
+      </div>
+    </div>
+  } @else if (totalCards() === 0) {
+    <!-- No cards - choose session type -->
+    <div class="session-picker">
+      <h1>Spaced Repetition Review</h1>
+      <p class="subtitle">Choose what to review</p>
+
+      <div class="session-options">
+        <button class="session-option due-option" (click)="startSession('due')">
+          <mat-icon class="option-icon">schedule</mat-icon>
+          <span class="option-title">Due for Review</span>
+          <span class="option-count">{{ dueCount() }} words</span>
+          <span class="option-desc">Words scheduled for today</span>
+        </button>
+
+        <button class="session-option new-option" (click)="startSession('new')">
+          <mat-icon class="option-icon">fiber_new</mat-icon>
+          <span class="option-title">New Words</span>
+          <span class="option-count">{{ newCount() }} words</span>
+          <span class="option-desc">Words not yet reviewed</span>
+        </button>
+
+        <button class="session-option all-option" (click)="startSession('all')">
+          <mat-icon class="option-icon">list</mat-icon>
+          <span class="option-title">All Words</span>
+          <span class="option-count">{{ totalCards() }} words</span>
+          <span class="option-desc">Full vocabulary review</span>
+        </button>
+      </div>
+    </div>
+  } @else {
+    <!-- Active session -->
+    <div class="session-active">
+      <div class="session-header">
+        <div class="session-progress-text">
+          {{ currentIndex() + 1 }} / {{ totalCards() }}
+        </div>
+        <div class="session-progress-bar">
+          <mat-progress-bar mode="determinate" [value]="progress()"></mat-progress-bar>
+        </div>
+      </div>
+
+      @let card = currentCard();
+      @if (card) {
+        <div class="flashcard" [class.revealed]="card.revealed">
+          @if (!card.revealed) {
+            <!-- Front of card: image + German word -->
+            <div class="card-front" (click)="revealCard()">
+              @if (currentImage()) {
+                <img
+                  class="card-image"
+                  [src]="currentImage()"
+                  alt="Image for {{ card.word.german }}"
+                />
+              }
+              <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
+                @if (card.word.gender && card.word.partOfSpeech === 'noun') {
+                  <span class="card-article">{{ card.word.gender }}</span>
+                }
+                <span class="card-word">{{ card.word.german }}</span>
+              </div>
+              <div class="card-front-actions">
+                @if (!currentImage() && !generatingImage()) {
+                  <button
+                    class="generate-image-btn"
+                    (click)="$event.stopPropagation(); generateCurrentWordImage()"
+                    title="Generate image for this word"
+                  >
+                    <mat-icon>image</mat-icon>
+                    Generate Image
+                  </button>
+                } @else if (generatingImage()) {
+                  <mat-spinner diameter="20" />
+                }
+              </div>
+              @if (settingsService.showSentencesInSrs() && currentSentences() && currentSentences()!.length > 0) {
+                <div class="card-sentences">
+                  <span class="sentences-label">Example sentences:</span>
+                  @for (s of currentSentences()!; track s.german) {
+                    <div class="card-sentence">{{ s.german }}</div>
+                  }
+                </div>
+              }
+              @if (settingsService.showSentencesInSrs() && !currentSentences() && !generatingSentences()) {
+                <div class="card-front-actions">
+                  <button
+                    class="generate-sentences-btn"
+                    (click)="$event.stopPropagation(); generateCurrentSentences()"
+                    title="Generate example sentences for this word"
+                  >
+                    <mat-icon>text_snippet</mat-icon>
+                    Generate Sentences
+                  </button>
+                </div>
+              } @else if (generatingSentences()) {
+                <div class="card-front-actions">
+                  <mat-spinner diameter="20" />
+                  <span class="gen-label">Generating sentences...</span>
+                </div>
+              }
+              <div class="card-hint">Tap to reveal translation</div>
+            </div>
+          } @else {
+            <!-- Back of card: translation and details -->
+            <div class="card-back">
+              <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
+                @if (card.word.gender && card.word.partOfSpeech === 'noun') {
+                  <span class="card-article">{{ card.word.gender }}</span>
+                }
+                <span class="card-word">{{ card.word.german }}</span>
+                <button class="speak-btn" (click)="speakWord(card.word)" title="Pronounce">
+                  <mat-icon>volume_up</mat-icon>
+                </button>
+              </div>
+
+              <div class="card-translation">{{ getTranslation(card.word) }}</div>
+
+              <div class="card-details">
+                <span class="card-pos">{{ getPosLabel(card.word) }}</span>
+                <span class="card-level">{{ card.word.level }}</span>
+                @if (card.word.verbType) {
+                  <span class="card-verb-type">{{ getVerbTypeLabel(card.word.verbType) }}</span>
+                }
+              </div>
+
+              @if (card.word.partOfSpeech === 'noun' && (card.word.pluralForm || card.word.pluralFormation)) {
+                <div class="card-noun-details">
+                  <span class="detail-label">Plural:</span>
+                  <span class="detail-value">{{ card.word.pluralForm ?? '—' }}</span>
+                  @if (card.word.pluralFormation) {
+                    <span class="detail-formation">{{ card.word.pluralFormation }}</span>
+                  }
+                </div>
+              }
+
+              @if (card.word.partOfSpeech === 'verb') {
+                <div class="card-verb-details">
+                  @if (card.word.simplePast) {
+                    <span class="detail-label">Präteritum:</span>
+                    <span class="detail-value">{{ card.word.simplePast }}</span>
+                  }
+                  @if (card.word.pastParticiple) {
+                    <span class="detail-label">Partizip II:</span>
+                    <span class="detail-value highlight">{{ card.word.pastParticiple }}</span>
+                  }
+                </div>
+              }
+
+              @if (card.grade === null) {
+                <!-- Grading buttons -->
+                <div class="grade-section">
+                  <p class="grade-label">How well did you know it?</p>
+                  <div class="grade-buttons">
+                    <button class="grade-btn grade-forgot" (click)="recordGrade(0)">
+                      <mat-icon>close</mat-icon>
+                      Forgot
+                    </button>
+                    <button class="grade-btn grade-hard" (click)="recordGrade(2)">
+                      <mat-icon>sentiment_dissatisfied</mat-icon>
+                      Hard
+                    </button>
+                    <button class="grade-btn grade-good" (click)="recordGrade(4)">
+                      <mat-icon>sentiment_satisfied</mat-icon>
+                      Good
+                    </button>
+                    <button class="grade-btn grade-easy" (click)="recordGrade(5)">
+                      <mat-icon>sentiment_very_satisfied</mat-icon>
+                      Easy
+                    </button>
+                  </div>
+                </div>
+              } @else {
+                <!-- After grading -->
+                <div class="grade-result">
+                  <div class="grade-feedback" [class.forgot]="card.grade < 2" [class.passed]="card.grade >= 2">
+                    @if (card.grade < 2) {
+                      <mat-icon>refresh</mat-icon>
+                      <span>Reset — will review again soon</span>
+                    } @else {
+                      <mat-icon>check</mat-icon>
+                      <span>Next review in {{ card.word.srsInterval }} day{{ card.word.srsInterval === 1 ? '' : 's' }}</span>
+                    }
+                  </div>
+                  <button mat-raised-button color="primary" (click)="nextCard()">
+                    @if (currentIndex() + 1 >= totalCards()) {
+                      Finish Session
+                    } @else {
+                      Next Word
+                    }
+                    <mat-icon>arrow_forward</mat-icon>
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

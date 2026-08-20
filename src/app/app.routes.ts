@@ -96,4 +96,11 @@ export const routes: Routes = [
         (m) => m.CaptionsComponent
       ),
   },
+  {
+    path: 'review-session',
+    loadComponent: () =>
+      import('./pages/review-session/review-session.component').then(
+        (m) => m.ReviewSessionComponent
+      ),
+  },
 ];

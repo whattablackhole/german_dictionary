@@ -3,29 +3,47 @@ import { Word, Gender, DifficultyLevel, PartOfSpeech } from '../models/word';
 
 const STORAGE_KEY = 'german-dictionary-words';
 
+function srsDefaults() {
+  const now = new Date().toISOString();
+  return {
+    srsInterval: 0,
+    srsNextReview: now,
+    srsEase: 2.5,
+    srsConsecutiveCorrect: 0,
+  };
+}
+
 const SEED_WORDS: Word[] = [
-  { id: '1', german: 'Hund', partOfSpeech: 'noun', gender: 'der', translationEn: 'dog', translationRu: 'собака', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', pluralForm: 'Hunde', pluralFormation: '-e' },
-  { id: '2', german: 'Katze', partOfSpeech: 'noun', gender: 'die', translationEn: 'cat', translationRu: 'кошка', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', pluralForm: 'Katzen', pluralFormation: '-en' },
-  { id: '3', german: 'Haus', partOfSpeech: 'noun', gender: 'das', translationEn: 'house', translationRu: 'дом', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', pluralForm: 'Häuser', pluralFormation: 'umlaut + -er' },
-  { id: '4', german: 'Mann', partOfSpeech: 'noun', gender: 'der', translationEn: 'man', translationRu: 'мужчина', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', pluralForm: 'Männer', pluralFormation: 'umlaut + -er' },
-  { id: '5', german: 'Frau', partOfSpeech: 'noun', gender: 'die', translationEn: 'woman', translationRu: 'женщина', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-03T10:00:00.000Z', pluralForm: 'Frauen', pluralFormation: '-en' },
-  { id: '6', german: 'Kind', partOfSpeech: 'noun', gender: 'das', translationEn: 'child', translationRu: 'ребёнок', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-03T10:00:00.000Z', pluralForm: 'Kinder', pluralFormation: '-er' },
-  { id: '7', german: 'Baum', partOfSpeech: 'noun', gender: 'der', translationEn: 'tree', translationRu: 'дерево', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-04T10:00:00.000Z', pluralForm: 'Bäume', pluralFormation: 'umlaut + -e' },
-  { id: '8', german: 'Blume', partOfSpeech: 'noun', gender: 'die', translationEn: 'flower', translationRu: 'цветок', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-04T10:00:00.000Z', pluralForm: 'Blumen', pluralFormation: '-en' },
-  { id: '9', german: 'Auto', partOfSpeech: 'noun', gender: 'das', translationEn: 'car', translationRu: 'автомобиль', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-05T10:00:00.000Z', pluralForm: 'Autos', pluralFormation: '-s' },
-  { id: '10', german: 'Tisch', partOfSpeech: 'noun', gender: 'der', translationEn: 'table', translationRu: 'стол', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-05T10:00:00.000Z', pluralForm: 'Tische', pluralFormation: '-e' },
-  { id: '11', german: 'Lampe', partOfSpeech: 'noun', gender: 'die', translationEn: 'lamp', translationRu: 'лампа', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-06T10:00:00.000Z', pluralForm: 'Lampen', pluralFormation: '-en' },
-  { id: '12', german: 'Buch', partOfSpeech: 'noun', gender: 'das', translationEn: 'book', translationRu: 'книга', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-06T10:00:00.000Z', pluralForm: 'Bücher', pluralFormation: 'umlaut + -er' },
-  { id: '13', german: 'Apfel', partOfSpeech: 'noun', gender: 'der', translationEn: 'apple', translationRu: 'яблоко', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-07T10:00:00.000Z', pluralForm: 'Äpfel', pluralFormation: 'umlaut' },
-  { id: '14', german: 'Milch', partOfSpeech: 'noun', gender: 'die', translationEn: 'milk', translationRu: 'молоко', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-07T10:00:00.000Z', pluralForm: '—', pluralFormation: '-' },
-  { id: '15', german: 'Wasser', partOfSpeech: 'noun', gender: 'das', translationEn: 'water', translationRu: 'вода', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-08T10:00:00.000Z', pluralForm: 'Wasser', pluralFormation: '-' },
+  { id: '1', german: 'Hund', partOfSpeech: 'noun', gender: 'der', translationEn: 'dog', translationRu: 'собака', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', pluralForm: 'Hunde', pluralFormation: '-e', ...srsDefaults() },
+  { id: '2', german: 'Katze', partOfSpeech: 'noun', gender: 'die', translationEn: 'cat', translationRu: 'кошка', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', pluralForm: 'Katzen', pluralFormation: '-en', ...srsDefaults() },
+  { id: '3', german: 'Haus', partOfSpeech: 'noun', gender: 'das', translationEn: 'house', translationRu: 'дом', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', pluralForm: 'Häuser', pluralFormation: 'umlaut + -er', ...srsDefaults() },
+  { id: '4', german: 'Mann', partOfSpeech: 'noun', gender: 'der', translationEn: 'man', translationRu: 'мужчина', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', pluralForm: 'Männer', pluralFormation: 'umlaut + -er', ...srsDefaults() },
+  { id: '5', german: 'Frau', partOfSpeech: 'noun', gender: 'die', translationEn: 'woman', translationRu: 'женщина', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-03T10:00:00.000Z', pluralForm: 'Frauen', pluralFormation: '-en', ...srsDefaults() },
+  { id: '6', german: 'Kind', partOfSpeech: 'noun', gender: 'das', translationEn: 'child', translationRu: 'ребёнок', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-03T10:00:00.000Z', pluralForm: 'Kinder', pluralFormation: '-er', ...srsDefaults() },
+  { id: '7', german: 'Baum', partOfSpeech: 'noun', gender: 'der', translationEn: 'tree', translationRu: 'дерево', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-04T10:00:00.000Z', pluralForm: 'Bäume', pluralFormation: 'umlaut + -e', ...srsDefaults() },
+  { id: '8', german: 'Blume', partOfSpeech: 'noun', gender: 'die', translationEn: 'flower', translationRu: 'цветок', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-04T10:00:00.000Z', pluralForm: 'Blumen', pluralFormation: '-en', ...srsDefaults() },
+  { id: '9', german: 'Auto', partOfSpeech: 'noun', gender: 'das', translationEn: 'car', translationRu: 'автомобиль', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-05T10:00:00.000Z', pluralForm: 'Autos', pluralFormation: '-s', ...srsDefaults() },
+  { id: '10', german: 'Tisch', partOfSpeech: 'noun', gender: 'der', translationEn: 'table', translationRu: 'стол', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-05T10:00:00.000Z', pluralForm: 'Tische', pluralFormation: '-e', ...srsDefaults() },
+  { id: '11', german: 'Lampe', partOfSpeech: 'noun', gender: 'die', translationEn: 'lamp', translationRu: 'лампа', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-06T10:00:00.000Z', pluralForm: 'Lampen', pluralFormation: '-en', ...srsDefaults() },
+  { id: '12', german: 'Buch', partOfSpeech: 'noun', gender: 'das', translationEn: 'book', translationRu: 'книга', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-06T10:00:00.000Z', pluralForm: 'Bücher', pluralFormation: 'umlaut + -er', ...srsDefaults() },
+  { id: '13', german: 'Apfel', partOfSpeech: 'noun', gender: 'der', translationEn: 'apple', translationRu: 'яблоко', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-07T10:00:00.000Z', pluralForm: 'Äpfel', pluralFormation: 'umlaut', ...srsDefaults() },
+  { id: '14', german: 'Milch', partOfSpeech: 'noun', gender: 'die', translationEn: 'milk', translationRu: 'молоко', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-07T10:00:00.000Z', pluralForm: '—', pluralFormation: '-', ...srsDefaults() },
+  { id: '15', german: 'Wasser', partOfSpeech: 'noun', gender: 'das', translationEn: 'water', translationRu: 'вода', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-08T10:00:00.000Z', pluralForm: 'Wasser', pluralFormation: '-', ...srsDefaults() },
   // Verbs with principal parts
-  { id: '16', german: 'sein', partOfSpeech: 'verb', gender: null, translationEn: 'to be', translationRu: 'быть', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'ist', simplePast: 'war', pastParticiple: 'gewesen' },
-  { id: '17', german: 'haben', partOfSpeech: 'verb', gender: null, translationEn: 'to have', translationRu: 'иметь', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', verbType: 'weak', presentThirdPerson: 'hat', simplePast: 'hatte', pastParticiple: 'gehabt' },
-  { id: '18', german: 'fliegen', partOfSpeech: 'verb', gender: null, translationEn: 'to fly', translationRu: 'летать', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'fliegt', simplePast: 'flog', pastParticiple: 'geflogen' },
-  { id: '19', german: 'gehen', partOfSpeech: 'verb', gender: null, translationEn: 'to go', translationRu: 'идти', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'geht', simplePast: 'ging', pastParticiple: 'gegangen' },
-  { id: '20', german: 'machen', partOfSpeech: 'verb', gender: null, translationEn: 'to do/make', translationRu: 'делать', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-03T10:00:00.000Z', verbType: 'weak', presentThirdPerson: 'macht', simplePast: 'machte', pastParticiple: 'gemacht' },
+  { id: '16', german: 'sein', partOfSpeech: 'verb', gender: null, translationEn: 'to be', translationRu: 'быть', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'ist', simplePast: 'war', pastParticiple: 'gewesen', ...srsDefaults() },
+  { id: '17', german: 'haben', partOfSpeech: 'verb', gender: null, translationEn: 'to have', translationRu: 'иметь', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-01T10:00:00.000Z', verbType: 'weak', presentThirdPerson: 'hat', simplePast: 'hatte', pastParticiple: 'gehabt', ...srsDefaults() },
+  { id: '18', german: 'fliegen', partOfSpeech: 'verb', gender: null, translationEn: 'to fly', translationRu: 'летать', level: 'A2', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'fliegt', simplePast: 'flog', pastParticiple: 'geflogen', ...srsDefaults() },
+  { id: '19', german: 'gehen', partOfSpeech: 'verb', gender: null, translationEn: 'to go', translationRu: 'идти', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-02T10:00:00.000Z', verbType: 'strong', presentThirdPerson: 'geht', simplePast: 'ging', pastParticiple: 'gegangen', ...srsDefaults() },
+  { id: '20', german: 'machen', partOfSpeech: 'verb', gender: null, translationEn: 'to do/make', translationRu: 'делать', level: 'A1', mastery: 0, usageCount: 0, createdAt: '2026-08-03T10:00:00.000Z', verbType: 'weak', presentThirdPerson: 'macht', simplePast: 'machte', pastParticiple: 'gemacht', ...srsDefaults() },
 ];
+
+// Type that makes SRS fields optional for addWord (they have defaults)
+type WordInput = Omit<Word, 'id' | 'createdAt' | 'srsInterval' | 'srsNextReview' | 'srsEase' | 'srsConsecutiveCorrect'> & {
+  srsInterval?: number;
+  srsNextReview?: string;
+  srsEase?: number;
+  srsConsecutiveCorrect?: number;
+};
 
 @Injectable({ providedIn: 'root' })
 export class WordService {
@@ -192,17 +210,22 @@ export class WordService {
     this.save();
   }
 
-  addWord(word: Omit<Word, 'id' | 'createdAt'>): void {
+  addWord(word: WordInput): void {
+    const now = new Date().toISOString();
     const newWord: Word = {
       ...word,
       id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      srsInterval: word.srsInterval ?? 0,
+      srsNextReview: word.srsNextReview ?? now,
+      srsEase: word.srsEase ?? 2.5,
+      srsConsecutiveCorrect: word.srsConsecutiveCorrect ?? 0,
     };
     this.words.update((words) => [...words, newWord]);
     this.save();
   }
 
-  updateWord(id: string, changes: Omit<Word, 'id' | 'createdAt'>): void {
+  updateWord(id: string, changes: Partial<Omit<Word, 'id' | 'createdAt'>>): void {
     this.words.update((words) =>
       words.map((w) => (w.id === id ? { ...w, ...changes } : w))
     );
@@ -238,6 +261,11 @@ export class WordService {
               ru && !ruIsEnglish
                 ? ru
                 : seed?.translationRu ?? legacy.translation ?? '',
+            // SRS defaults for legacy data
+            srsInterval: (w as Word).srsInterval ?? 0,
+            srsNextReview: (w as Word).srsNextReview ?? fallback,
+            srsEase: (w as Word).srsEase ?? 2.5,
+            srsConsecutiveCorrect: (w as Word).srsConsecutiveCorrect ?? 0,
           };
         });
       } catch {

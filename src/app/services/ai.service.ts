@@ -1,8 +1,9 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { Gender, DifficultyLevel, PartOfSpeech } from '../models/word';
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
+import { SettingsService } from './settings.service';
 
 export interface AiSuggestion {
   translationEn: string;
@@ -93,10 +94,36 @@ export interface DeclensionAnswerResult {
   score: number;
 }
 
+export interface TextModelOption {
+  id: string;
+  label: string;
+  description: string;
+}
+
 const API_KEY_STORAGE = 'german-dictionary-openrouter-key';
+const CREDIT_ERROR_KEY = 'german-dictionary-credit-error';
 
 @Injectable({ providedIn: 'root' })
 export class AiService {
+  private readonly settingsService = inject(SettingsService);
+
+  /** True when the last API call returned 402 (insufficient credits). */
+  readonly creditError = signal<boolean>(false);
+
+  /** Available text models fetched from OpenRouter */
+  readonly availableTextModels = signal<TextModelOption[]>([]);
+
+  constructor() {
+    // Restore persisted credit error state
+    try {
+      if (localStorage.getItem(CREDIT_ERROR_KEY) === 'true') {
+        this.creditError.set(true);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   getApiKey(): string {
     return localStorage.getItem(API_KEY_STORAGE) || environment.openRouterApiKey;
   }
@@ -107,6 +134,80 @@ export class AiService {
 
   setApiKey(key: string): void {
     localStorage.setItem(API_KEY_STORAGE, key.trim());
+    // Clearing the key may resolve a credit issue (new account)
+    this.setCreditError(false);
+  }
+
+  /**
+   * Fetch available text/chat models from OpenRouter API.
+   * Filters for models that support chat completions.
+   */
+  async fetchAvailableModels(): Promise<TextModelOption[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      return [];
+    }
+
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to fetch models from OpenRouter:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    const models: TextModelOption[] = [];
+
+    for (const model of data.data ?? []) {
+      const id: string = model.id ?? '';
+      if (!id) continue;
+
+      // Only include models that can do text chat (text or multimodal modality)
+      const modality = model.architecture?.modality ?? '';
+      if (modality === 'image') continue;
+
+      models.push({
+        id,
+        label: model.name ?? id,
+        description: model.description
+          ? model.description.replace(/<[^>]*>/g, '').substring(0, 120)
+          : (model.pricing?.prompt ? `$${model.pricing.prompt}/tok prompt` : ''),
+      });
+    }
+
+    // Sort: free models first, then by label
+    models.sort((a, b) => {
+      const aFree = a.id.includes(':free') ? 0 : 1;
+      const bFree = b.id.includes(':free') ? 0 : 1;
+      if (aFree !== bFree) return aFree - bFree;
+      return a.label.localeCompare(b.label);
+    });
+
+    this.availableTextModels.set(models);
+    return models;
+  }
+
+  /** Dismiss the credit warning banner — the user acknowledges the problem. */
+  dismissCreditError(): void {
+    this.setCreditError(false);
+  }
+
+  private setCreditError(value: boolean): void {
+    this.creditError.set(value);
+    try {
+      if (value) {
+        localStorage.setItem(CREDIT_ERROR_KEY, 'true');
+      } else {
+        localStorage.removeItem(CREDIT_ERROR_KEY);
+      }
+    } catch {
+      // ignore
+    }
   }
 
   /**
@@ -165,7 +266,7 @@ Example response format:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
@@ -188,6 +289,9 @@ Example response format:
       }
       throw new Error(`AI request failed (HTTP ${response.status})`);
     }
+
+    // On any successful API call, clear the credit error
+    this.setCreditError(false);
 
     const data = await response.json();
     const text: string | undefined = data.choices?.[0]?.message?.content;
@@ -319,7 +423,7 @@ Word: "${german}"`;
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
@@ -464,7 +568,7 @@ Word: "${german}"`;
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
@@ -577,7 +681,8 @@ Word: "${german}"`;
     knownWords: string[],
     count: number,
     domain?: string,
-    grammarTopics?: string[]
+    grammarTopics?: string[],
+    wordDetails?: { german: string; partOfSpeech: string; gender?: string | null; pluralForm?: string; verbType?: string; presentThirdPerson?: string; simplePast?: string; pastParticiple?: string }
   ): Promise<GeneratedSentence[]> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -592,6 +697,43 @@ Word: "${german}"`;
       grammarTopics && grammarTopics.length > 0
         ? `Each sentence must demonstrate at least one of these grammar topics: ${grammarTopics.join(', ')}.`
         : '';
+
+    let partOfSpeechInstructions = '';
+    if (wordDetails) {
+      const wd = wordDetails;
+      if (wd.partOfSpeech === 'noun') {
+        const genderLabel = wd.gender ? ` (${wd.gender})` : '';
+        const pluralInfo = wd.pluralForm ? ` (plural: ${wd.pluralForm})` : '';
+        partOfSpeechInstructions = `The target word is the noun "${wd.german}"${genderLabel}${pluralInfo}.
+- Show both singular and plural forms in different sentences when the plural exists.
+- Vary the grammatical cases (nominative, accusative, dative) across examples.
+- Include articles (der/die/das, ein/eine, dem/den/der etc.) naturally.`;
+      } else if (wd.partOfSpeech === 'verb') {
+        const verbInfo = [
+          wd.presentThirdPerson ? `3rd person present: "${wd.presentThirdPerson}"` : '',
+          wd.simplePast ? `simple past (Präteritum): "${wd.simplePast}"` : '',
+          wd.pastParticiple ? `past participle (Partizip II): "${wd.pastParticiple}"` : '',
+          wd.verbType ? `type: ${wd.verbType}` : '',
+        ].filter(Boolean).join(', ');
+        partOfSpeechInstructions = `The target word is the verb "${wd.german}"${verbInfo ? ` (${verbInfo})` : ''}.
+- Use different subjects: "ich", "du", "er/sie/es", "wir", "sie" in different sentences.
+- Include at least one example in Präsens, one in Präteritum, and one with Partizip II (Perfekt) when these forms are provided.
+- For separable verbs: correctly separate the prefix in Präsens and Präteritum, but keep it attached in the Partizip II.`;
+      } else if (wd.partOfSpeech === 'adjective') {
+        partOfSpeechInstructions = `The target word is the adjective "${wd.german}".
+- Include its comparative form (e.g. "größer", "besser", "schneller") in at least one sentence.
+- Include its superlative form (e.g. "größte", "beste", "schnellste") in at least one sentence if natural.
+- Show the adjective with different endings (e.g. after "der/die/das", after "ein/eine", without article).`;
+      } else if (wd.partOfSpeech === 'adverb') {
+        partOfSpeechInstructions = `The target word is the adverb "${wd.german}".
+- Include its comparative form (e.g. "häufiger", "besser", "mehr") in at least one sentence.
+- Include its superlative form (e.g. "am häufigsten", "am besten", "am meisten") in at least one sentence if natural.
+- Show the adverb in different positions within the sentence (beginning, middle, end).`;
+      } else {
+        partOfSpeechInstructions = `The target word is "${wd.german}" (${wd.partOfSpeech}).
+- Use the word naturally in different sentence positions and contexts.`;
+      }
+    }
 
     const prompt = `You are a German language teacher. Generate ${count} German sentences at CEFR level ${level}.
 Respond with JSON only (no markdown) as an object with a single key "sentences" containing an array of objects. Each object must have exactly these fields:
@@ -610,6 +752,7 @@ Rules:
 - Keep sentences concise (5-15 words).
 - ${domainInstruction}
 - ${grammarInstruction}
+${partOfSpeechInstructions ? `\n${partOfSpeechInstructions}` : ''}
 
 Generate exactly ${count} sentences.
 
@@ -623,7 +766,7 @@ Example format:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.7,
@@ -732,7 +875,7 @@ Example format:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.7,
@@ -778,38 +921,29 @@ Example format:
     sentence: string,
     patternId: string,
     patternDescription: string,
-    patternTips: string,
-    vocabList: { german: string; translationEn: string; translationRu: string }[]
+    patternTips: string
   ): Promise<SentenceFeedback> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
 
-    const vocabListLimited = vocabList.slice(0, 40);
-    const vocabJson = JSON.stringify(vocabListLimited.map((v: { german: string }) => v.german.toLowerCase()));
-
     const prompt = `You are a German language teacher. A student has written a German sentence to practice a specific grammar pattern.
 
 Analyze the sentence and respond with JSON only (no markdown) using exactly these fields:
 - "patternCorrect": boolean — does the sentence follow the required grammar pattern?
 - "patternErrors": array of strings — specific errors in the grammar pattern (e.g. "Verb should be at the end of the subordinate clause", "Modal verb should be in position 2"). Empty array if none.
-- "vocabCorrect": boolean — are ALL words in the sentence from the student's known vocabulary list?
-- "unknownWords": array of strings — any words in the sentence NOT in the student's vocabulary list. Empty array if all known.
-- "tips": array of strings — encouraging, actionable tips to improve the sentence, including suggestions for replacements if unknown words were used
+- "tips": array of strings — encouraging, actionable tips to improve the sentence
 - "masteryDelta": number — how much the student's mastery of this pattern should change: +5 if perfectly correct, +2 if mostly correct with minor issues, 0 if partially correct, -5 if pattern is wrong, -10 if completely wrong
 
 Pattern to practice: "${patternId}"
 Pattern description: ${patternDescription}
 Pattern tips: ${patternTips}
 
-Student's known vocabulary (only these words are allowed in the sentence): ${vocabJson}
 Student's sentence: "${sentence}"
 
 Rules:
 - Check if the sentence follows the grammar pattern correctly (word order, verb position, etc.)
-- Check if all words in the sentence are from the student's known vocabulary (case-insensitive). Allow conjugated forms of known verbs (e.g. "geht" for "gehen", "isst" for "essen").
-- If the student used words not in their vocabulary, suggest replacements from their known vocabulary.
 - Be encouraging but honest. The goal is to teach, not just criticize.
 - Ignore punctuation and capitalization differences.
 - For separable verbs: check if the prefix is correctly separated and moved to the end.`;
@@ -821,7 +955,7 @@ Rules:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
@@ -916,7 +1050,7 @@ Rules:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.3,
@@ -995,7 +1129,7 @@ Student's query: "${userQuery}"`;
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.3,
@@ -1073,7 +1207,7 @@ Student's translation: "${userInput}"`;
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
@@ -1157,7 +1291,7 @@ Generate exactly ${config.sentenceCount} sentences.`;
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.7,
@@ -1244,7 +1378,7 @@ Rules:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.5,
@@ -1373,7 +1507,7 @@ Example format:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.5,
@@ -1481,7 +1615,7 @@ Rules:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
@@ -1724,7 +1858,7 @@ ${rawText}`;
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
@@ -1812,7 +1946,7 @@ Rules:
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: environment.openRouterModel,
+        model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2,
@@ -1859,6 +1993,7 @@ Rules:
       );
     }
     if (response.status === 402) {
+      this.setCreditError(true);
       throw new Error(
         'OpenRouter account has insufficient credits. Add credits at openrouter.ai.'
       );

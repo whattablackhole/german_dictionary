@@ -51,6 +51,54 @@
               }
             </ul>
           </div>
+
+          @if (pattern.separableVerbs; as verbs) {
+            <details class="verb-table-details">
+              <summary>Common Separable Verbs ({{ verbs.length }})</summary>
+              <div class="verb-table-wrapper">
+                <table class="verb-table">
+                  <thead>
+                    <tr>
+                      <th>Infinitive</th>
+                      <th>Prefix</th>
+                      <th>Translation</th>
+                      <th>3rd Person</th>
+                      <th>Präteritum</th>
+                      <th>Partizip II</th>
+                      <th>Audio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (v of verbs; track v.infinitive) {
+                      <tr>
+                        <td class="verb-infinitive">{{ v.infinitive }}</td>
+                        <td class="verb-prefix">{{ v.prefix }}</td>
+                        <td class="verb-translation">
+                          <span class="verb-en">{{ v.translationEn }}</span>
+                          <span class="verb-ru">{{ v.translationRu }}</span>
+                        </td>
+                        <td class="verb-form">{{ v.presentThirdPerson }}</td>
+                        <td class="verb-form">{{ v.simplePast }}</td>
+                        <td class="verb-form">{{ v.pastParticiple }}</td>
+                        <td class="verb-audio">
+                          <button
+                            mat-icon-button
+                            class="audio-btn"
+                            [class.playing]="playingAudio() === v.infinitive"
+                            (click)="playVerbAudio(v.infinitive)"
+                            matTooltip="Play pronunciation"
+                            aria-label="Play {{ v.infinitive }}"
+                          >
+                            <mat-icon>{{ playingAudio() === v.infinitive ? 'volume_up' : 'volume_up' }}</mat-icon>
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          }
         </details>
       </div>
 
@@ -117,7 +165,7 @@
                     }
                     <div class="feedback-row" [class.status-ok]="feedback.vocabCorrect" [class.status-bad]="!feedback.vocabCorrect">
                       <mat-icon>{{ feedback.vocabCorrect ? 'check_circle' : 'warning' }}</mat-icon>
-                      <span><strong>Vocabulary:</strong> {{ feedback.vocabCorrect ? 'All words from your vocabulary' : 'Some words not in your vocabulary' }}</span>
+                      <span><strong>Vocabulary:</strong> {{ feedback.vocabCorrect ? 'All words from your vocabulary' : 'Some words are potentially not in your vocabulary' }}</span>
                     </div>
                     @if (feedback.unknownWords.length > 0) {
                       <div class="unknown-words">

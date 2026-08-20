@@ -1,3 +1,5 @@
+import { SeparableVerbData, SEPARABLE_VERBS } from '../data/separable-verbs';
+
 export interface SentencePattern {
   id: string;
   name: string;
@@ -7,6 +9,8 @@ export interface SentencePattern {
   examples: string[]; // example sentences
   tips: string; // explanation of the grammar rule
   keywords: string[]; // frequently used words for this pattern (weil, dass, etc.)
+  /** Optional list of separable verbs to display in the tips section */
+  separableVerbs?: SeparableVerbData[];
 }
 
 export interface PatternSubmission {
@@ -73,6 +77,7 @@ export const SENTENCE_PATTERNS: SentencePattern[] = [
       'Wir kommen morgen mit.',
     ],
     keywords: ['aufwachen', 'anrufen', 'mitkommen', 'aufräumen', 'einkaufen', 'ausgehen', 'vorhaben', 'anfangen'],
+    separableVerbs: SEPARABLE_VERBS,
   },
   {
     id: 'coordinating-conjunctions',

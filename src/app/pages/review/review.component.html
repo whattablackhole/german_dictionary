@@ -126,6 +126,27 @@
                 <span class="word-right">
                   <span class="word-translation">{{ getTranslation(word) }}</span>
                   <span class="mastery-indicator">{{ word.mastery }}%</span>
+                  @if (!generatingImage().has(word.id)) {
+                    @if (imageData().has(word.id)) {
+                      <img
+                        class="word-thumbnail"
+                        [src]="imageData().get(word.id)"
+                        alt="Image for {{ word.german }}"
+                        title="Word image"
+                      (click)="openFullSize(imageData().get(word.id)!, word.german)"
+                      />
+                    } @else {
+                      <button
+                        class="image-button"
+                        aria-label="Generate image for {{ word.german }}"
+                        (click)="generateWordImage(word)"
+                      >
+                        <mat-icon>image</mat-icon>
+                      </button>
+                    }
+                  } @else {
+                    <mat-spinner diameter="18" class="image-spinner" />
+                  }
                   <button
                     class="speak-button"
                     aria-label="Pronounce {{ word.german }}"
@@ -198,6 +219,27 @@
               <span class="word-right">
                 <span class="word-translation">{{ getTranslation(word) }}</span>
                 <span class="mastery-indicator">{{ word.mastery }}%</span>
+                @if (!generatingImage().has(word.id)) {
+                  @if (imageData().has(word.id)) {
+                    <img
+                      class="word-thumbnail"
+                      [src]="imageData().get(word.id)"
+                      alt="Image for {{ word.german }}"
+                      title="Word image"
+                      (click)="openFullSize(imageData().get(word.id)!, word.german)"
+                    />
+                  } @else {
+                    <button
+                      class="image-button"
+                      aria-label="Generate image for {{ word.german }}"
+                      (click)="generateWordImage(word)"
+                    >
+                      <mat-icon>image</mat-icon>
+                    </button>
+                  }
+                } @else {
+                  <mat-spinner diameter="18" class="image-spinner" />
+                }
                 <button
                   class="speak-button"
                   aria-label="Pronounce {{ word.german }}"
@@ -304,6 +346,18 @@
             }
           </mat-select>
         </mat-form-field>
+      </div>
+    </div>
+  }
+
+  @if (fullSizeImage(); as img) {
+    <div class="fullsize-overlay" (click)="closeFullSize()">
+      <div class="fullsize-modal" (click)="$event.stopPropagation()">
+        <button class="fullsize-close" (click)="closeFullSize()" aria-label="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+        <img [src]="img.data" alt="Image for {{ img.german }}" />
+        <p class="fullsize-caption">{{ img.german }}</p>
       </div>
     </div>
   }

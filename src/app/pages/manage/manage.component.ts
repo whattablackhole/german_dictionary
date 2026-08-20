@@ -1,16 +1,19 @@
 import { Component, computed, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatCardModule } from '@angular/material/card';
 import { WordService } from '../../services/word.service';
 import { SettingsService } from '../../services/settings.service';
-import { PartOfSpeechService, PartOfSpeechInfo } from '../../services/part-of-speech.service';
 import { AiService, AiSuggestion } from '../../services/ai.service';
+import { PartOfSpeechService, PartOfSpeechInfo } from '../../services/part-of-speech.service';
+import { ImageCacheService } from '../../services/image-cache.service';
+import { ImageGenerationService } from '../../services/image-generation.service';
 import { Gender, DifficultyLevel, PartOfSpeech, VerbType, PluralFormation, Word } from '../../models/word';
 
 @Component({
@@ -90,16 +93,13 @@ export class ManageComponent {
   readonly translationEnInput = signal('');
   readonly translationRuInput = signal('');
   readonly levelInput = signal<DifficultyLevel>('A1');
-  // Verb-specific fields
   readonly verbTypeInput = signal<VerbType>('weak');
   readonly presentThirdPersonInput = signal('');
   readonly simplePastInput = signal('');
   readonly pastParticipleInput = signal('');
-  // Noun-specific fields
   readonly pluralFormInput = signal('');
   readonly pluralFormationInput = signal<PluralFormation | ''>('');
 
-  // Expanded row in word list
   readonly expandedRowId = signal<string | null>(null);
 
   readonly isNoun = computed(() => this.partOfSpeechInput() === 'noun');
@@ -112,23 +112,59 @@ export class ManageComponent {
   readonly aiError = signal('');
   readonly suggestion = signal<AiSuggestion | null>(null);
 
+  // Image generation state
+  readonly generatingImage = signal<Set<string>>(new Set());
+  readonly imageData = signal<Map<string, string>>(new Map());
+
   constructor(
     private readonly wordService: WordService,
     private readonly settingsService: SettingsService,
     private readonly posService: PartOfSpeechService,
-    private readonly aiService: AiService
+    private readonly aiService: AiService,
+    private readonly imageCache: ImageCacheService,
+    private readonly imageGen: ImageGenerationService
   ) {
     this.partsOfSpeech = this.posService.getAll();
     this.apiKeyInput.set(this.aiService.getApiKey());
     this.apiKeySaved.set(this.aiService.hasApiKey());
 
-    // Keep page in valid range when filters change the result count
     effect(() => {
       const total = this.totalPages();
       if (this.page() > total) {
         this.page.set(total);
       }
     });
+
+    // Preload image data for visible words
+    effect(async () => {
+      const words = this.paginatedWords();
+      const map = new Map<string, string>();
+      for (const w of words) {
+        const img = await this.imageCache.getImage(w.id);
+        if (img) map.set(w.id, img);
+      }
+      this.imageData.set(map);
+    });
+  }
+
+  async generateWordImage(word: Word): Promise<void> {
+    this.generatingImage.update((s) => new Set(s).add(word.id));
+    try {
+      const data = await this.imageGen.generateImage(word);
+      this.imageData.update((m) => {
+        const next = new Map(m);
+        next.set(word.id, data);
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to generate image:', err);
+    } finally {
+      this.generatingImage.update((s) => {
+        const next = new Set(s);
+        next.delete(word.id);
+        return next;
+      });
+    }
   }
 
   startAdd(): void {
@@ -194,31 +230,26 @@ export class ManageComponent {
       ? this.wordService.getWords().find((w) => w.id === this.editingId())
       : undefined;
 
-    const isNoun = this.partOfSpeechInput() === 'noun';
-
-    const isVerb = this.partOfSpeechInput() === 'verb';
-
     const data = {
       german,
       partOfSpeech: this.partOfSpeechInput(),
-      gender: isNoun ? this.genderInput() : null,
+      gender: this.isNoun() ? this.genderInput() : null,
       translationEn,
       translationRu,
       level: this.levelInput(),
       mastery: existing?.mastery ?? 0,
       usageCount: existing?.usageCount ?? 0,
-      verbType: isVerb ? this.verbTypeInput() : undefined,
-      presentThirdPerson: isVerb ? (this.presentThirdPersonInput().trim() || undefined) : undefined,
-      simplePast: isVerb ? (this.simplePastInput().trim() || undefined) : undefined,
-      pastParticiple: isVerb ? (this.pastParticipleInput().trim() || undefined) : undefined,
-      pluralForm: isNoun ? (this.pluralFormInput().trim() || undefined) : undefined,
-      pluralFormation: isNoun ? (this.pluralFormationInput() || undefined) : undefined,
+      verbType: this.isVerb() ? this.verbTypeInput() : undefined,
+      presentThirdPerson: this.isVerb() ? (this.presentThirdPersonInput().trim() || undefined) : undefined,
+      simplePast: this.isVerb() ? (this.simplePastInput().trim() || undefined) : undefined,
+      pastParticiple: this.isVerb() ? (this.pastParticipleInput().trim() || undefined) : undefined,
+      pluralForm: this.isNoun() ? (this.pluralFormInput().trim() || undefined) : undefined,
+      pluralFormation: this.isNoun() ? (this.pluralFormationInput() || undefined) : undefined,
     };
 
     if (this.editingId()) {
       this.wordService.updateWord(this.editingId()!, data);
     } else {
-      // Check for duplicate German word (case-insensitive)
       const duplicate = this.wordService
         .getWords()
         .find((w) => w.german.toLowerCase() === german.toLowerCase());
@@ -229,13 +260,12 @@ export class ManageComponent {
         if (confirmed) {
           this.wordService.updateWord(duplicate.id, data);
         } else {
-          return; // keep the form open so the user can adjust
+          return;
         }
       } else {
         this.wordService.addWord(data);
       }
     }
-
     this.cancelEdit();
   }
 
@@ -260,11 +290,9 @@ export class ManageComponent {
     if (!german) {
       return;
     }
-
     this.clearSuggestion();
     this.aiLoading.set(true);
     this.aiError.set('');
-
     try {
       const result = await this.aiService.analyzeWord(german);
       this.suggestion.set(result);
@@ -279,10 +307,7 @@ export class ManageComponent {
 
   acceptSuggestion(): void {
     const s = this.suggestion();
-    if (!s) {
-      return;
-    }
-    // Use the base form if available (e.g. "sein" for "seine", "gut" for "gute")
+    if (!s) return;
     if (s.baseForm?.trim()) {
       this.germanInput.set(s.baseForm.trim());
     }
@@ -291,14 +316,12 @@ export class ManageComponent {
     this.translationEnInput.set(s.translationEn);
     this.translationRuInput.set(s.translationRu);
     this.levelInput.set(s.level);
-    // Fill verb fields if present
     if (s.verbType) {
       this.verbTypeInput.set(s.verbType);
       this.presentThirdPersonInput.set(s.presentThirdPerson ?? '');
       this.simplePastInput.set(s.simplePast ?? '');
       this.pastParticipleInput.set(s.pastParticiple ?? '');
     }
-    // Fill noun fields if present
     if (s.pluralForm) {
       this.pluralFormInput.set(s.pluralForm);
       this.pluralFormationInput.set((s.pluralFormation as PluralFormation) ?? '');
@@ -317,9 +340,7 @@ export class ManageComponent {
 
   formatDate(iso: string): string {
     const date = new Date(iso);
-    if (isNaN(date.getTime())) {
-      return '';
-    }
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleDateString();
   }
 

@@ -1,5 +1,4 @@
 import { Injectable, signal } from '@angular/core';
-import { environment } from '../../environments/environment';
 import { SettingsService } from './settings.service';
 
 @Injectable({ providedIn: 'root' })
@@ -13,8 +12,9 @@ export class TranslationService {
   }
 
   async checkConnection(): Promise<boolean> {
+    const url = this.settingsService.translationApiUrl();
     try {
-      const res = await fetch(environment.libreTranslateUrl, { method: 'HEAD', signal: AbortSignal.timeout(2000) });
+      const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(2000) });
       this.localRunning.set(res.ok);
       return res.ok;
     } catch {
@@ -33,7 +33,8 @@ export class TranslationService {
       format: 'text',
     });
 
-    const response = await fetch(environment.libreTranslateUrl, {
+    const url = this.settingsService.translationApiUrl();
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params,

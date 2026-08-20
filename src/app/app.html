@@ -25,6 +25,21 @@
 
   <!-- Right area: header + content -->
   <div class="app-right">
+    <!-- Credit error banner -->
+    @if (aiService.creditError()) {
+      <div class="credit-banner">
+        <mat-icon class="credit-banner-icon">account_balance_wallet</mat-icon>
+        <span class="credit-banner-text">
+          OpenRouter account has insufficient credits.
+          <a href="https://openrouter.ai/settings/credits" target="_blank" rel="noopener noreferrer" class="credit-banner-link">Add credits</a>
+          to continue using AI features.
+        </span>
+        <button class="credit-banner-close" (click)="dismissCreditWarning()" mat-icon-button aria-label="Dismiss">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    }
+
     <header class="app-header">
       <div class="header-left">
         <button
