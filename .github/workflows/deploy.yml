@@ -35,6 +35,10 @@ jobs:
       - name: Build Angular app
         run: npx ng build --configuration production --base-href /german_dictionary/
 
+      - name: Copy index.html as 404.html for SPA routing
+        shell: bash
+        run: cp dist/german-dictionary/browser/index.html dist/german-dictionary/browser/404.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
