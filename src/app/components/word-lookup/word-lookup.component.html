@@ -1,0 +1,288 @@
+<!-- Floating chat bubble (closed state) -->
+@if (!open()) {
+  <button
+    class="lookup-fab"
+    (click)="toggleOpen()"
+    matTooltip="Word lookup"
+    matTooltipPosition="left"
+    aria-label="Open word lookup"
+  >
+    <mat-icon>chat</mat-icon>
+  </button>
+}
+
+<!-- Popup (open state) -->
+@if (open()) {
+  <div class="lookup-popup-shell">
+    <div class="lookup-popup">
+      <!-- Header -->
+      <div class="lookup-header">
+        <span class="lookup-title">
+          <mat-icon>search</mat-icon>
+          Word Lookup
+        </span>
+        <button
+          class="lookup-close"
+          mat-icon-button
+          aria-label="Close"
+          (click)="close()"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <!-- Search input -->
+      <div class="lookup-search-row">
+        <input
+          class="lookup-input"
+          [(ngModel)]="searchInput"
+          (input)="onInputChange()"
+          (keydown.enter)="search()"
+          placeholder="Enter a German word or form..."
+          autofocus
+        />
+        <button
+          class="lookup-search-btn"
+          mat-flat-button
+          color="primary"
+          (click)="search()"
+          [disabled]="!searchInput().trim() || searching()"
+        >
+          @if (searching()) {
+            <mat-spinner diameter="16" />
+          } @else {
+            <mat-icon>search</mat-icon>
+          }
+        </button>
+      </div>
+
+      <!-- Live matches (while typing) -->
+      @if (liveMatches().length > 0 && !selectedWord()) {
+        <div class="live-matches">
+          @for (word of liveMatches(); track word.id) {
+            <button class="live-match-item" (click)="selectWord(word)">
+              <span class="live-match-word">{{ displayWord(word) }}</span>
+              <span class="live-match-translation">{{ getTranslation(word) }}</span>
+            </button>
+          }
+          @if (liveMatches().length > 0) {
+            <button class="live-match-more" (click)="forceAiLookup()">
+              Search for "{{ searchInput().trim() }}" not in results...
+            </button>
+          }
+        </div>
+      }
+
+      <!-- ── Vocabulary result ── -->
+      @if (selectedWord(); as word) {
+        <div class="lookup-result">
+          <div class="result-word-row">
+            <span class="result-word">{{ displayWord(word) }}</span>
+            <button
+              mat-icon-button
+              class="result-audio-btn"
+              aria-label="Play pronunciation"
+              (click)="playAudio(word.german)"
+            >
+              <mat-icon>volume_up</mat-icon>
+            </button>
+          </div>
+
+          <div class="result-meta">
+            <span class="pos-badge">{{ partOfSpeechLabel(word.partOfSpeech) }}</span>
+            @if (word.level) {
+              <span class="level-badge">{{ word.level }}</span>
+            }
+            @if (word.partOfSpeech === 'noun' && word.gender) {
+              <span class="gender-badge" [class.der]="word.gender === 'der'" [class.die]="word.gender === 'die'" [class.das]="word.gender === 'das'">
+                {{ word.gender }}
+              </span>
+            }
+          </div>
+
+          <div class="result-translation">{{ getTranslation(word) }}</div>
+
+          @if (word.partOfSpeech === 'noun' && word.pluralForm) {
+            <div class="result-form-row">
+              <span class="form-label">Plural:</span>
+              <span class="form-value">{{ word.pluralForm }}</span>
+              @if (word.pluralFormation) {
+                <span class="form-formation">{{ word.pluralFormation }}</span>
+              }
+            </div>
+          }
+
+          @if (word.partOfSpeech === 'verb') {
+            @if (word.verbType) {
+              <div class="result-form-row">
+                <span class="form-label">Type:</span>
+                <span class="form-value">{{ verbTypeLabel(word.verbType) }}</span>
+              </div>
+            }
+            @if (word.presentThirdPerson || word.simplePast || word.pastParticiple) {
+              <div class="result-form-row verb-forms">
+                <span class="form-label">Forms:</span>
+                <span class="verb-forms-list">
+                  @if (word.presentThirdPerson) {
+                    <span class="verb-form">{{ word.presentThirdPerson }}</span>
+                  }
+                  @if (word.simplePast) {
+                    <span class="verb-arrow">&rarr;</span>
+                    <span class="verb-form">{{ word.simplePast }}</span>
+                  }
+                  @if (word.pastParticiple) {
+                    <span class="verb-arrow">&rarr;</span>
+                    <span class="verb-form">{{ word.pastParticiple }}</span>
+                  }
+                </span>
+              </div>
+            }
+          }
+        </div>
+      }
+
+      <!-- ── AI mode (word not found) ── -->
+      @if (aiModeActive() && !selectedWord()) {
+        <div class="lookup-result ai-result">
+          <div class="ai-result-header">
+            <mat-icon class="ai-icon">auto_awesome</mat-icon>
+            <span>AI Lookup</span>
+            @if (defaultTranslation()) {
+              <button
+                mat-icon-button
+                class="result-audio-btn"
+                aria-label="Play pronunciation"
+                (click)="playAudio(lookupQuery())"
+              >
+                <mat-icon>volume_up</mat-icon>
+              </button>
+            }
+          </div>
+
+          @if (aiLoading()) {
+            <div class="ai-loading">
+              <mat-spinner diameter="28" />
+              <span>Looking up "{{ lookupQuery() }}"...</span>
+            </div>
+          } @else if (aiError() && !aiSuggestion()) {
+            <div class="ai-error">
+              <mat-icon color="warn">error_outline</mat-icon>
+              <span>{{ aiError() }}</span>
+            </div>
+          } @else if (aiSuggestion(); as s) {
+            <div class="ai-content">
+              <div class="result-word-row">
+                <span class="result-word">{{ aiDisplayWord() }}</span>
+              </div>
+
+              @if (defaultTranslation()) {
+                <div class="default-translation">
+                  <span class="form-label">Translation:</span>
+                  <span class="form-value">{{ defaultTranslation() }}</span>
+                </div>
+              }
+
+              <div class="result-meta">
+                <span class="pos-badge">{{ partOfSpeechLabel(s.partOfSpeech) }}</span>
+                @if (s.level) {
+                  <span class="level-badge">{{ s.level }}</span>
+                }
+                @if (s.partOfSpeech === 'noun' && s.gender) {
+                  <span class="gender-badge" [class.der]="s.gender === 'der'" [class.die]="s.gender === 'die'" [class.das]="s.gender === 'das'">
+                    {{ s.gender }}
+                  </span>
+                }
+              </div>
+
+              <div class="result-translation">{{ suggestionTranslation() }}</div>
+
+              @if (s.partOfSpeech === 'noun' && s.pluralForm) {
+                <div class="result-form-row">
+                  <span class="form-label">Plural:</span>
+                  <span class="form-value">{{ s.pluralForm }}</span>
+                  @if (s.pluralFormation) {
+                    <span class="form-formation">{{ s.pluralFormation }}</span>
+                  }
+                </div>
+              }
+
+              @if (s.partOfSpeech === 'verb') {
+                @if (s.verbType) {
+                  <div class="result-form-row">
+                    <span class="form-label">Type:</span>
+                    <span class="form-value">{{ verbTypeLabel(s.verbType) }}</span>
+                  </div>
+                }
+                @if (s.presentThirdPerson || s.simplePast || s.pastParticiple) {
+                  <div class="result-form-row verb-forms">
+                    <span class="form-label">Forms:</span>
+                    <span class="verb-forms-list">
+                      @if (s.presentThirdPerson) {
+                        <span class="verb-form">{{ s.presentThirdPerson }}</span>
+                      }
+                      @if (s.simplePast) {
+                        <span class="verb-arrow">&rarr;</span>
+                        <span class="verb-form">{{ s.simplePast }}</span>
+                      }
+                      @if (s.pastParticiple) {
+                        <span class="verb-arrow">&rarr;</span>
+                        <span class="verb-form">{{ s.pastParticiple }}</span>
+                      }
+                    </span>
+                  </div>
+                }
+              }
+
+              <!-- Add to vocabulary -->
+              @if (!addedFeedback()) {
+                <button
+                  class="add-to-vocab-btn"
+                  mat-flat-button
+                  color="primary"
+                  (click)="addToVocabulary()"
+                >
+                  <mat-icon>add</mat-icon>
+                  Add to Vocabulary
+                </button>
+              } @else {
+                <div class="added-feedback">
+                  <mat-icon>check_circle</mat-icon>
+                  Added!
+                </div>
+              }
+            </div>
+          }
+
+          <!-- Hint/retry (always available in AI mode even after error) -->
+          <div class="hint-section">
+            <input
+              class="hint-input"
+              [(ngModel)]="hintInput"
+              (keydown.enter)="retryWithHint()"
+              placeholder="Add a hint (e.g. 'it's a separable verb')..."
+            />
+            <button
+              class="hint-btn"
+              mat-stroked-button
+              (click)="retryWithHint()"
+              [disabled]="!hintInput().trim() || hintLoading()"
+            >
+              @if (hintLoading()) {
+                <mat-spinner diameter="16" />
+              } @else {
+                Retry
+              }
+            </button>
+          </div>
+
+          @if (hintError()) {
+            <div class="hint-error">
+              <mat-icon color="warn">info</mat-icon>
+              <span>{{ hintError() }}</span>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}

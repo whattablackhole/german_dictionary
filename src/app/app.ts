@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AiService } from './services/ai.service';
+import { WordLookupComponent } from './components/word-lookup/word-lookup.component';
 
 const DARK_MODE_KEY = 'german-dictionary-dark-mode';
 
@@ -25,6 +26,7 @@ export interface NavItem {
     MatIconModule,
     MatButtonModule,
     MatTooltipModule,
+    WordLookupComponent,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
