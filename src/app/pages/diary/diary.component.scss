@@ -321,6 +321,68 @@
     background: #e3f2fd;
     border-color: #90caf9;
   }
+
+  &.active {
+    background: #e3f2fd;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 1px #1976d2;
+  }
+}
+
+// Follow-up hint (shown above the input when a question is selected)
+.follow-up-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  font-size: 0.9rem;
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    color: #1976d2;
+  }
+
+  .hint-label {
+    font-weight: 600;
+    color: #1565c0;
+    white-space: nowrap;
+  }
+
+  .hint-text {
+    flex: 1;
+    color: #1a1a2e;
+    line-height: 1.4;
+  }
+
+  .hint-clear-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    transition: background 0.2s;
+
+    &:hover {
+      background: #f0f0f0;
+    }
+
+    mat-icon {
+      font-size: 1rem;
+      width: 1rem;
+      height: 1rem;
+    }
+  }
 }
 
 .question-de {
@@ -700,6 +762,10 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  scroll-behavior: smooth;
 }
 
 .message {
@@ -801,6 +867,214 @@
     font-size: 0.85rem;
     width: 0.85rem;
     height: 0.85rem;
+  }
+}
+
+// ── Dark mode ──
+
+:host-context(.dark-theme) {
+  .input-card,
+  .feedback-card,
+  .message,
+  .side-column {
+    background: rgba(42, 42, 42, 0.92);
+  }
+
+  .entry-field {
+    ::ng-deep .mat-mdc-input-element {
+      color: #e6e6e6 !important;
+    }
+
+    ::ng-deep .mat-mdc-form-field-outline {
+      color: rgba(255, 255, 255, 0.35);
+    }
+  }
+
+  .section-title,
+  .message-label,
+  .feedback-overall,
+  .subsection-title,
+  .message-text,
+  .question-de,
+  .preview-word,
+  .history-preview,
+  .detail-section p {
+    color: #e6e6e6;
+  }
+
+  .word-count,
+  .section-hint,
+  .question-en,
+  .history-date,
+  .expand-icon,
+  .history-empty,
+  .preview-details,
+  .preview-translations .preview-ru,
+  .correction-explanation {
+    color: #b0b0b0;
+  }
+
+  .suggestions-list li,
+  .unknown-words-text,
+  .preview-translations,
+  .detail-section ul li {
+    color: #c4c4c4;
+  }
+
+  .correction-original .label,
+  .correction-corrected .label,
+  .detail-section strong {
+    color: #b0b0b0;
+  }
+
+  .correction-item {
+    background: rgba(42, 42, 42, 0.92);
+    border-left-color: #ef5350;
+  }
+
+  .corrected-text-block {
+    background: rgba(46, 60, 46, 0.4);
+    border-left-color: #43a047;
+    color: #e6e6e6;
+  }
+
+  .question-chip {
+    background: rgba(42, 42, 42, 0.92);
+    border-color: #444;
+
+    &.active {
+      background: rgba(25, 118, 210, 0.15);
+      border-color: #90caf9;
+      box-shadow: 0 0 0 1px #90caf9;
+    }
+  }
+
+  .follow-up-hint {
+    background: rgba(25, 118, 210, 0.15);
+    border-color: #90caf9;
+
+    .hint-label {
+      color: #90caf9;
+    }
+
+    .hint-text {
+      color: #e6e6e6;
+    }
+
+    .hint-clear-btn {
+      color: #b0b0b0;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+    }
+  }
+
+  .history-card {
+    border-color: #444;
+
+    &.expanded {
+      border-color: #90caf9;
+    }
+
+    &.active {
+      border-color: #1976d2;
+      background: rgba(25, 118, 210, 0.15);
+    }
+  }
+
+  .history-card-header:hover {
+    background: rgba(42, 42, 42, 0.92);
+  }
+
+  .history-detail {
+    border-top-color: #444;
+  }
+
+  .add-words-preview {
+    background: rgba(42, 42, 42, 0.95);
+  }
+
+  .preview-header {
+    border-bottom-color: #444;
+  }
+
+  .preview-item {
+    border-bottom-color: #444;
+  }
+
+  .preview-actions {
+    border-top-color: #444;
+  }
+
+  .preview-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .delete-btn,
+  .continue-btn {
+    color: #b0b0b0;
+  }
+
+  .delete-btn:hover {
+    color: #ef5350;
+    background: rgba(239, 83, 80, 0.15);
+  }
+
+  .continue-btn:hover {
+    color: #1976d2;
+    background: rgba(25, 118, 210, 0.15);
+  }
+
+  .message-time {
+    color: #b0b0b0;
+  }
+
+  .active-entry-bar {
+    background: rgba(25, 118, 210, 0.15);
+    color: #90caf9;
+  }
+
+  .new-entry-btn {
+    border-color: #90caf9;
+    color: #90caf9;
+  }
+
+  .new-entry-btn:hover {
+    background: rgba(25, 118, 210, 0.15);
+  }
+
+  .cefr-badge {
+    background: rgba(46, 125, 50, 0.2);
+    color: #81c784;
+  }
+
+  .history-level {
+    background: rgba(46, 125, 50, 0.2);
+    color: #81c784;
+  }
+
+  .preview-level {
+    background: rgba(46, 125, 50, 0.2);
+    color: #81c784;
+  }
+
+  .preview-status {
+    color: #81c784;
+  }
+
+  .encouragements {
+    color: #81c784;
+  }
+
+  .preview-normalized {
+    color: #ffb74d;
+  }
+
+  .ai-error {
+    background: rgba(185, 28, 28, 0.15);
+    border-color: #ef5350;
+    color: #ffb4ab;
   }
 }
 

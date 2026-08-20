@@ -975,19 +975,42 @@ Rules:
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     const jsonText = jsonMatch ? jsonMatch[1] : text;
 
-    let parsed: SentenceFeedback;
+    interface ParsedFeedback {
+      patternCorrect?: boolean;
+      patternErrors?: string[] | string;
+      vocabCorrect?: boolean;
+      unknownWords?: string[] | string;
+      tips?: string[] | string;
+      masteryDelta?: number;
+    }
+
+    let parsed: ParsedFeedback;
     try {
-      parsed = JSON.parse(jsonText) as SentenceFeedback;
+      parsed = JSON.parse(jsonText) as ParsedFeedback;
     } catch {
       throw new Error('AI returned an invalid response.');
     }
 
+    const normalizeList = (value: string[] | string | undefined): string[] => {
+      if (Array.isArray(value)) {
+        return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter((item) => item.length > 0);
+      }
+      if (typeof value === 'string' && value.trim()) {
+        // AI sometimes returns a single string instead of an array — split into sentences/period-separated tips
+        const trimmed = value.trim();
+        // If it looks like a single sentence, return as one tip. If it has multiple sentences, split on periods.
+        const sentences = trimmed.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length > 0);
+        return sentences.length > 0 ? sentences : [trimmed];
+      }
+      return [];
+    };
+
     return {
       patternCorrect: parsed.patternCorrect ?? false,
-      patternErrors: parsed.patternErrors ?? [],
+      patternErrors: normalizeList(parsed.patternErrors),
       vocabCorrect: parsed.vocabCorrect ?? false,
-      unknownWords: parsed.unknownWords ?? [],
-      tips: parsed.tips ?? [],
+      unknownWords: normalizeList(parsed.unknownWords),
+      tips: normalizeList(parsed.tips),
       masteryDelta: parsed.masteryDelta ?? 0,
     };
   }

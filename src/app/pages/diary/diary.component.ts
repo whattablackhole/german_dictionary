@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
@@ -46,6 +46,12 @@ export class DiaryComponent {
   /** The entry currently being continued (null = new entry) */
   readonly activeEntryId = signal<string | null>(null);
 
+  /** Follow-up question shown as a hint for the user's next message */
+  readonly followUpHint = signal('');
+
+  /** Reference to the conversation scroll container */
+  readonly conversationScroll = viewChild('conversationScroll');
+
   // Unknown words → add to vocabulary
   readonly pendingWords = signal<PendingWord[] | null>(null);
   readonly selectedPendingWords = signal<Set<string>>(new Set());
@@ -63,7 +69,7 @@ export class DiaryComponent {
     return id ? this.diaryService.getEntry(id) ?? null : null;
   });
 
-  /** All messages for the active entry (initial + follow-ups) */
+  /** All active entry messages (initial + follow-ups) */
   readonly activeMessages = computed(() => {
     const entry = this.activeEntry();
     if (!entry) return [];
@@ -76,6 +82,14 @@ export class DiaryComponent {
     }
     return messages;
   });
+
+  /** Scroll the conversation to the bottom (latest message) */
+  scrollToBottom(): void {
+    const el = this.conversationScroll() as HTMLElement | null;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }
 
   constructor(
     private readonly diaryService: DiaryService,
@@ -91,6 +105,7 @@ export class DiaryComponent {
     this.aiError.set('');
     this.pendingWords.set(null);
     this.selectedPendingWords.set(new Set());
+    this.followUpHint.set('');
   }
 
   /** Continue an existing entry from history */
@@ -101,6 +116,9 @@ export class DiaryComponent {
     this.aiError.set('');
     this.pendingWords.set(null);
     this.selectedPendingWords.set(new Set());
+    this.followUpHint.set('');
+    // Scroll to the bottom of the conversation for the continued entry
+    this.scrollToBottom();
   }
 
   async submitEntry(): Promise<void> {
@@ -137,6 +155,12 @@ export class DiaryComponent {
           conversationHistory.push({ role: m.role, text: m.text });
         }
 
+        // Include the selected follow-up question as an assistant message (hint)
+        const hint = this.followUpHint();
+        if (hint) {
+          conversationHistory.push({ role: 'assistant', text: hint });
+        }
+
         // Add the user's new message to history
         this.diaryService.addMessage(activeId, 'user', text);
 
@@ -158,6 +182,9 @@ export class DiaryComponent {
       }
 
       this.entryInput.set('');
+      this.followUpHint.set('');
+      // Scroll to the bottom to show the latest AI response
+      this.scrollToBottom();
     } catch (err) {
       this.aiError.set(err instanceof Error ? err.message : 'Failed to analyze diary entry.');
     } finally {
@@ -165,10 +192,16 @@ export class DiaryComponent {
     }
   }
 
+  /** Set a follow-up question as a hint for the user's next message (does NOT auto-submit). */
   useQuestion(de: string): void {
-    this.entryInput.set(de);
-    // Auto-submit the follow-up question
-    this.submitEntry();
+    this.followUpHint.set(de);
+    // Scroll to the bottom so the user sees the hint and input area
+    this.scrollToBottom();
+  }
+
+  /** Clear the follow-up question hint. */
+  clearFollowUpHint(): void {
+    this.followUpHint.set('');
   }
 
   deleteEntry(id: string): void {
