@@ -800,12 +800,16 @@
   gap: 8px;
 
   .generate-exercises-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
 
     mat-spinner {
-      margin-right: 2px;
+      margin: 0;
+    }
+
+    mat-icon {
+      margin: 0;
     }
   }
 }

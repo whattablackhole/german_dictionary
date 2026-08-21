@@ -36,6 +36,8 @@ export interface TranslationResult {
   score: number;
   errors: TranslationError[];
   feedback: string;
+  /** The corrected/fixed German sentence */
+  correctedText: string;
 }
 
 export interface GeneratedSentence {
@@ -1253,12 +1255,14 @@ Respond with JSON only (no markdown) using exactly these fields:
   - "endIndex": number (character index in the student's input where the error ends)
   - "explanation": string (explanation of the error in English)
 - "feedback": string (overall encouraging feedback in English)
+- "correctedText": string (the student's translation with all errors corrected into a natural, grammatically correct German sentence. If correct is true, this equals the student's input.)
 
 Rules:
 - Minor spelling mistakes that don't change meaning should reduce score but not count as errors.
 - Wrong articles, wrong verb conjugations, wrong word order are errors.
 - Missing words are errors (point to the position where the word should be).
 - If the student's input is empty or completely wrong, set correct to false and score to 0.
+- "correctedText" must preserve the student's intended meaning while fixing all errors, and be natural German.
 
 Correct sentence: "${correctGerman}"
 Student's translation: "${userInput}"`;
@@ -1296,6 +1300,7 @@ Student's translation: "${userInput}"`;
       score?: number;
       errors?: TranslationError[];
       feedback?: string;
+      correctedText?: string;
     };
     try {
       parsed = JSON.parse(jsonText);
@@ -1308,6 +1313,7 @@ Student's translation: "${userInput}"`;
       score: parsed.score ?? 0,
       errors: parsed.errors ?? [],
       feedback: parsed.feedback ?? '',
+      correctedText: parsed.correctedText?.trim() || correctGerman,
     };
   }
 

@@ -169,7 +169,7 @@ export class StoryExercisesComponent implements OnInit {
       item,
       correct,
       correct
-        ? 'Correct!'
+        ? ''
         : `Not quite. The correct translation is "${item.exercise.mcCorrect}".`
     );
   }
@@ -185,7 +185,7 @@ export class StoryExercisesComponent implements OnInit {
       item,
       correct,
       correct
-        ? 'Correct!'
+        ? ''
         : `You typed "${answer}". The correct word is "${this.expectedClozeAnswer(item.exercise)}".`
     );
     this.speechService.speak(
@@ -207,13 +207,16 @@ export class StoryExercisesComponent implements OnInit {
         item.exercise.sentenceGerman ?? ''
       );
       item.translation = result;
+      const rawFeedback =
+        result.feedback ||
+        (result.correct
+          ? ''
+          : `The correct sentence is "${item.exercise.sentenceGerman}".`);
       this.answerItem(
         item,
         result.correct,
-        result.feedback ||
-          (result.correct
-            ? 'Correct!'
-            : `The correct sentence is "${item.exercise.sentenceGerman}".`)
+        // Avoid duplicating the "Correct!" header for correct answers
+        result.correct ? this.stripLeadingCorrect(rawFeedback) : rawFeedback
       );
     } catch (err) {
       this.submitError.set(
@@ -235,6 +238,11 @@ export class StoryExercisesComponent implements OnInit {
     this.session.update((items) =>
       items.map((it, i) => (i === this.currentIndex() ? item : it))
     );
+  }
+
+  /** Removes a leading "Correct!" (with optional punctuation/spaces) from feedback text. */
+  private stripLeadingCorrect(text: string): string {
+    return text.replace(/^\s*(Correct!|Correct)\s*[.!:]?\s*/i, '').trim();
   }
 
   nextQuestion(): void {

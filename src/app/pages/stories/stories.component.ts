@@ -123,27 +123,23 @@ export class StoriesComponent implements OnDestroy {
 
   // Vocabulary exercise word selection
   readonly exerciseSelectionMode = signal(false);
-  readonly exerciseSelectedIndices = signal<Set<number>>(new Set());
+  /** Ordered list of selected word groups. Each group is an ordered array of token indices
+   *  (single words = length 1; Ctrl+click groups contiguous words into one unit, e.g. "mache an"). */
+  readonly exerciseSelectedGroups = signal<number[][]>([]);
   readonly exerciseGenerating = signal(false);
   readonly exerciseError = signal('');
 
-  /** Cleaned, deduplicated list of German words selected for exercises. */
+  /** Ordered list of German word units selected for exercises (groups joined with a space). */
   readonly selectedExerciseWords = computed<string[]>(() => {
     const tokens = this.wordTokens();
-    const indices = Array.from(this.exerciseSelectedIndices()).sort((a, b) => a - b);
-    const cleaned = indices
-      .map((i) => tokens[i] ? this.cleanWordToken(tokens[i].text) : '')
+    return this.exerciseSelectedGroups()
+      .map((g) =>
+        g
+          .map((i) => tokens[i] ? this.cleanWordToken(tokens[i].text) : '')
+          .filter((w) => w.length > 0)
+          .join(' ')
+      )
       .filter((w) => w.length > 0);
-    const seen = new Set<string>();
-    const result: string[] = [];
-    for (const w of cleaned) {
-      const key = w.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(w);
-      }
-    }
-    return result;
   });
 
   // Computed
@@ -446,7 +442,7 @@ export class StoriesComponent implements OnDestroy {
     this.audioCurrentTime.set(0);
     this.closeWordPopup();
     this.exerciseSelectionMode.set(false);
-    this.exerciseSelectedIndices.set(new Set());
+    this.exerciseSelectedGroups.set([]);
     this.exerciseError.set('');
   }
 
@@ -697,7 +693,11 @@ export class StoriesComponent implements OnDestroy {
   onWordClick(word: string, index: number, event: MouseEvent): void {
     // Exercise selection mode takes priority over word lookup
     if (this.exerciseSelectionMode()) {
-      this.toggleExerciseSelection(index);
+      if (event.ctrlKey) {
+        this.groupExerciseSelection(index);
+      } else {
+        this.toggleExerciseSelection(index);
+      }
       return;
     }
 
@@ -844,19 +844,38 @@ export class StoriesComponent implements OnDestroy {
   // ── Vocabulary exercise word selection ──
 
   isExerciseWordSelected(index: number): boolean {
-    return this.exerciseSelectedIndices().has(index);
+    return this.exerciseSelectedGroups().some((g) => g.includes(index));
   }
 
+  /** Plain left-click: toggle a single word (or remove its whole group if already selected). */
   toggleExerciseSelection(index: number): void {
-    this.exerciseSelectedIndices.update((s) => {
-      const next = new Set(s);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
+    const groups = this.exerciseSelectedGroups();
+    const groupIdx = groups.findIndex((g) => g.includes(index));
+    if (groupIdx >= 0) {
+      // Remove the entire group this word belongs to
+      this.exerciseSelectedGroups.set(groups.filter((_, i) => i !== groupIdx));
+    } else {
+      this.exerciseSelectedGroups.set([...groups, [index]]);
+    }
+    this.exerciseError.set('');
+  }
+
+  /** Ctrl+left-click: group this word with the previously selected one as a single unit. */
+  groupExerciseSelection(index: number): void {
+    const groups = this.exerciseSelectedGroups().map((g) => [...g]);
+    if (groups.length > 0) {
+      const last = groups[groups.length - 1];
+      const adjacent =
+        last[last.length - 1] + 1 === index || last[0] - 1 === index;
+      if (!last.includes(index) && adjacent) {
+        groups[groups.length - 1] = [...last, index].sort((a, b) => a - b);
+        this.exerciseSelectedGroups.set(groups);
+        this.exerciseError.set('');
+        return;
       }
-      return next;
-    });
+    }
+    // Not adjacent to the last group → start a new single-word group
+    this.exerciseSelectedGroups.set([...groups, [index]]);
     this.exerciseError.set('');
   }
 
@@ -864,29 +883,31 @@ export class StoriesComponent implements OnDestroy {
     const enabled = !this.exerciseSelectionMode();
     this.exerciseSelectionMode.set(enabled);
     if (!enabled) {
-      this.exerciseSelectedIndices.set(new Set());
+      this.exerciseSelectedGroups.set([]);
     }
     this.exerciseError.set('');
   }
 
   clearExerciseSelection(): void {
-    this.exerciseSelectedIndices.set(new Set());
+    this.exerciseSelectedGroups.set([]);
     this.exerciseError.set('');
   }
 
-  removeExerciseWord(word: string): void {
-    this.exerciseSelectedIndices.update((s) => {
-      const tokens = this.wordTokens();
-      const next = new Set(s);
-      for (const idx of next) {
-        const token = tokens[idx];
-        if (token && this.cleanWordToken(token.text).toLowerCase() === word.toLowerCase()) {
-          next.delete(idx);
-        }
-      }
-      return next;
-    });
+  /** Removes a word group by its index in the selection. */
+  removeExerciseGroup(groupIndex: number): void {
+    this.exerciseSelectedGroups.update((groups) =>
+      groups.filter((_, i) => i !== groupIndex)
+    );
     this.exerciseError.set('');
+  }
+
+  /** Builds the display label for a group of token indices (e.g. "mache an"). */
+  groupLabel(group: number[]): string {
+    const tokens = this.wordTokens();
+    return group
+      .map((i) => tokens[i] ? this.cleanWordToken(tokens[i].text) : '')
+      .filter((w) => w.length > 0)
+      .join(' ');
   }
 
   private cleanWordToken(word: string): string {

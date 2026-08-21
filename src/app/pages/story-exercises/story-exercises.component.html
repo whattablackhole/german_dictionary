@@ -54,10 +54,6 @@
         </button>
       </div>
 
-      @if (item.exercise.type !== 'cloze') {
-        <div class="word-badge">{{ item.exercise.word }}</div>
-      }
-
       @switch (item.exercise.type) {
         @case ('mc') {
           <div class="question-prompt">{{ item.exercise.mcPrompt }}</div>
@@ -147,12 +143,26 @@
           <mat-icon>{{ item.correct ? 'check_circle' : 'cancel' }}</mat-icon>
           <div>
             <strong>{{ item.correct ? 'Correct!' : 'Not quite.' }}</strong>
-            <span>{{ item.feedback }}</span>
+            @if (item.feedback) {
+              <span>{{ item.feedback }}</span>
+            }
           </div>
         </div>
 
         @if (item.exercise.type === 'sentence' && item.translation; as t) {
           <div class="score-display">Score: {{ t.score }}/100</div>
+          @if (!t.correct) {
+            <div class="sentence-compare">
+              <div class="compare-row">
+                <span class="compare-label">Your sentence:</span>
+                <span class="compare-text original">{{ userInput() }}</span>
+              </div>
+              <div class="compare-row">
+                <span class="compare-label">Corrected:</span>
+                <span class="compare-text corrected">{{ t.correctedText }}</span>
+              </div>
+            </div>
+          }
           @if (!t.correct && t.errors.length > 0) {
             <div class="errors-section">
               <div class="error-list">

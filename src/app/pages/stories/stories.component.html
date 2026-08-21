@@ -170,18 +170,20 @@
             Select words for exercises
           </mat-slide-toggle>
           @if (exerciseSelectionMode()) {
-            <span class="lookup-hint">Click words to select them for vocabulary exercises</span>
+            <span class="lookup-hint">Click to select words, Ctrl+Click to group them as one unit (e.g. "mache an")</span>
           }
         </div>
 
         @if (exerciseSelectionMode() && selectedExerciseWords().length > 0) {
           <div class="exercise-selection-bar">
             <div class="exercise-selected-words">
-              @for (word of selectedExerciseWords(); track word) {
-                <button class="exercise-word-chip" (click)="removeExerciseWord(word)">
-                  {{ word }}
-                  <mat-icon>close</mat-icon>
-                </button>
+              @for (group of exerciseSelectedGroups(); track $index; let gi = $index) {
+                @if (groupLabel(group); as label) {
+                  <button class="exercise-word-chip" (click)="removeExerciseGroup(gi)">
+                    {{ label }}
+                    <mat-icon>close</mat-icon>
+                  </button>
+                }
               }
             </div>
             <div class="exercise-actions">
