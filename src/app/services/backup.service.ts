@@ -1,16 +1,24 @@
 import { Injectable } from '@angular/core';
 import { ImageCacheService, ImageEntry } from './image-cache.service';
 import { SentenceCacheService, SentenceEntry } from './sentence-cache.service';
+import { StoryService } from './story.service';
+import { CaptionsService } from './captions.service';
+import { Story } from '../models/story';
+import { CorrectedCaption } from '../models/captions';
 
 export interface BackupData {
   app: 'GermanDictionary';
-  version: 1;
+  version: 1 | 2;
   exportedAt: string;
   data: Record<string, string>;
   /** Optional: images stored in IndexedDB */
   images?: ImageEntry[];
   /** Optional: example sentences stored in IndexedDB */
   sentences?: SentenceEntry[];
+  /** Optional: stories stored in IndexedDB */
+  stories?: Story[];
+  /** Optional: captions stored in IndexedDB */
+  captions?: CorrectedCaption[];
 }
 
 const BACKUP_KEYS: string[] = [
@@ -27,17 +35,30 @@ const BACKUP_KEYS: string[] = [
   'german-dictionary-tts-voice',
   'german-dictionary-lookup-modifier',
   'german-dictionary-openrouter-key',
+  // Additional localStorage keys that were previously missing from backups
+  'german-dictionary-pattern-history',
+  'german-dictionary-diary',
+  'german-dictionary-declension-mastery',
+  'german-dictionary-preposition-mastery',
+  'german-dictionary-image-style',
+  'german-dictionary-image-style-custom',
+  'german-dictionary-image-model',
+  'german-dictionary-text-model',
+  'german-dictionary-show-sentences-srs',
+  'german-dictionary-translation-api-url',
 ];
 
 @Injectable({ providedIn: 'root' })
 export class BackupService {
   constructor(
     private readonly imageCache: ImageCacheService,
-    private readonly sentenceCache: SentenceCacheService
+    private readonly sentenceCache: SentenceCacheService,
+    private readonly storyService: StoryService,
+    private readonly captionsService: CaptionsService
   ) {}
 
   /**
-   * Collects all known localStorage keys + IndexedDB images and triggers a JSON file download.
+   * Collects all known localStorage keys + IndexedDB data and triggers a JSON file download.
    */
   async exportBackup(): Promise<void> {
     const data: Record<string, string> = {};
@@ -52,14 +73,20 @@ export class BackupService {
     const images = await this.imageCache.getAllEntries();
     // Include sentences from IndexedDB
     const sentences = await this.sentenceCache.getAllEntries();
+    // Include stories from IndexedDB
+    const stories = await this.storyService.getAllEntries();
+    // Include captions from IndexedDB
+    const captions = await this.captionsService.getAllEntries();
 
     const backup: BackupData = {
       app: 'GermanDictionary',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       data,
       images: images.length > 0 ? images : undefined,
       sentences: sentences.length > 0 ? sentences : undefined,
+      stories: stories.length > 0 ? stories : undefined,
+      captions: captions.length > 0 ? captions : undefined,
     };
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], {
@@ -75,7 +102,7 @@ export class BackupService {
   }
 
   /**
-   * Validates and restores a backup file into localStorage + IndexedDB images.
+   * Validates and restores a backup file into localStorage + IndexedDB.
    */
   importBackup(
     file: File
@@ -103,7 +130,7 @@ export class BackupService {
             });
             return;
           }
-          if (parsed.version !== 1) {
+          if (parsed.version !== 1 && parsed.version !== 2) {
             resolve({
               ok: false,
               error: `Unsupported backup version: ${parsed.version}`,
@@ -161,6 +188,24 @@ export class BackupService {
             } catch (err) {
               // Non-critical — sentences can be regenerated
               console.warn('Failed to restore sentences:', err);
+            }
+          }
+
+          // Restore stories to IndexedDB
+          if (parsed.stories && Array.isArray(parsed.stories)) {
+            try {
+              await this.storyService.restoreAll(parsed.stories);
+            } catch (err) {
+              console.warn('Failed to restore stories:', err);
+            }
+          }
+
+          // Restore captions to IndexedDB
+          if (parsed.captions && Array.isArray(parsed.captions)) {
+            try {
+              await this.captionsService.restoreAll(parsed.captions);
+            } catch (err) {
+              console.warn('Failed to restore captions:', err);
             }
           }
 

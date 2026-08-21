@@ -101,4 +101,49 @@ export class CaptionsService {
       tx.onerror = () => reject(new Error('Failed to delete caption'));
     });
   }
+
+  /** Returns all captions (for backup) */
+  async getAllEntries(): Promise<CorrectedCaption[]> {
+    const db = await this.openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        resolve(request.result as CorrectedCaption[]);
+      };
+
+      request.onerror = () => {
+        reject(new Error('Failed to read captions'));
+      };
+    });
+  }
+
+  /** Restores all captions from a backup (clears existing first) */
+  async restoreAll(entries: CorrectedCaption[]): Promise<void> {
+    const db = await this.openDb();
+
+    // Clear existing
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+
+    if (entries.length === 0) return;
+
+    // Store all entries
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      for (const entry of entries) {
+        store.put(entry);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
 }

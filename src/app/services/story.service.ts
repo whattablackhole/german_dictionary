@@ -69,6 +69,30 @@ export class StoryService {
     return this.stories();
   }
 
+  /** Returns all stories from IndexedDB (for backup) */
+  async getAllEntries(): Promise<Story[]> {
+    const db = await this.openDb();
+    if (!db) return [];
+    return this.loadAllFromDb(db);
+  }
+
+  /** Restores all stories from a backup (clears existing first) */
+  async restoreAll(entries: Story[]): Promise<void> {
+    const db = await this.openDb();
+    if (!db) {
+      // Fallback: save to localStorage
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+      } catch (err) {
+        console.warn('Failed to restore stories to localStorage.', err);
+      }
+      return;
+    }
+
+    await this.saveAllToDb(db, entries);
+    this.stories.set(entries.length > 0 ? entries : [...SEED_STORIES]);
+  }
+
   getStoryById(id: string): Story | undefined {
     return this.stories().find((s) => s.id === id);
   }
