@@ -740,3 +740,90 @@
   color: #c62828;
   padding: 8px 0;
 }
+
+/* Vocabulary exercise word selection */
+.word-exercise-selected {
+  background: rgba(46, 125, 50, 0.18);
+  box-shadow: 0 0 0 1px var(--mat-sys-primary, #2e7d32);
+  border-radius: 3px;
+}
+
+.exercise-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--mat-sys-surface-container-high);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+}
+
+.exercise-selected-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.exercise-word-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 14px;
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+  cursor: pointer;
+  transition: background 0.15s;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+
+  &:hover {
+    background: rgba(46, 125, 50, 0.2);
+  }
+}
+
+.exercise-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .generate-exercises-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    mat-spinner {
+      margin-right: 2px;
+    }
+  }
+}
+
+.exercise-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(211, 47, 47, 0.1);
+  color: #c62828;
+  font-size: 13px;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}

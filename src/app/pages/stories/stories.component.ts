@@ -1,6 +1,7 @@
 import { Component, computed, signal, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -13,8 +14,10 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { Subscription } from 'rxjs';
 import { Story, StoryConfig } from '../../models/story';
+import { StoryExercise } from '../../models/story-exercise';
 import { StoryService } from '../../services/story.service';
-import { AiService, AiSuggestion } from '../../services/ai.service';
+import { AiService, AiSuggestion, GeneratedStoryExercise } from '../../services/ai.service';
+import { StoryExerciseService } from '../../services/story-exercise.service';
 import { SettingsService, TTS_MODELS } from '../../services/settings.service';
 import { SpeechService } from '../../services/speech.service';
 import { TtsCacheService } from '../../services/tts-cache.service';
@@ -117,6 +120,31 @@ export class StoriesComponent implements OnDestroy {
   readonly phrasePopupPosition = signal<PopupPosition>({ x: 0, y: 0 });
   readonly phrasePopupVisible = signal(false);
   readonly phraseLookupWord = signal<string | null>(null);
+
+  // Vocabulary exercise word selection
+  readonly exerciseSelectionMode = signal(false);
+  readonly exerciseSelectedIndices = signal<Set<number>>(new Set());
+  readonly exerciseGenerating = signal(false);
+  readonly exerciseError = signal('');
+
+  /** Cleaned, deduplicated list of German words selected for exercises. */
+  readonly selectedExerciseWords = computed<string[]>(() => {
+    const tokens = this.wordTokens();
+    const indices = Array.from(this.exerciseSelectedIndices()).sort((a, b) => a - b);
+    const cleaned = indices
+      .map((i) => tokens[i] ? this.cleanWordToken(tokens[i].text) : '')
+      .filter((w) => w.length > 0);
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const w of cleaned) {
+      const key = w.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(w);
+      }
+    }
+    return result;
+  });
 
   // Computed
   readonly selectedStory = computed(() => {
@@ -333,7 +361,9 @@ export class StoriesComponent implements OnDestroy {
     readonly settingsService: SettingsService,
     private readonly speechService: SpeechService,
     private readonly wordService: WordService,
-    private readonly ttsCacheService: TtsCacheService
+    private readonly ttsCacheService: TtsCacheService,
+    private readonly storyExerciseService: StoryExerciseService,
+    private readonly router: Router
   ) {
     this.boundarySub = this.speechService.onBoundary.subscribe((b) => {
       this.currentCharIndex.set(b.charIndex);
@@ -415,6 +445,9 @@ export class StoriesComponent implements OnDestroy {
     this.audioDuration.set(0);
     this.audioCurrentTime.set(0);
     this.closeWordPopup();
+    this.exerciseSelectionMode.set(false);
+    this.exerciseSelectedIndices.set(new Set());
+    this.exerciseError.set('');
   }
 
   async playStory(): Promise<void> {
@@ -662,6 +695,12 @@ export class StoriesComponent implements OnDestroy {
   }
 
   onWordClick(word: string, index: number, event: MouseEvent): void {
+    // Exercise selection mode takes priority over word lookup
+    if (this.exerciseSelectionMode()) {
+      this.toggleExerciseSelection(index);
+      return;
+    }
+
     if (!this.wordLookupEnabled()) return;
 
     const cleanWord = word.replace(/[.,!?;:()"']+$/, '').replace(/^[.,!?;:()"']+/, '');
@@ -800,6 +839,177 @@ export class StoriesComponent implements OnDestroy {
     this.correctionLoading.set(false);
     this.correctionError.set('');
     this.selectedWordIndices.set(new Set());
+  }
+
+  // ── Vocabulary exercise word selection ──
+
+  isExerciseWordSelected(index: number): boolean {
+    return this.exerciseSelectedIndices().has(index);
+  }
+
+  toggleExerciseSelection(index: number): void {
+    this.exerciseSelectedIndices.update((s) => {
+      const next = new Set(s);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+    this.exerciseError.set('');
+  }
+
+  toggleExerciseSelectionMode(): void {
+    const enabled = !this.exerciseSelectionMode();
+    this.exerciseSelectionMode.set(enabled);
+    if (!enabled) {
+      this.exerciseSelectedIndices.set(new Set());
+    }
+    this.exerciseError.set('');
+  }
+
+  clearExerciseSelection(): void {
+    this.exerciseSelectedIndices.set(new Set());
+    this.exerciseError.set('');
+  }
+
+  removeExerciseWord(word: string): void {
+    this.exerciseSelectedIndices.update((s) => {
+      const tokens = this.wordTokens();
+      const next = new Set(s);
+      for (const idx of next) {
+        const token = tokens[idx];
+        if (token && this.cleanWordToken(token.text).toLowerCase() === word.toLowerCase()) {
+          next.delete(idx);
+        }
+      }
+      return next;
+    });
+    this.exerciseError.set('');
+  }
+
+  private cleanWordToken(word: string): string {
+    return word
+      .replace(/^[.,!?;:()"'\u201C\u201D\u2018\u2019]+/, '')
+      .replace(/[.,!?;:()"'\u201C\u201D\u2018\u2019]+$/, '')
+      .trim();
+  }
+
+  private shuffleArray<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
+  async generateExercises(): Promise<void> {
+    const story = this.selectedStory();
+    const words = this.selectedExerciseWords();
+    if (!story || words.length === 0) return;
+
+    if (!this.aiService.hasApiKey()) {
+      this.exerciseError.set('No API key set. Add your OpenRouter API key in Settings.');
+      return;
+    }
+
+    this.exerciseGenerating.set(true);
+    this.exerciseError.set('');
+    try {
+      const dictionary = this.wordService.getWords();
+      const enriched = words.map((w) => {
+        const found = dictionary.find((d) => d.german.toLowerCase() === w.toLowerCase());
+        return {
+          german: w,
+          translationEn: found?.translationEn,
+          translationRu: found?.translationRu,
+        };
+      });
+
+      const generated = await this.aiService.generateStoryExercises({
+        words: enriched,
+        storyLevel: story.level,
+        storyDomain: story.domain,
+        storyText: story.german,
+        translationLanguage: this.settingsService.translationLanguage(),
+      });
+
+      const exercises = generated
+        .map((g) => this.toStoryExercise(g, story.id, story.level))
+        .filter((e): e is StoryExercise => e !== null);
+
+      if (exercises.length === 0) {
+        this.exerciseError.set('No valid exercises could be generated. Try again.');
+        return;
+      }
+
+      this.storyExerciseService.setSession(story, this.shuffleArray(exercises));
+      this.router.navigate(['/stories-exercises']);
+    } catch (err) {
+      this.exerciseError.set(
+        err instanceof Error ? err.message : 'Failed to generate exercises.'
+      );
+    } finally {
+      this.exerciseGenerating.set(false);
+    }
+  }
+
+  private toStoryExercise(
+    g: GeneratedStoryExercise,
+    storyId: string,
+    level: DifficultyLevel
+  ): StoryExercise | null {
+    const base = {
+      id: crypto.randomUUID(),
+      storyId,
+      word: g.word,
+      level,
+    };
+
+    switch (g.type) {
+      case 'mc': {
+        if (!g.mcPrompt || !g.mcCorrect || !Array.isArray(g.mcOptions)) return null;
+        const options = g.mcOptions
+          .map((o) => String(o).trim())
+          .filter((o) => o.length > 0);
+        if (!options.includes(g.mcCorrect)) options.push(g.mcCorrect);
+        if (options.length < 2) return null;
+        return {
+          ...base,
+          type: 'mc',
+          mcPrompt: g.mcPrompt,
+          mcOptions: options,
+          mcCorrect: g.mcCorrect,
+        };
+      }
+      case 'cloze': {
+        if (!g.clozeSentence || !Array.isArray(g.clozeBlankWords)) return null;
+        const blanks = g.clozeBlankWords
+          .map((w) => String(w).trim())
+          .filter((w) => w.length > 0 && g.clozeSentence!.includes(w));
+        if (blanks.length === 0) return null;
+        return {
+          ...base,
+          type: 'cloze',
+          clozeSentence: g.clozeSentence,
+          clozeBlankWords: blanks,
+          clozeHint: g.clozeHint ?? '',
+        };
+      }
+      case 'sentence': {
+        if (!g.sentenceGerman || !g.sentenceNative) return null;
+        return {
+          ...base,
+          type: 'sentence',
+          sentenceGerman: g.sentenceGerman,
+          sentenceNative: g.sentenceNative,
+        };
+      }
+      default:
+        return null;
+    }
   }
 
   // ── Right-click context menu for multi-word selection ──

@@ -50,6 +50,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'stories-exercises',
+    loadComponent: () =>
+      import('./pages/story-exercises/story-exercises.component').then(
+        (m) => m.StoryExercisesComponent
+      ),
+  },
+  {
     path: 'sentence-builder',
     loadComponent: () =>
       import('./pages/sentence-builder/sentence-builder.component').then(

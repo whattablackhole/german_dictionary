@@ -11,6 +11,7 @@ const IMAGE_STYLE_KEY = 'german-dictionary-image-style';
 const IMAGE_MODEL_KEY = 'german-dictionary-image-model';
 const TEXT_MODEL_KEY = 'german-dictionary-text-model';
 const SHOW_SENTENCES_KEY = 'german-dictionary-show-sentences-srs';
+const THROUGHPUT_ROUTING_KEY = 'german-dictionary-throughput-routing';
 const TRANSLATION_API_URL_KEY = 'german-dictionary-translation-api-url';
 
 export type TtsEngine = 'browser' | 'openai';
@@ -218,9 +219,19 @@ export class SettingsService {
     localStorage.getItem(SHOW_SENTENCES_KEY) !== 'false'
   );
 
+  /** Route OpenRouter text requests by throughput instead of the default price-based load balancing */
+  readonly throughputRouting = signal<boolean>(
+    localStorage.getItem(THROUGHPUT_ROUTING_KEY) === 'true'
+  );
+
   setShowSentencesInSrs(show: boolean): void {
     this.showSentencesInSrs.set(show);
     this.safeWrite(SHOW_SENTENCES_KEY, String(show));
+  }
+
+  setThroughputRouting(enabled: boolean): void {
+    this.throughputRouting.set(enabled);
+    this.safeWrite(THROUGHPUT_ROUTING_KEY, String(enabled));
   }
 
   setImageStyle(style: string): void {

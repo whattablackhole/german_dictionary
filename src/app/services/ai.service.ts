@@ -86,6 +86,26 @@ export interface GeneratedDeclensionExercise {
   options: string[];
 }
 
+export interface GeneratedStoryExercise {
+  /** The German target word this exercise trains */
+  word: string;
+  type: 'mc' | 'cloze' | 'sentence';
+
+  // mc — multiple choice translation
+  mcPrompt?: string;
+  mcOptions?: string[];
+  mcCorrect?: string;
+
+  // cloze — word in a sentence
+  clozeSentence?: string;
+  clozeBlankWords?: string[];
+  clozeHint?: string;
+
+  // sentence — translate the whole sentence
+  sentenceGerman?: string;
+  sentenceNative?: string;
+}
+
 export interface DeclensionAnswerResult {
   correct: boolean;
   expectedAnswer: string;
@@ -136,6 +156,18 @@ export class AiService {
     localStorage.setItem(API_KEY_STORAGE, key.trim());
     // Clearing the key may resolve a credit issue (new account)
     this.setCreditError(false);
+  }
+
+  /**
+   * Returns the OpenRouter `provider` routing object when throughput-based
+   * routing is enabled, otherwise an empty object (spread no-op). Setting
+   * `provider.sort` to "throughput" prioritizes the highest-throughput provider
+   * instead of the default price-based load balancing.
+   */
+  private throughputProviderField(): { provider?: { sort: 'throughput' } } {
+    return this.settingsService.throughputRouting()
+      ? { provider: { sort: 'throughput' } }
+      : {};
   }
 
   /**
@@ -268,6 +300,7 @@ Example response format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -425,6 +458,7 @@ Word: "${german}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -570,6 +604,7 @@ Word: "${german}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -768,6 +803,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -877,6 +913,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -957,6 +994,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1075,6 +1113,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.3,
       }),
@@ -1154,6 +1193,7 @@ Student's query: "${userQuery}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.3,
       }),
@@ -1232,6 +1272,7 @@ Student's translation: "${userInput}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1316,6 +1357,7 @@ Generate exactly ${config.sentenceCount} sentences.`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -1351,6 +1393,135 @@ Generate exactly ${config.sentenceCount} sentences.`;
       translationEn: parsed.translationEn,
       translationRu: parsed.translationRu,
     };
+  }
+
+  /**
+   * Generate vocabulary exercises (3 per word) for words from an AI-generated story:
+   * multiple-choice translation, fill-in-the-blank (word in a sentence), and whole-sentence translation.
+   * Words are processed in chunks to keep each AI response a manageable size.
+   */
+  async generateStoryExercises(config: {
+    words: { german: string; translationEn?: string; translationRu?: string }[];
+    storyLevel: DifficultyLevel;
+    storyDomain: string;
+    storyText?: string;
+    translationLanguage: 'en' | 'ru';
+  }): Promise<GeneratedStoryExercise[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+    if (config.words.length === 0) {
+      throw new Error('No words selected.');
+    }
+
+    const langName = config.translationLanguage === 'ru' ? 'Russian' : 'English';
+    const storyBlock = config.storyText
+      ? `The student has read the following German story at CEFR level ${config.storyLevel} about "${config.storyDomain}":\n"""\n${config.storyText}\n"""\n`
+      : `The student is at CEFR level ${config.storyLevel} and the story theme is "${config.storyDomain}".\n`;
+
+    const allExercises: GeneratedStoryExercise[] = [];
+    const CHUNK_SIZE = 8;
+
+    for (let i = 0; i < config.words.length; i += CHUNK_SIZE) {
+      const chunk = config.words.slice(i, i + CHUNK_SIZE);
+      const wordsJson = JSON.stringify(chunk);
+      const count = chunk.length * 3;
+
+      const prompt = `You are a German language teacher. ${storyBlock}
+For EACH word in the list below, generate EXACTLY 3 vocabulary exercises (3 exercises per word):
+1. "mc" — multiple choice: show the German word and provide exactly 4 answer options — its translation in ${langName} plus 3 plausible distractor translations.
+2. "cloze" — word in a sentence: a German sentence containing the word, where the target word is blanked with "___". The student must type the German word. Provide the hint = the word's translation in ${langName}.
+3. "sentence" — translate the sentence: a German sentence containing the word and its ${langName} translation. The student must type the German sentence.
+
+Words: ${wordsJson}
+
+Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
+- "word": the target German word (copy it exactly from the input list)
+- "type": exactly "mc", "cloze" or "sentence"
+- "mcPrompt": (only for type "mc") the German word to translate, with the article for nouns (e.g. "der Apfel")
+- "mcOptions": (only for type "mc") array of exactly 4 translations in ${langName}, including the correct one, in random order
+- "mcCorrect": (only for type "mc") the correct translation
+- "clozeSentence": (only for type "cloze") the full German sentence with the word
+- "clozeBlankWords": (only for type "cloze") array of the EXACT substrings of clozeSentence that should be replaced with "___" (e.g. ["Schuhe"]; for a separable verb like "Ich hole dich ab" use ["hole", "ab"]; never include the article for nouns)
+- "clozeHint": (only for type "cloze") the ${langName} translation of the target word
+- "sentenceGerman": (only for type "sentence") the German sentence the student must type
+- "sentenceNative": (only for type "sentence") the ${langName} translation of that sentence
+
+Rules:
+- Prefer using sentences from the provided story when the target word appears there; otherwise write a short natural sentence (5-15 words) at CEFR level ${config.storyLevel}.
+- The three exercises for a word may reuse a story sentence; otherwise vary the sentences.
+- Keep sentences concise, natural and level-appropriate.
+- The mc options must be translations in ${langName} (not German words). Distractors must be plausible (similar meaning area or part of speech, similar difficulty).
+- For nouns in "mcPrompt" include the article and the base form.
+- Generate exactly ${count} exercises.
+
+Example format:
+{"exercises":[{"word":"Apfel","type":"mc","mcPrompt":"der Apfel","mcOptions":["apple","pear","banana","orange"],"mcCorrect":"apple","clozeSentence":"","clozeBlankWords":[],"clozeHint":"","sentenceGerman":"","sentenceNative":""}]}`;
+
+      const response = await fetch(environment.openRouterApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.settingsService.textModel(),
+          messages: [{ role: 'user', content: prompt }],
+          ...(this.throughputProviderField()),
+          response_format: { type: 'json_object' },
+          temperature: 0.5,
+        }),
+      });
+
+      if (!response.ok) {
+        this.handleError(response);
+      }
+
+      const data = await response.json();
+      const text: string | undefined = data.choices?.[0]?.message?.content;
+      if (!text) {
+        throw new Error('AI returned no result.');
+      }
+
+      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+      let parsed: GeneratedStoryExercise[] | { exercises: GeneratedStoryExercise[] };
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch {
+        throw new Error('AI returned an invalid response.');
+      }
+
+      const exercises = Array.isArray(parsed)
+        ? parsed
+        : (parsed as { exercises: GeneratedStoryExercise[] }).exercises ?? [];
+
+      if (!Array.isArray(exercises) || exercises.length === 0) {
+        throw new Error('AI could not generate exercises. Try again.');
+      }
+
+      allExercises.push(...exercises);
+    }
+
+    // Validate: keep only well-formed exercises
+    const valid = allExercises.filter((e) => {
+      if (!e.word || !['mc', 'cloze', 'sentence'].includes(e.type)) return false;
+      if (e.type === 'mc') {
+        return !!e.mcPrompt && !!e.mcCorrect && Array.isArray(e.mcOptions) && e.mcOptions.length >= 2;
+      }
+      if (e.type === 'cloze') {
+        return !!e.clozeSentence && Array.isArray(e.clozeBlankWords) && e.clozeBlankWords.length > 0;
+      }
+      return !!e.sentenceGerman && !!e.sentenceNative;
+    });
+
+    if (valid.length < config.words.length) {
+      throw new Error('AI could not generate complete exercises. Try again.');
+    }
+
+    return valid;
   }
 
   async generatePrepositionExercise(
@@ -1403,6 +1574,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.5,
       }),
@@ -1532,6 +1704,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.5,
       }),
@@ -1640,6 +1813,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1883,6 +2057,7 @@ ${rawText}`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
         max_tokens: 8192,
@@ -1971,6 +2146,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),

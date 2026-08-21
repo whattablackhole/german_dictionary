@@ -161,6 +161,60 @@
           }
         </div>
 
+        <!-- Vocabulary Exercise Word Selection -->
+        <div class="lookup-toggle-row">
+          <mat-slide-toggle
+            [checked]="exerciseSelectionMode()"
+            (toggleChange)="toggleExerciseSelectionMode()"
+          >
+            Select words for exercises
+          </mat-slide-toggle>
+          @if (exerciseSelectionMode()) {
+            <span class="lookup-hint">Click words to select them for vocabulary exercises</span>
+          }
+        </div>
+
+        @if (exerciseSelectionMode() && selectedExerciseWords().length > 0) {
+          <div class="exercise-selection-bar">
+            <div class="exercise-selected-words">
+              @for (word of selectedExerciseWords(); track word) {
+                <button class="exercise-word-chip" (click)="removeExerciseWord(word)">
+                  {{ word }}
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+            </div>
+            <div class="exercise-actions">
+              <button
+                mat-flat-button
+                color="primary"
+                class="generate-exercises-btn"
+                (click)="generateExercises()"
+                [disabled]="exerciseGenerating()"
+              >
+                @if (exerciseGenerating()) {
+                  <mat-spinner diameter="18" />
+                  <span>Generating...</span>
+                } @else {
+                  <ng-container>
+                    <mat-icon>quiz</mat-icon>
+                    Generate Exercises ({{ selectedExerciseWords().length * 3 }})
+                  </ng-container>
+                }
+              </button>
+              <button mat-stroked-button class="clear-exercise-btn" (click)="clearExerciseSelection()">
+                Clear
+              </button>
+            </div>
+          </div>
+          @if (exerciseError()) {
+            <div class="exercise-error">
+              <mat-icon>error_outline</mat-icon>
+              <span>{{ exerciseError() }}</span>
+            </div>
+          }
+        }
+
         <div class="story-text-card">
           <div class="story-text" #storyText
             (contextmenu)="onContextMenu($event)"
@@ -175,6 +229,7 @@
                 "
                 [class.word-selected]="wordLookupEnabled() && isWordSelected(i)"
                 [class.word-lookup-hover]="wordLookupEnabled()"
+                [class.word-exercise-selected]="exerciseSelectionMode() && isExerciseWordSelected(i)"
                 (click)="onWordClick(token.text, i, $event)"
                 (contextmenu)="onWordRightClick(token.text, $event)"
               >{{ token.text }} </span>

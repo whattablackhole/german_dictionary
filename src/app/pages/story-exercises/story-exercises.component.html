@@ -1,0 +1,177 @@
+<div class="story-exercises-container">
+  <div class="page-header">
+    <h1 class="page-title">Story Vocabulary Exercises</h1>
+    <p class="page-subtitle">
+      {{ story()?.title ?? 'Story exercises' }}
+      @if (story(); as s) {
+        <span class="story-badge">{{ s.level }}</span>
+      }
+    </p>
+    <button mat-stroked-button class="back-btn" (click)="backToStories()">
+      <mat-icon>arrow_back</mat-icon>
+      Back to Stories
+    </button>
+  </div>
+
+  @if (totalQuestions() === 0) {
+    <div class="empty-state-large">
+      <mat-icon class="empty-icon">auto_stories</mat-icon>
+      <p>No exercises yet. Open a story and select words to generate exercises.</p>
+      <button mat-raised-button color="primary" (click)="backToStories()">
+        Go to Stories
+      </button>
+    </div>
+  } @else if (sessionFinished()) {
+    <div class="results-screen">
+      <mat-icon class="results-trophy">emoji_events</mat-icon>
+      <h2>Session Complete!</h2>
+      <p class="score">
+        {{ correctCount() }} / {{ totalQuestions() }} correct ({{ scorePercent() }}%)
+      </p>
+      <div class="results-actions">
+        <button mat-raised-button (click)="restart()">
+          <mat-icon>replay</mat-icon>
+          Practice Again
+        </button>
+        <button mat-raised-button color="primary" (click)="backToStories()">
+          Back to Stories
+        </button>
+      </div>
+    </div>
+  } @else if (sessionActive() && currentItem(); as item) {
+    <div class="session-card">
+      <div class="session-header">
+        <div class="session-title-row">
+          <mat-icon>{{ typeIcon(item.exercise.type) }}</mat-icon>
+          <span>{{ typeLabel(item.exercise.type) }}</span>
+        </div>
+        <div class="session-meta">
+          <span>Exercise {{ currentNumber() }} of {{ totalQuestions() }}</span>
+          <span>Correct: {{ correctCount() }}</span>
+        </div>
+        <button mat-icon-button class="quit-btn" (click)="quitSession()" title="Quit" aria-label="Quit">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      @if (item.exercise.type !== 'cloze') {
+        <div class="word-badge">{{ item.exercise.word }}</div>
+      }
+
+      @switch (item.exercise.type) {
+        @case ('mc') {
+          <div class="question-prompt">{{ item.exercise.mcPrompt }}</div>
+          @if (!item.answered) {
+            <div class="options-grid">
+              @for (opt of item.exercise.mcOptions; track opt) {
+                <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
+              }
+            </div>
+          }
+        }
+        @case ('cloze') {
+          <div class="sentence-card">
+            <div class="sentence-label">Fill in the missing German word:</div>
+            <div class="sentence-text">
+              @if (item.answered) {
+                {{ buildFilledClozeSentence(item.exercise, userInput() || expectedClozeAnswer(item.exercise)) }}
+              } @else {
+                {{ buildClozeSentence(item.exercise) }}
+              }
+            </div>
+            @if (item.exercise.clozeHint) {
+              <div class="sentence-hint">
+                <mat-icon>translate</mat-icon>
+                <span>Hint: {{ item.exercise.clozeHint }}</span>
+              </div>
+            }
+          </div>
+          @if (!item.answered) {
+            <div class="input-section">
+              <input
+                class="answer-input"
+                [(ngModel)]="userInput"
+                placeholder="Type the German word..."
+                (keydown.enter)="checkCloze()"
+              />
+              <button
+                class="submit-button"
+                (click)="checkCloze()"
+                [disabled]="!userInput().trim()"
+              >
+                Check Answer
+              </button>
+            </div>
+          }
+        }
+        @case ('sentence') {
+          <div class="sentence-card">
+            <div class="sentence-label">Translate this sentence into German:</div>
+            <div class="native-sentence">{{ item.exercise.sentenceNative }}</div>
+          </div>
+          @if (!item.answered) {
+            <div class="input-section">
+              <textarea
+                class="answer-textarea"
+                [(ngModel)]="userInput"
+                rows="2"
+                placeholder="Type the German sentence..."
+              ></textarea>
+              @if (verifying()) {
+                <div class="verifying-indicator">
+                  <mat-spinner diameter="18" />
+                  <span>Checking your translation...</span>
+                </div>
+              } @else {
+                <button
+                  class="submit-button"
+                  (click)="submitSentence()"
+                  [disabled]="!userInput().trim()"
+                >
+                  Check Translation
+                </button>
+              }
+            </div>
+            @if (submitError()) {
+              <div class="submit-error">
+                <mat-icon>error_outline</mat-icon>
+                <span>{{ submitError() }}</span>
+              </div>
+            }
+          }
+        }
+      }
+
+      @if (item.answered) {
+        <div class="feedback" [class.correct]="item.correct" [class.wrong]="!item.correct">
+          <mat-icon>{{ item.correct ? 'check_circle' : 'cancel' }}</mat-icon>
+          <div>
+            <strong>{{ item.correct ? 'Correct!' : 'Not quite.' }}</strong>
+            <span>{{ item.feedback }}</span>
+          </div>
+        </div>
+
+        @if (item.exercise.type === 'sentence' && item.translation; as t) {
+          <div class="score-display">Score: {{ t.score }}/100</div>
+          @if (!t.correct && t.errors.length > 0) {
+            <div class="errors-section">
+              <div class="error-list">
+                @for (error of t.errors; track error.errorId) {
+                  <div class="error-item">
+                    <span class="error-number">{{ error.errorId }}.</span>
+                    <span class="error-word">"{{ getErrorText(userInput(), error) }}"</span>
+                    <span class="error-explanation">{{ error.explanation }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+
+        <button mat-raised-button color="primary" class="next-btn" (click)="nextQuestion()">
+          {{ currentNumber() >= totalQuestions() ? 'See Results' : 'Next' }}
+        </button>
+      }
+    </div>
+  }
+</div>

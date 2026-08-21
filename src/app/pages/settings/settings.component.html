@@ -166,6 +166,17 @@
         }
       </mat-select>
     </mat-form-field>
+    <div class="routing-toggle">
+      <mat-slide-toggle
+        [checked]="settingsService.throughputRouting()"
+        (toggleChange)="settingsService.setThroughputRouting(!settingsService.throughputRouting())"
+      >
+        Route text requests by throughput
+      </mat-slide-toggle>
+      <p class="settings-description">
+        When enabled, OpenRouter prioritizes the highest-throughput provider instead of the default price-based load balancing.
+      </p>
+    </div>
   </mat-card>
 
   <mat-card class="settings-card">

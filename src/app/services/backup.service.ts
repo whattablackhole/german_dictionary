@@ -46,6 +46,7 @@ const BACKUP_KEYS: string[] = [
   'german-dictionary-text-model',
   'german-dictionary-show-sentences-srs',
   'german-dictionary-translation-api-url',
+  'german-dictionary-throughput-routing',
 ];
 
 @Injectable({ providedIn: 'root' })
