@@ -1436,6 +1436,67 @@ Generate exactly ${config.sentenceCount} sentences.`;
   }
 
   /**
+   * Translates a German text into the user's native language (Russian or English)
+   * via the AI model. Used as a fallback when the local translation service is unavailable.
+   */
+  async translateToNative(
+    text: string,
+    target: 'ru' | 'en'
+  ): Promise<string> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const targetName = target === 'ru' ? 'Russian' : 'English';
+    const prompt = `You are a translator. Translate the following German sentence into ${targetName}.
+Respond with JSON only (no markdown) as an object with a single key "translation" containing the ${targetName} translation.
+
+German sentence: "${text}"`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.settingsService.textModel(),
+        messages: [{ role: 'user', content: prompt }],
+        ...(this.throughputProviderField()),
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const content: string | undefined = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : content;
+
+    let parsed: { translation?: string };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const translation = parsed.translation?.trim();
+    if (!translation) {
+      throw new Error('AI could not translate the sentence.');
+    }
+    return translation;
+  }
+
+  /**
    * Generate vocabulary exercises (3 per word) for words from an AI-generated story:
    * multiple-choice translation, fill-in-the-blank (word in a sentence), and whole-sentence translation.
    * Words are processed in chunks to keep each AI response a manageable size.

@@ -598,8 +598,14 @@ export class PracticeWordComponent {
       const result = await this.translationService.translateSentence(sentence);
       this.translation.set(result);
     } catch {
-      // LibreTranslate not running — silently ignore
-      this.translation.set(null);
+      // LibreTranslate / local translation service unavailable — fall back to AI translation
+      try {
+        const language = this.settingsService.translationLanguage();
+        const aiResult = await this.aiService.translateToNative(sentence, language);
+        this.translation.set(aiResult);
+      } catch {
+        this.translation.set(null);
+      }
     } finally {
       this.translationLoading.set(false);
     }

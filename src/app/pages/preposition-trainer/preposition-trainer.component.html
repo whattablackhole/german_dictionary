@@ -213,6 +213,12 @@
                 <button mat-raised-button color="primary" (click)="completeAiExercise()">
                   Next exercise
                 </button>
+                @if (aiPrefetching()) {
+                  <span class="ai-prefetching">
+                    <mat-spinner diameter="16"></mat-spinner>
+                    Preparing next exercise...
+                  </span>
+                }
               </div>
             }
           </mat-card-content>

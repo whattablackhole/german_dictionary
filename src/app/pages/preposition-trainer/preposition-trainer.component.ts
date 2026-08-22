@@ -31,6 +31,17 @@ interface SessionCard {
   pairId?: string;
 }
 
+interface AiExerciseData {
+  sentenceWithBlank: string;
+  correctPreposition: string;
+  correctCase: GermanCase;
+  hintEn: string;
+  hintRu: string;
+  explanation: string;
+  options: string[];
+  title: string;
+}
+
 @Component({
   selector: 'app-preposition-trainer',
   imports: [
@@ -64,11 +75,20 @@ export class PrepositionTrainerComponent {
   readonly selectedLevel = signal<DifficultyLevel | ''>('');
 
   // AI exercise state
-  readonly aiExercise = signal<{ sentenceWithBlank: string; correctPreposition: string; correctCase: GermanCase; hintEn: string; hintRu: string; explanation: string; options: string[] } | null>(null);
+  readonly aiExercise = signal<AiExerciseData | null>(null);
   readonly aiLoading = signal(false);
   readonly aiError = signal('');
   readonly aiInput = signal('');
   readonly aiResult = signal<{ correct: boolean; message: string } | null>(null);
+
+  /** Queue of already-generated exercises, shown immediately on "Next". */
+  private aiQueue: AiExerciseData[] = [];
+  /** True while the next exercise is being generated in the background. */
+  readonly aiPrefetching = signal(false);
+  /** How many exercises to keep ready ahead of the current one. */
+  private readonly PREFETCH_TARGET = 2;
+  /** Incremented to invalidate stale async generation when leaving/re-entering AI mode. */
+  private aiGenToken = 0;
 
   readonly levels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
 
@@ -129,6 +149,11 @@ export class PrepositionTrainerComponent {
     this.sessionCards.set([]);
     this.aiResult.set(null);
     this.aiExercise.set(null);
+    // Invalidate any in-flight AI generation and clear the prefetch queue
+    this.aiGenToken++;
+    this.aiQueue = [];
+    this.aiPrefetching.set(false);
+    this.aiError.set('');
   }
 
   // ─────────────────────────────────────────────
@@ -242,27 +267,85 @@ export class PrepositionTrainerComponent {
     this.aiLoading.set(true);
     this.aiError.set('');
     this.aiResult.set(null);
+    this.aiQueue = [];
     this.aiExercise.set(null);
+    this.sessionType.set('ai');
+    const token = ++this.aiGenToken;
 
     try {
-      const rules = this.prepositionService.getAllRules();
-      const rule = rules[Math.floor(Math.random() * rules.length)];
-      const knownWords = this.wordService.getWords().slice(0, 60).map((w) => w.german);
+      // Generate the first exercise so the user can start immediately.
+      const first = await this.generateOne();
+      if (token !== this.aiGenToken) return; // user left AI mode meanwhile
+      this.aiQueue.push(first);
+      this.advanceAi();
 
-      const exercise = await this.aiService.generatePrepositionExercise(
-        rule.id,
-        rule.name,
-        rule.prepositions,
-        knownWords,
-        'A2'
-      );
-      this.aiExercise.set(exercise);
-      this.sessionTitle.set('AI Exercise: ' + rule.name);
-      this.sessionType.set('ai');
+      // Prefetch the next ones in the background while the user solves this one.
+      this.prefetchAi();
     } catch (err) {
-      this.aiError.set(err instanceof Error ? err.message : 'Failed to generate exercise.');
+      if (token === this.aiGenToken) {
+        this.aiError.set(
+          err instanceof Error ? err.message : 'Failed to generate exercise.'
+        );
+      }
     } finally {
-      this.aiLoading.set(false);
+      if (token === this.aiGenToken) {
+        this.aiLoading.set(false);
+      }
+    }
+  }
+
+  /** Generate a single AI preposition exercise (used for the first + prefetch). */
+  private async generateOne(): Promise<AiExerciseData> {
+    const rules = this.prepositionService.getAllRules();
+    const rule = rules[Math.floor(Math.random() * rules.length)];
+    const knownWords = this.wordService.getWords().slice(0, 60).map((w) => w.german);
+
+    const exercise = await this.aiService.generatePrepositionExercise(
+      rule.id,
+      rule.name,
+      rule.prepositions,
+      knownWords,
+      'A2'
+    );
+
+    return {
+      sentenceWithBlank: exercise.sentenceWithBlank,
+      correctPreposition: exercise.correctPreposition,
+      correctCase: exercise.correctCase,
+      hintEn: exercise.hintEn,
+      hintRu: exercise.hintRu,
+      explanation: exercise.explanation,
+      options: exercise.options,
+      title: 'AI Exercise: ' + rule.name,
+    };
+  }
+
+  /** Show the head of the queue as the current exercise (if any). */
+  private advanceAi(): void {
+    const next = this.aiQueue.shift();
+    if (next) {
+      this.aiExercise.set(next);
+      this.aiInput.set('');
+      this.aiResult.set(null);
+      this.aiError.set('');
+      this.sessionTitle.set(next.title);
+    }
+  }
+
+  /** Background refill: keep the queue topped up while the user is in AI mode. */
+  private async prefetchAi(): Promise<void> {
+    if (this.aiPrefetching() || this.mode() !== 'ai') return;
+    this.aiPrefetching.set(true);
+    try {
+      while (this.aiQueue.length < this.PREFETCH_TARGET && this.mode() === 'ai') {
+        try {
+          this.aiQueue.push(await this.generateOne());
+        } catch {
+          break; // stop prefetching on failure; next exercise will generate on demand
+        }
+      }
+    } finally {
+      this.aiPrefetching.set(false);
     }
   }
 
@@ -281,10 +364,15 @@ export class PrepositionTrainerComponent {
     });
   }
 
+  /** Move to the next exercise — served instantly from the prefetched queue. */
   completeAiExercise(): void {
-    this.aiExercise.set(null);
-    this.aiInput.set('');
-    this.aiResult.set(null);
+    if (this.aiQueue.length > 0) {
+      this.advanceAi();
+      // Refill the queue for the following ones.
+      this.prefetchAi();
+      return;
+    }
+    // Queue unexpectedly empty — generate on demand (rare, only if prefetch failed).
     this.startAiExercise();
   }
 
