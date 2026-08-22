@@ -88,6 +88,31 @@ export interface GeneratedDeclensionExercise {
   options: string[];
 }
 
+/**
+ * Raw declension exercise as returned by the AI. AI models sometimes rename or
+ * abbreviate fields (e.g. "sentenceWithBank" typo, "correct" instead of
+ * "correctAnswer", "case" instead of "caseReq"), so the parser tolerates aliases.
+ */
+interface RawDeclensionExercise {
+  sentenceWithBlank?: string;
+  sentenceWithBank?: string;
+  correctAnswer?: string;
+  correct?: string;
+  caseReq?: string;
+  case?: string;
+  genderLabel?: string;
+  gender?: string;
+  focusType?: string;
+  focus?: string;
+  baseForm?: string;
+  base?: string;
+  hintEn?: string;
+  hintRu?: string;
+  explanation?: string;
+  note?: string;
+  options?: string[] | string;
+}
+
 export interface GeneratedStoryExercise {
   /** The German target word this exercise trains */
   word: string;
@@ -1686,6 +1711,8 @@ Rules:
 - ${caseFilter}
 - ${themeInstruction}
 - Keep sentences concise (5-12 words) and natural.
+- CRITICAL: Use these EXACT field names — "sentenceWithBlank", "correctAnswer", "caseReq", "genderLabel", "focusType", "baseForm", "hintEn", "hintRu", "explanation", "note", "options". Do NOT rename, abbreviate or misspell them.
+- CRITICAL: Every "sentenceWithBlank" MUST contain the literal blank "___" replacing the target word(s). Never omit the German sentence.
 - The blank must be exactly one word or one phrase (for phrase exercises).
 - For article exercises: blank ONLY the article, not the noun after it.
 - For adjective exercises: blank the adjective WITH its ending (e.g. "großen" not just "en").
@@ -1729,7 +1756,7 @@ Example format:
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     const jsonText = jsonMatch ? jsonMatch[1] : text;
 
-    let parsed: GeneratedDeclensionExercise[] | { exercises: GeneratedDeclensionExercise[] };
+    let parsed: RawDeclensionExercise[] | { exercises: RawDeclensionExercise[] };
     try {
       parsed = JSON.parse(jsonText);
     } catch {
@@ -1738,7 +1765,7 @@ Example format:
 
     const exercises = Array.isArray(parsed)
       ? parsed
-      : (parsed as { exercises: GeneratedDeclensionExercise[] }).exercises ?? [];
+      : (parsed as { exercises: RawDeclensionExercise[] }).exercises ?? [];
 
     if (!Array.isArray(exercises) || exercises.length === 0) {
       throw new Error('AI could not generate exercises. Try again.');
@@ -1747,21 +1774,63 @@ Example format:
     const validCases = ['nominative', 'accusative', 'dative', 'genitive'];
     const validFocusTypes = ['article', 'adjective', 'noun', 'phrase'];
 
-    return exercises.slice(0, config.count).map((e) => ({
-      sentenceWithBlank: e.sentenceWithBlank ?? '',
-      correctAnswer: (e.correctAnswer ?? '').trim(),
-      caseReq: validCases.includes(e.caseReq ?? '') ? e.caseReq as GeneratedDeclensionExercise['caseReq'] : 'nominative',
-      genderLabel: e.genderLabel ?? '',
-      focusType: validFocusTypes.includes(e.focusType ?? '') ? e.focusType as GeneratedDeclensionExercise['focusType'] : 'article',
-      baseForm: e.baseForm?.trim(),
-      hintEn: e.hintEn ?? '',
-      hintRu: e.hintRu ?? '',
-      explanation: e.explanation ?? '',
-      note: e.note?.trim(),
-      options: Array.isArray(e.options) && e.options.length >= 2
-        ? e.options.map((o) => String(o).trim())
-        : [e.correctAnswer ?? ''],
-    }));
+    // Returns the first defined, non-empty value (tolerates renamed/abbreviated fields)
+    const first = (...values: (string | undefined)[]): string =>
+      values.find((v) => v !== undefined && String(v).trim().length > 0)?.trim() ?? '';
+
+    const normalized = exercises.slice(0, config.count).map(
+      (e): GeneratedDeclensionExercise | null => {
+        const sentence = first(e.sentenceWithBlank, e.sentenceWithBank);
+        const correctAnswer = first(e.correctAnswer, e.correct);
+        const caseRaw = first(e.caseReq, e.case);
+        const gender = first(e.genderLabel, e.gender);
+        const focusRaw = first(e.focusType, e.focus);
+        const baseForm = first(e.baseForm, e.base);
+
+        // Validate: must contain a German sentence with a literal blank and a correct answer
+        if (!sentence || !/_{3,}/.test(sentence) || !correctAnswer) {
+          return null;
+        }
+
+        const rawOptions = Array.isArray(e.options)
+          ? e.options.map((o) => String(o).trim()).filter((o) => o.length > 0)
+          : typeof e.options === 'string' && e.options.trim()
+            ? e.options.split(',').map((o) => o.trim()).filter((o) => o.length > 0)
+            : [];
+
+        // Ensure at least 2 options and that the correct answer is present
+        const options =
+          rawOptions.length >= 2
+            ? rawOptions.includes(correctAnswer)
+              ? rawOptions
+              : [...rawOptions, correctAnswer]
+            : [correctAnswer];
+
+        return {
+          sentenceWithBlank: sentence,
+          correctAnswer,
+          caseReq: validCases.includes(caseRaw)
+            ? caseRaw as GeneratedDeclensionExercise['caseReq']
+            : 'nominative',
+          genderLabel: gender,
+          focusType: validFocusTypes.includes(focusRaw)
+            ? focusRaw as GeneratedDeclensionExercise['focusType']
+            : 'article',
+          baseForm: baseForm || undefined,
+          hintEn: e.hintEn ?? '',
+          hintRu: e.hintRu ?? '',
+          explanation: e.explanation ?? '',
+          note: e.note?.trim() || undefined,
+          options,
+        };
+      }
+    );
+
+    const valid = normalized.filter((e): e is GeneratedDeclensionExercise => e !== null);
+    if (valid.length === 0) {
+      throw new Error('AI returned malformed exercises. Please try again.');
+    }
+    return valid;
   }
 
   /**
