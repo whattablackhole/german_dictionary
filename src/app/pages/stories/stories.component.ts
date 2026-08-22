@@ -23,11 +23,20 @@ import { SpeechService } from '../../services/speech.service';
 import { TtsCacheService } from '../../services/tts-cache.service';
 import { WordService } from '../../services/word.service';
 import { DifficultyLevel, PartOfSpeech } from '../../models/word';
+import { GrammarNotesService } from '../../services/grammar-notes.service';
+import { SentenceNotesService } from '../../services/sentence-notes.service';
 
 interface WordToken {
   text: string;
   start: number;
   end: number;
+}
+
+interface SentenceToken {
+  text: string;
+  start: number;
+  end: number;
+  wordIndices: number[];
 }
 
 interface PopupPosition {
@@ -140,6 +149,48 @@ export class StoriesComponent implements OnDestroy {
           .join(' ')
       )
       .filter((w) => w.length > 0);
+  });
+
+  // Sentence Notes Mode
+  readonly sentenceNotesMode = signal(false);
+  readonly selectedSentenceIndex = signal<number | null>(null);
+  readonly sentenceNotePopupVisible = signal(false);
+  readonly sentenceNotePopupPosition = signal<PopupPosition>({ x: 0, y: 0 });
+  readonly sentenceNoteText = signal('');
+  readonly sentenceNoteLoading = signal(false);
+  readonly sentenceNoteError = signal('');
+
+  readonly sentenceTokens = computed<SentenceToken[]>(() => {
+    const story = this.selectedStory();
+    if (!story) return [];
+
+    const text = story.german;
+    const tokens: SentenceToken[] = [];
+    // Split by sentence-ending punctuation followed by space or end of string
+    const regex = /[^.!?]+[.!?]+(?:\s+|$)/g;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      const sentenceText = match[0].trim();
+      if (sentenceText.length === 0) continue;
+
+      // Find which word tokens belong to this sentence
+      const wordTokens = this.wordTokens();
+      const wordIndices: number[] = [];
+      for (let i = 0; i < wordTokens.length; i++) {
+        const wt = wordTokens[i];
+        if (wt.start >= match.index && wt.end <= match.index + match[0].length) {
+          wordIndices.push(i);
+        }
+      }
+
+      tokens.push({
+        text: sentenceText,
+        start: match.index,
+        end: match.index + match[0].length,
+        wordIndices,
+      });
+    }
+    return tokens;
   });
 
   // Computed
@@ -359,6 +410,8 @@ export class StoriesComponent implements OnDestroy {
     private readonly wordService: WordService,
     private readonly ttsCacheService: TtsCacheService,
     private readonly storyExerciseService: StoryExerciseService,
+    private readonly grammarNotesService: GrammarNotesService,
+    private readonly sentenceNotesService: SentenceNotesService,
     private readonly router: Router
   ) {
     this.boundarySub = this.speechService.onBoundary.subscribe((b) => {
@@ -441,9 +494,12 @@ export class StoriesComponent implements OnDestroy {
     this.audioDuration.set(0);
     this.audioCurrentTime.set(0);
     this.closeWordPopup();
+    this.closeSentenceNotePopup();
     this.exerciseSelectionMode.set(false);
     this.exerciseSelectedGroups.set([]);
     this.exerciseError.set('');
+    this.sentenceNotesMode.set(false);
+    this.selectedSentenceIndex.set(null);
   }
 
   async playStory(): Promise<void> {
@@ -915,6 +971,140 @@ export class StoriesComponent implements OnDestroy {
       .replace(/^[.,!?;:()"'\u201C\u201D\u2018\u2019]+/, '')
       .replace(/[.,!?;:()"'\u201C\u201D\u2018\u2019]+$/, '')
       .trim();
+  }
+
+  // ── Sentence Notes Mode ──
+
+  /** Toggles the sentence notes mode on/off. */
+  toggleSentenceNotesMode(): void {
+    const enabled = !this.sentenceNotesMode();
+    this.sentenceNotesMode.set(enabled);
+    if (!enabled) {
+      this.selectedSentenceIndex.set(null);
+      this.closeSentenceNotePopup();
+    }
+  }
+
+  /** Checks if a sentence is currently selected. */
+  isSentenceSelected(index: number): boolean {
+    return this.selectedSentenceIndex() === index;
+  }
+
+  /** Handles click on a sentence span. */
+  onSentenceClick(sentenceIndex: number, event: MouseEvent): void {
+    if (!this.sentenceNotesMode()) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Toggle selection
+    if (this.selectedSentenceIndex() === sentenceIndex) {
+      this.selectedSentenceIndex.set(null);
+      this.closeSentenceNotePopup();
+    } else {
+      this.selectedSentenceIndex.set(sentenceIndex);
+      this.openSentenceNotePopup(sentenceIndex, event);
+    }
+  }
+
+  /** Opens the sentence note popup for the given sentence. */
+  private openSentenceNotePopup(sentenceIndex: number, event: MouseEvent): void {
+    const sentenceTokens = this.sentenceTokens();
+    const sentence = sentenceTokens[sentenceIndex];
+    if (!sentence) return;
+
+    const story = this.selectedStory();
+    if (!story) return;
+
+    // Load existing note from service
+    const note = this.sentenceNotesService.getNote(story.id, sentence.text);
+    this.sentenceNoteText.set(note ?? '');
+
+    // Position popup near the click
+    this.sentenceNotePopupPosition.set({ x: event.clientX, y: event.clientY });
+    this.sentenceNotePopupVisible.set(true);
+    this.sentenceNoteError.set('');
+  }
+
+  /** Closes the sentence note popup. */
+  closeSentenceNotePopup(): void {
+    this.sentenceNotePopupVisible.set(false);
+    this.sentenceNoteText.set('');
+    this.sentenceNoteLoading.set(false);
+    this.sentenceNoteError.set('');
+  }
+
+  /** Saves the note for the currently selected sentence. */
+  async saveSentenceNote(): Promise<void> {
+    const sentenceIndex = this.selectedSentenceIndex();
+    if (sentenceIndex === null) return;
+
+    const sentenceTokens = this.sentenceTokens();
+    const sentence = sentenceTokens[sentenceIndex];
+    if (!sentence) return;
+
+    const story = this.selectedStory();
+    if (!story) return;
+
+    const noteText = this.sentenceNoteText().trim();
+
+    this.sentenceNoteLoading.set(true);
+    this.sentenceNoteError.set('');
+
+    try {
+      this.sentenceNotesService.setNote(story.id, sentence.text, noteText);
+      this.closeSentenceNotePopup();
+      this.selectedSentenceIndex.set(null);
+    } catch (err) {
+      this.sentenceNoteError.set('Failed to save note.');
+    } finally {
+      this.sentenceNoteLoading.set(false);
+    }
+  }
+
+  /** Deletes the note for the currently selected sentence. */
+  async deleteSentenceNote(): Promise<void> {
+    const sentenceIndex = this.selectedSentenceIndex();
+    if (sentenceIndex === null) return;
+
+    const sentenceTokens = this.sentenceTokens();
+    const sentence = sentenceTokens[sentenceIndex];
+    if (!sentence) return;
+
+    const story = this.selectedStory();
+    if (!story) return;
+
+    try {
+      this.sentenceNotesService.deleteNote(story.id, sentence.text);
+      this.sentenceNoteText.set('');
+    } catch (err) {
+      this.sentenceNoteError.set('Failed to delete note.');
+    }
+  }
+
+  /** Checks if a sentence has a saved note. */
+  hasSentenceNote(sentenceIndex: number): boolean {
+    const sentenceTokens = this.sentenceTokens();
+    const sentence = sentenceTokens[sentenceIndex];
+    if (!sentence) return false;
+
+    const story = this.selectedStory();
+    if (!story) return false;
+
+    return this.sentenceNotesService.hasNote(story.id, sentence.text);
+  }
+
+  /** Gets the note text for a sentence (for display). */
+  getSentenceNoteText(sentenceIndex: number): string {
+    const sentenceTokens = this.sentenceTokens();
+    const sentence = sentenceTokens[sentenceIndex];
+    if (!sentence) return '';
+
+    const story = this.selectedStory();
+    if (!story) return '';
+
+    const note = this.sentenceNotesService.getNote(story.id, sentence.text);
+    return note ?? '';
   }
 
   private shuffleArray<T>(array: T[]): T[] {

@@ -8,7 +8,7 @@ import { CorrectedCaption } from '../models/captions';
 
 export interface BackupData {
   app: 'GermanDictionary';
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   exportedAt: string;
   data: Record<string, string>;
   /** Optional: images stored in IndexedDB */
@@ -49,6 +49,8 @@ const BACKUP_KEYS: string[] = [
   'german-dictionary-throughput-routing',
 ];
 
+const SENTENCE_NOTES_PREFIX = 'sentence-note-';
+
 @Injectable({ providedIn: 'root' })
 export class BackupService {
   constructor(
@@ -70,6 +72,17 @@ export class BackupService {
       }
     }
 
+    // Include sentence notes from localStorage (dynamic keys)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(SENTENCE_NOTES_PREFIX)) {
+        const value = localStorage.getItem(key);
+        if (value !== null) {
+          data[key] = value;
+        }
+      }
+    }
+
     // Include images from IndexedDB
     const images = await this.imageCache.getAllEntries();
     // Include sentences from IndexedDB
@@ -81,7 +94,7 @@ export class BackupService {
 
     const backup: BackupData = {
       app: 'GermanDictionary',
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       data,
       images: images.length > 0 ? images : undefined,
@@ -131,7 +144,7 @@ export class BackupService {
             });
             return;
           }
-          if (parsed.version !== 1 && parsed.version !== 2) {
+          if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) {
             resolve({
               ok: false,
               error: `Unsupported backup version: ${parsed.version}`,
