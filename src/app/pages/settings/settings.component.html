@@ -157,15 +157,82 @@
     }
     <mat-form-field appearance="outline" class="tts-select">
       <mat-label>Text model</mat-label>
-      <mat-select
-        [value]="settingsService.textModel()"
-        (valueChange)="settingsService.setTextModel($event)"
-      >
-        @for (model of dynamicTextModels(); track model.id) {
-          <mat-option [value]="model.id">{{ model.label }} — {{ model.description }}</mat-option>
-        }
-      </mat-select>
+      <input
+        matInput
+        [matAutocomplete]="textModelAuto"
+        [ngModel]="textModelSearchInput()"
+        (ngModelChange)="textModelSearchInput.set($event)"
+        [disabled]="modelsLoading()"
+        placeholder="Search models by name..."
+      />
+      <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
+    <mat-autocomplete
+      #textModelAuto="matAutocomplete"
+      (optionSelected)="onTextModelSelected($event.option.value)"
+      class="text-model-autocomplete"
+    >
+      @for (model of filteredTextModels(); track model.id) {
+        <mat-option [value]="model.id">
+          <span class="model-option-label">{{ model.label }}</span>
+          @if (model.free) {
+            <span class="model-option-free">Free</span>
+          }
+          @if (model.contextLength; as ctx) {
+            <span class="model-option-ctx">{{ ctx / 1000 }}K</span>
+          }
+          @if (model.description) {
+            <span class="model-option-desc"> — {{ model.description }}</span>
+          }
+        </mat-option>
+      }
+      @if (filteredTextModels().length === 0 && textModelSearchInput().trim()) {
+        <mat-option disabled>No models match "{{ textModelSearchInput() }}"</mat-option>
+      }
+    </mat-autocomplete>
+
+    <!-- Filters -->
+    <div class="model-filters">
+      <div class="model-filter-row">
+        <mat-slide-toggle
+          [checked]="textModelFreeOnly()"
+          (toggleChange)="textModelFreeOnly.set(!textModelFreeOnly())"
+        >
+          Free models only
+        </mat-slide-toggle>
+
+        <mat-form-field appearance="outline" class="model-sort-select">
+          <mat-label>Sort by</mat-label>
+          <mat-select
+            [value]="textModelSort()"
+            (valueChange)="textModelSort.set($event)"
+          >
+            @for (opt of sortOptions; track opt.key) {
+              <mat-option [value]="opt.key">{{ opt.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <div class="model-filter-row">
+        <label class="model-filter-label">Context size:</label>
+        <div class="model-size-chips">
+          @for (opt of contextFilterOptions; track opt.key) {
+            <button
+              class="model-size-chip"
+              [class.selected]="textModelContextFilter() === opt.key"
+              (click)="textModelContextFilter.set(opt.key)"
+            >
+              {{ opt.label }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <p class="model-result-count">
+        {{ filteredTextModels().length }} model{{ filteredTextModels().length === 1 ? '' : 's' }} shown
+      </p>
+    </div>
     <div class="routing-toggle">
       <mat-slide-toggle
         [checked]="settingsService.throughputRouting()"

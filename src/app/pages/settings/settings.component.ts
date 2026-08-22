@@ -51,6 +51,90 @@ export class SettingsComponent implements OnInit {
     return this.presetTextModels;
   });
 
+  /** Search input for the text model autocomplete */
+  readonly textModelSearchInput = signal('');
+
+  /** Filter: only free models */
+  readonly textModelFreeOnly = signal(false);
+
+  /** Filter: minimum context window size bucket */
+  readonly textModelContextFilter = signal<'any' | 'small' | 'medium' | 'large' | 'huge'>('any');
+
+  /** Sort order for the text model list */
+  readonly textModelSort = signal<'default' | 'name' | 'context'>('default');
+
+  readonly contextFilterOptions: { key: 'any' | 'small' | 'medium' | 'large' | 'huge'; label: string }[] = [
+    { key: 'any', label: 'Any size' },
+    { key: 'small', label: '≤ 8K' },
+    { key: 'medium', label: '8K–32K' },
+    { key: 'large', label: '32K–128K' },
+    { key: 'huge', label: '> 128K' },
+  ];
+
+  readonly sortOptions: { key: 'default' | 'name' | 'context'; label: string }[] = [
+    { key: 'default', label: 'Default (free first)' },
+    { key: 'name', label: 'Name A–Z' },
+    { key: 'context', label: 'Largest context' },
+  ];
+
+  /** Returns true when a model matches the active context size bucket. */
+  private matchesContextBucket(
+    model: TextModelOption,
+    bucket: 'any' | 'small' | 'medium' | 'large' | 'huge'
+  ): boolean {
+    const c = model.contextLength;
+    switch (bucket) {
+      case 'small': return c !== undefined && c <= 8_000;
+      case 'medium': return c !== undefined && c > 8_000 && c <= 32_000;
+      case 'large': return c !== undefined && c > 32_000 && c <= 128_000;
+      case 'huge': return c !== undefined && c > 128_000;
+      default: return true;
+    }
+  }
+
+  /** Text models filtered by search query + filters, then sorted. */
+  readonly filteredTextModels = computed<TextModelOption[]>(() => {
+    const query = this.textModelSearchInput().trim().toLowerCase();
+    const freeOnly = this.textModelFreeOnly();
+    const bucket = this.textModelContextFilter();
+    const sort = this.textModelSort();
+
+    let models = this.dynamicTextModels().filter((m) => {
+      if (freeOnly && !m.free) return false;
+      if (bucket !== 'any' && !this.matchesContextBucket(m, bucket)) return false;
+      if (query) {
+        return (
+          m.label.toLowerCase().includes(query) ||
+          m.id.toLowerCase().includes(query) ||
+          (m.description ?? '').toLowerCase().includes(query)
+        );
+      }
+      return true;
+    });
+
+    if (sort === 'name') {
+      models = [...models].sort((a, b) => a.label.localeCompare(b.label));
+    } else if (sort === 'context') {
+      models = [...models].sort((a, b) => (b.contextLength ?? 0) - (a.contextLength ?? 0));
+    }
+    // 'default' keeps the order from dynamicTextModels (already free-first, by label)
+
+    return models;
+  });
+
+  /** Label of the currently selected text model, shown in the autocomplete input. */
+  readonly selectedTextModelLabel = computed<string>(() => {
+    const current = this.settingsService.textModel();
+    const found = this.dynamicTextModels().find((m) => m.id === current);
+    return found ? found.label : current;
+  });
+
+  onTextModelSelected(id: string): void {
+    this.settingsService.setTextModel(id);
+    const found = this.dynamicTextModels().find((m) => m.id === id);
+    this.textModelSearchInput.set(found ? found.label : id);
+  }
+
   readonly currentModelVoices = computed(() => {
     const model = this.ttsModels.find(
       (m) => m.id === this.settingsService.ttsModel()
@@ -109,6 +193,7 @@ export class SettingsComponent implements OnInit {
     this.translationApiUrlInput.set(this.settingsService.translationApiUrl());
     this.apiKeyInput.set(this.aiService.getApiKey());
     this.apiKeySaved.set(this.aiService.hasApiKey());
+    this.textModelSearchInput.set(this.selectedTextModelLabel());
   }
 
   saveApiKey(): void {

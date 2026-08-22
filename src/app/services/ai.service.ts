@@ -145,6 +145,10 @@ export interface TextModelOption {
   id: string;
   label: string;
   description: string;
+  /** Context window size in tokens (from OpenRouter `context_length`). */
+  contextLength?: number;
+  /** Whether the model is a free tier model (id contains `:free`). */
+  free?: boolean;
 }
 
 const API_KEY_STORAGE = 'german-dictionary-openrouter-key';
@@ -236,6 +240,11 @@ export class AiService {
         description: model.description
           ? model.description.replace(/<[^>]*>/g, '').substring(0, 120)
           : (model.pricing?.prompt ? `$${model.pricing.prompt}/tok prompt` : ''),
+        contextLength:
+          typeof model.context_length === 'number' && model.context_length > 0
+            ? model.context_length
+            : undefined,
+        free: id.includes(':free'),
       });
     }
 
