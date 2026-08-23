@@ -43,6 +43,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'stories/:storyId',
+    loadComponent: () =>
+      import('./pages/stories/stories.component').then(
+        (m) => m.StoriesComponent
+      ),
+  },
+  {
     path: 'stories',
     loadComponent: () =>
       import('./pages/stories/stories.component').then(

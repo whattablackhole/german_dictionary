@@ -1,7 +1,7 @@
-import { Component, computed, signal, OnDestroy } from '@angular/core';
+import { Component, computed, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -67,7 +67,7 @@ const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
   templateUrl: './stories.component.html',
   styleUrl: './stories.component.scss',
 })
-export class StoriesComponent implements OnDestroy {
+export class StoriesComponent implements OnInit, OnDestroy {
   readonly levels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
   readonly wordTypes: PartOfSpeech[] = [
     'noun', 'verb', 'adjective', 'adverb', 'pronoun',
@@ -81,6 +81,17 @@ export class StoriesComponent implements OnDestroy {
     'Verbs with fixed prepositions', 'Subordinating conjunctions', 'Word order (subordinate clauses)',
     'Relative clauses', 'Comparative and superlative', 'Adjective endings',
     'Negation (nicht/kein)', 'Imperative', 'Passive voice',
+    'Receptive modal particles (doch/ja/denn)', 'Infinitives with/without zu', 'Verb + infinitive',
+    'Participle clauses', 'Subjunctive II (Konjunktiv II)', 'Subjunctive I (Konjunktiv I)',
+    'Conditional sentences (wenn/würde)', 'Nouns with dative/accusative verbs (sie/ihn)',
+    'Possessive pronouns (mein/dein/sein)', 'Demonstrative pronouns (dieser/jener)',
+    'Interrogative pronouns (wer/was/welch)',
+    'Nominative case', 'Possessive articles', 'Noun plural forms',
+    'Compound nouns', 'Compound verbs', 'Cognates',
+    'Word formation (prefixes/suffixes)', 'Diminuitive (chen/lein)',
+    'Adjectival nouns', 'Adverbs of time/manner/place', 'Prepositional adverbs (dafür/damit)',
+    'Interrogative particles (denn/nur/etwa)', 'Collocations', 'Idioms and expressions',
+    'Intensifiers and degree adverbs', 'Colloquial structures', 'Formal writing structures',
   ];
   readonly speeds = PLAYBACK_SPEEDS;
 
@@ -403,6 +414,7 @@ export class StoriesComponent implements OnDestroy {
 
   private boundarySub: Subscription | null = null;
   private endSub: Subscription | null = null;
+  private routeSub: Subscription | null = null;
 
   constructor(
     private readonly storyService: StoryService,
@@ -415,8 +427,11 @@ export class StoriesComponent implements OnDestroy {
     private readonly grammarNotesService: GrammarNotesService,
     private readonly sentenceNotesService: SentenceNotesService,
     private readonly historyService: StoryExerciseHistoryService,
-    private readonly router: Router
-  ) {
+    private readonly router: Router,
+    private readonly route: ActivatedRoute
+  ) {}
+
+  ngOnInit(): void {
     this.boundarySub = this.speechService.onBoundary.subscribe((b) => {
       this.currentCharIndex.set(b.charIndex);
     });
@@ -424,11 +439,18 @@ export class StoriesComponent implements OnDestroy {
       this.isPlaying.set(false);
       this.currentCharIndex.set(null);
     });
+    this.routeSub = this.route.paramMap.subscribe((params) => {
+      const id = params.get('storyId');
+      if (id) {
+        this.selectStory(id);
+      }
+    });
   }
 
   ngOnDestroy(): void {
     this.boundarySub?.unsubscribe();
     this.endSub?.unsubscribe();
+    this.routeSub?.unsubscribe();
     this.stopPlayback();
   }
 
@@ -480,6 +502,7 @@ export class StoriesComponent implements OnDestroy {
       });
 
       this.selectedStoryId.set(story.id);
+      this.router.navigate([`/stories/${story.id}`], { replaceUrl: true });
     } catch (err) {
       this.errorMessage.set(
         err instanceof Error ? err.message : 'Failed to generate story.'
@@ -503,6 +526,12 @@ export class StoriesComponent implements OnDestroy {
     this.exerciseError.set('');
     this.sentenceNotesMode.set(false);
     this.selectedSentenceIndex.set(null);
+
+    // Keep the story id in the route so the story reopens on refresh.
+    const targetUrl = `/stories/${id}`;
+    if (!this.router.url.startsWith(targetUrl)) {
+      this.router.navigate([targetUrl], { replaceUrl: true });
+    }
   }
 
   async playStory(): Promise<void> {
@@ -727,6 +756,8 @@ export class StoriesComponent implements OnDestroy {
     this.clearSessionHistory(id);
     if (this.selectedStoryId() === id) {
       this.selectedStoryId.set(null);
+      // Remove the story id from the route when the selected story is deleted.
+      this.router.navigate(['/stories'], { replaceUrl: true });
     }
   }
 
