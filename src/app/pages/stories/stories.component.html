@@ -231,42 +231,42 @@
         }
 
         <div class="story-text-card">
-          <div class="story-text" #storyText
-            (contextmenu)="onContextMenu($event)"
-          >
-            @if (sentenceNotesMode()) {
-              <!-- Sentence-level display for notes mode -->
-              @for (sentence of sentenceTokens(); track sentence.start; let si = $index) {
-                <span
-                  class="sentence-span"
-                  [class.sentence-selected]="isSentenceSelected(si)"
-                  [class.sentence-has-note]="hasSentenceNote(si)"
-                  (click)="onSentenceClick(si, $event)"
-                >{{ sentence.text }} </span>
+            <div class="story-text" #storyText
+              (contextmenu)="onContextMenu($event)"
+            >
+              @if (sentenceNotesMode()) {
+                <!-- Sentence-level display for notes mode -->
+                @for (sentence of sentenceTokens(); track sentence.start; let si = $index) {
+                  <span
+                    class="sentence-span"
+                    [class.sentence-selected]="isSentenceSelected(si)"
+                    [class.sentence-has-note]="hasSentenceNote(si)"
+                    (click)="onSentenceClick(si, $event)"
+                  >{{ sentence.text }} </span>
+                }
+              } @else {
+                <!-- Word-level display for other modes -->
+                @for (token of wordTokens(); track token.start; let i = $index) {
+                  <span
+                    class="word-span"
+                    [class.word-highlight]="
+                      currentCharIndex() !== null &&
+                      currentCharIndex()! >= token.start &&
+                      currentCharIndex()! < token.end
+                    "
+                    [class.word-selected]="wordLookupEnabled() && isWordSelected(i)"
+                    [class.word-lookup-hover]="wordLookupEnabled()"
+                    [class.word-exercise-selected]="exerciseSelectionMode() && isExerciseWordSelected(i)"
+                    (click)="onWordClick(token.text, i, $event)"
+                    (contextmenu)="onWordRightClick(token.text, $event)"
+                  >{{ token.text }} </span>
+                }
               }
-            } @else {
-              <!-- Word-level display for other modes -->
-              @for (token of wordTokens(); track token.start; let i = $index) {
-                <span
-                  class="word-span"
-                  [class.word-highlight]="
-                    currentCharIndex() !== null &&
-                    currentCharIndex()! >= token.start &&
-                    currentCharIndex()! < token.end
-                  "
-                  [class.word-selected]="wordLookupEnabled() && isWordSelected(i)"
-                  [class.word-lookup-hover]="wordLookupEnabled()"
-                  [class.word-exercise-selected]="exerciseSelectionMode() && isExerciseWordSelected(i)"
-                  (click)="onWordClick(token.text, i, $event)"
-                  (contextmenu)="onWordRightClick(token.text, $event)"
-                >{{ token.text }} </span>
-              }
-            }
+            </div>
           </div>
-        </div>
 
-        <!-- Right-click Context Menu -->
-        @if (contextMenuVisible()) {
+          <!-- Right-click Context Menu -->
+          @if (contextMenuVisible()) {
           <div class="context-menu-overlay" (click)="closeContextMenu()" (contextmenu)="closeContextMenu(); $event.preventDefault()"></div>
           <div
             class="context-menu"
@@ -600,6 +600,47 @@
             <p>{{ story.translationRu }}</p>
           </mat-expansion-panel>
         </mat-accordion>
+
+        <!-- Exercise History (below translations) -->
+        <section class="exercise-history-section">
+          <h3 class="history-title">Exercise History</h3>
+          @if (exerciseHistory().length === 0) {
+            <p class="history-empty">
+              No exercise sessions yet. Select words and generate exercises to start practicing.
+            </p>
+          } @else {
+            <div class="history-list">
+              @for (entry of exerciseHistory(); track entry.id) {
+                <div class="history-entry">
+                  <div class="history-entry-top">
+                    <span class="history-score" [class.history-good]="entry.scorePercent >= 80">
+                      {{ entry.correctCount }}/{{ entry.totalCount }}
+                    </span>
+                    <span class="history-percent">{{ entry.scorePercent }}%</span>
+                    <span class="history-date">{{ formatSessionDate(entry.completedAt) }}</span>
+                  </div>
+                  <div class="history-entry-actions">
+                    <button
+                      class="history-replay-btn"
+                      (click)="replaySession(entry.id)"
+                      title="Replay this session"
+                    >
+                      <mat-icon>replay</mat-icon>
+                      Replay
+                    </button>
+                    <button
+                      class="history-delete-btn"
+                      (click)="deleteSessionEntry(entry.id)"
+                      title="Delete this session"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </section>
 
         <!-- Sentence Note Popup -->
         @if (sentenceNotePopupVisible() && sentenceNotesMode()) {

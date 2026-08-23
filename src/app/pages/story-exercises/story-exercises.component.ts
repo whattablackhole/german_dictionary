@@ -6,9 +6,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { StoryExerciseService } from '../../services/story-exercise.service';
+import { StoryExerciseHistoryService } from '../../services/story-exercise-history.service';
 import { AiService, TranslationResult } from '../../services/ai.service';
 import { SpeechService } from '../../services/speech.service';
 import { StoryExercise, StoryExerciseType } from '../../models/story-exercise';
+import { StoryExerciseResult } from '../../models/story-exercise-history';
 
 interface SessionItem {
   exercise: StoryExercise;
@@ -17,6 +19,8 @@ interface SessionItem {
   correct: boolean;
   feedback: string;
   translation: TranslationResult | null;
+  /** The user's typed answer for cloze / sentence questions. */
+  userAnswer: string;
 }
 
 @Component({
@@ -61,6 +65,7 @@ export class StoryExercisesComponent implements OnInit {
 
   constructor(
     private readonly storyExerciseService: StoryExerciseService,
+    private readonly historyService: StoryExerciseHistoryService,
     private readonly aiService: AiService,
     private readonly speechService: SpeechService,
     private readonly router: Router
@@ -83,6 +88,7 @@ export class StoryExercisesComponent implements OnInit {
         correct: false,
         feedback: '',
         translation: null,
+        userAnswer: '',
       }))
     );
     this.currentIndex.set(0);
@@ -165,6 +171,7 @@ export class StoryExercisesComponent implements OnInit {
     const item = this.currentItem();
     if (!item || item.answered || item.exercise.type !== 'mc') return;
     const correct = option === item.exercise.mcCorrect;
+    item.selectedOption = option;
     this.answerItem(
       item,
       correct,
@@ -181,6 +188,7 @@ export class StoryExercisesComponent implements OnInit {
     if (!answer) return;
     const correct =
       answer.toLowerCase() === this.expectedClozeAnswer(item.exercise).toLowerCase();
+    item.userAnswer = answer;
     this.answerItem(
       item,
       correct,
@@ -199,6 +207,7 @@ export class StoryExercisesComponent implements OnInit {
     const answer = this.userInput().trim();
     if (!answer) return;
 
+    item.userAnswer = answer;
     this.verifying.set(true);
     this.submitError.set('');
     try {
@@ -251,6 +260,7 @@ export class StoryExercisesComponent implements OnInit {
     if (this.currentIndex() + 1 >= this.session().length) {
       this.sessionActive.set(false);
       this.sessionFinished.set(true);
+      this.saveHistory();
       return;
     }
     this.currentIndex.update((i) => i + 1);
@@ -265,6 +275,7 @@ export class StoryExercisesComponent implements OnInit {
         correct: false,
         feedback: '',
         translation: null,
+        userAnswer: '',
       }))
     );
     this.currentIndex.set(0);
@@ -275,12 +286,39 @@ export class StoryExercisesComponent implements OnInit {
   }
 
   quitSession(): void {
+    this.saveHistory();
     this.backToStories();
   }
 
   backToStories(): void {
     this.storyExerciseService.clear();
     this.router.navigate(['/stories']);
+  }
+
+  /** Persists the current session (completed or quit) to exercise history.
+   *  Sessions with no answered questions are skipped so empty runs don't spam history. */
+  private saveHistory(): void {
+    const story = this.storyExerciseService.story();
+    if (!story) return;
+
+    const results: StoryExerciseResult[] = this.session().map((it) => ({
+      exerciseId: it.exercise.id,
+      answered: it.answered,
+      correct: it.correct,
+      feedback: it.feedback,
+      selectedOption: it.selectedOption,
+      userInput: it.userAnswer,
+      translationScore: it.translation?.score ?? null,
+      translationCorrected: it.translation?.correctedText ?? null,
+    }));
+
+    if (results.every((r) => !r.answered)) return;
+
+    this.historyService.addSession(
+      story,
+      this.session().map((it) => it.exercise),
+      results
+    );
   }
 
   getErrorText(

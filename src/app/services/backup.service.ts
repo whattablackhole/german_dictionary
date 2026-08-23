@@ -27,6 +27,7 @@ const BACKUP_KEYS: string[] = [
   'german-dictionary-word-exercises',
   'german-dictionary-stories',
   'german-dictionary-grammar-notes',
+  'german-dictionary-story-exercise-history',
   'german-dictionary-custom-domains',
   'german-dictionary-translation-language',
   'german-dictionary-show-article-practice',

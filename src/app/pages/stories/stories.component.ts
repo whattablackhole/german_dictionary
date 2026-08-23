@@ -25,6 +25,8 @@ import { WordService } from '../../services/word.service';
 import { DifficultyLevel, PartOfSpeech } from '../../models/word';
 import { GrammarNotesService } from '../../services/grammar-notes.service';
 import { SentenceNotesService } from '../../services/sentence-notes.service';
+import { StoryExerciseHistoryService } from '../../services/story-exercise-history.service';
+import { StoryExerciseHistoryEntry } from '../../models/story-exercise-history';
 
 interface WordToken {
   text: string;
@@ -412,6 +414,7 @@ export class StoriesComponent implements OnDestroy {
     private readonly storyExerciseService: StoryExerciseService,
     private readonly grammarNotesService: GrammarNotesService,
     private readonly sentenceNotesService: SentenceNotesService,
+    private readonly historyService: StoryExerciseHistoryService,
     private readonly router: Router
   ) {
     this.boundarySub = this.speechService.onBoundary.subscribe((b) => {
@@ -720,6 +723,8 @@ export class StoriesComponent implements OnDestroy {
         voice: this.settingsService.ttsVoice(),
       });
     }
+    // Drop any saved exercise sessions tied to this story.
+    this.clearSessionHistory(id);
     if (this.selectedStoryId() === id) {
       this.selectedStoryId.set(null);
     }
@@ -1165,6 +1170,63 @@ export class StoriesComponent implements OnDestroy {
     } finally {
       this.exerciseGenerating.set(false);
     }
+  }
+
+  // ── Exercise history & replay ──
+
+  /** Completed/quit exercise sessions for the currently selected story, newest first. */
+  readonly exerciseHistory = computed<StoryExerciseHistoryEntry[]>(() => {
+    const id = this.selectedStoryId();
+    if (!id) return [];
+    return this.historyService.getForStory(id);
+  });
+
+  /** Computes a display date for a history entry. */
+  formatSessionDate(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }) + ' ' + d.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  /** Loads a saved session into the story exercise service and replays it. */
+  replaySession(entryId: string): void {
+    const entry = this.historyService.getEntryById(entryId);
+    if (!entry || entry.exercises.length === 0) return;
+
+    const story = this.storyService.getStoryById(entry.storyId) ?? {
+      id: entry.storyId,
+      title: entry.storyTitle,
+      german: '',
+      translationEn: '',
+      translationRu: '',
+      level: entry.level,
+      domain: '',
+      grammarTopics: [],
+      wordCount: entry.exercises.length,
+      createdAt: entry.completedAt,
+    };
+
+    this.stopPlayback();
+    this.closeWordPopup();
+    this.closeSentenceNotePopup();
+    this.storyExerciseService.setSession(story, this.shuffleArray(entry.exercises));
+    this.router.navigate(['/stories-exercises']);
+  }
+
+  /** Deletes a single history entry. */
+  deleteSessionEntry(entryId: string): void {
+    this.historyService.deleteEntry(entryId);
+  }
+
+  /** Deletes all saved history for a story (called when the story is deleted). */
+  clearSessionHistory(storyId: string): void {
+    this.historyService.deleteForStory(storyId);
   }
 
   private toStoryExercise(

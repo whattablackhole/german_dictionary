@@ -280,6 +280,131 @@
   color: var(--mat-sys-on-surface);
 }
 
+/* Exercise History Panel */
+.exercise-history-section {
+  margin-top: 16px;
+  margin-bottom: 16px;
+  background: var(--mat-sys-surface-container-low);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.history-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.history-empty {
+  font-size: 12px;
+  color: var(--mat-sys-on-surface-variant);
+  font-style: italic;
+  margin: 0;
+}
+
+.history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.history-entry {
+  flex: 1;
+  min-width: 240px;
+  max-width: 360px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--mat-sys-surface);
+}
+
+.history-entry-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.history-score {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--mat-sys-on-surface);
+}
+
+.history-good {
+  color: #2e7d32;
+}
+
+.history-percent {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.history-date {
+  font-size: 11px;
+  color: var(--mat-sys-on-surface-variant);
+  margin-left: auto;
+}
+
+.history-entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-replay-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+  cursor: pointer;
+  transition: opacity 0.15s;
+
+  mat-icon {
+    font-size: 15px;
+    width: 15px;
+    height: 15px;
+  }
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+.history-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+
+  mat-icon {
+    font-size: 17px;
+    width: 17px;
+    height: 17px;
+  }
+
+  &:hover {
+    background: rgba(211, 47, 47, 0.12);
+    color: #c62828;
+  }
+}
+
 .word-span {
   transition: background 0.1s, color 0.1s;
   border-radius: 3px;
