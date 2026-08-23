@@ -834,34 +834,39 @@
 
 /* Sentence Notes Mode */
 .sentence-span {
-  transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  border-radius: 4px;
-  padding: 2px 4px;
-  margin: 1px 0;
-  display: inline-block;
+  // Keep the span inline so text flows naturally (no column/gap artifacts).
+  // Use background + box-shadow (which neither affect layout) for all states,
+  // and clone the decoration across line breaks for long sentences.
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 3px;
   cursor: pointer;
-  border: 2px solid transparent;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 
   &:hover {
     background: rgba(var(--mat-sys-primary-rgb, 25, 118, 210), 0.08);
-    border-color: rgba(var(--mat-sys-primary-rgb, 25, 118, 210), 0.3);
+    box-shadow: 0 0 0 1px rgba(var(--mat-sys-primary-rgb, 25, 118, 210), 0.25);
   }
 }
 
 .sentence-selected {
-  background: rgba(var(--mat-sys-primary-rgb, 25, 118, 210), 0.15);
-  border-color: var(--mat-sys-primary);
-  box-shadow: 0 0 0 2px rgba(var(--mat-sys-primary-rgb, 25, 118, 210), 0.2);
+  background: rgba(var(--mat-sys-primary-rgb, 25, 118, 210), 0.16);
+  box-shadow: 0 0 0 1px var(--mat-sys-primary);
 }
 
 .sentence-has-note {
-  border-color: #2e7d32;
-  background: rgba(46, 125, 50, 0.05);
+  background: rgba(46, 125, 50, 0.06);
 
   &:hover {
-    border-color: #2e7d32;
-    background: rgba(46, 125, 50, 0.1);
+    background: rgba(46, 125, 50, 0.12);
+    box-shadow: 0 0 0 1px rgba(46, 125, 50, 0.35);
   }
+}
+
+// Selected sentence that also has a note: blend both accents.
+.sentence-selected.sentence-has-note {
+  background: rgba(var(--mat-sys-primary-rgb, 25, 118, 210), 0.16);
+  box-shadow: 0 0 0 1px var(--mat-sys-primary), 0 0 0 3px rgba(46, 125, 50, 0.3);
 }
 
 /* Sentence Note Popup */
