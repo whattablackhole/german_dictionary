@@ -200,6 +200,13 @@
               }
             </div>
             <div class="exercise-actions">
+              <mat-slide-toggle
+                class="only-mc-toggle"
+                [checked]="settingsService.storyOnlyMcExercises()"
+                (toggleChange)="settingsService.setStoryOnlyMcExercises(!settingsService.storyOnlyMcExercises())"
+              >
+                Only card choosing
+              </mat-slide-toggle>
               <button
                 mat-flat-button
                 color="primary"

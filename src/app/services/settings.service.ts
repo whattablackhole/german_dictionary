@@ -10,9 +10,11 @@ const LOOKUP_MODIFIER_KEY = 'german-dictionary-lookup-modifier';
 const IMAGE_STYLE_KEY = 'german-dictionary-image-style';
 const IMAGE_MODEL_KEY = 'german-dictionary-image-model';
 const TEXT_MODEL_KEY = 'german-dictionary-text-model';
+const TEXT_MODEL_PROVIDER_KEY = 'german-dictionary-text-model-provider';
 const SHOW_SENTENCES_KEY = 'german-dictionary-show-sentences-srs';
 const THROUGHPUT_ROUTING_KEY = 'german-dictionary-throughput-routing';
 const TRANSLATION_API_URL_KEY = 'german-dictionary-translation-api-url';
+const STORY_ONLY_MC_KEY = 'german-dictionary-story-only-mc-exercises';
 
 export type TtsEngine = 'browser' | 'openai';
 export type LookupModifier = 'alt' | 'ctrl' | 'meta' | 'shift';
@@ -160,6 +162,11 @@ export class SettingsService {
     localStorage.getItem(TEXT_MODEL_KEY) ?? 'google/gemma-4-31b-it:free'
   );
 
+  /** The selected provider for the text model (optional, for custom routing) */
+  readonly textModelProvider = signal<string | null>(
+    localStorage.getItem(TEXT_MODEL_PROVIDER_KEY) ?? null
+  );
+
   /** The LibreTranslate API endpoint URL */
   readonly translationApiUrl = signal<string>(
     localStorage.getItem(TRANSLATION_API_URL_KEY) ?? 'http://localhost:5000/translate'
@@ -178,6 +185,15 @@ export class SettingsService {
   setTextModel(model: string): void {
     this.textModel.set(model);
     this.safeWrite(TEXT_MODEL_KEY, model);
+  }
+
+  setTextModelProvider(provider: string | null): void {
+    this.textModelProvider.set(provider);
+    if (provider) {
+      this.safeWrite(TEXT_MODEL_PROVIDER_KEY, provider);
+    } else {
+      localStorage.removeItem(TEXT_MODEL_PROVIDER_KEY);
+    }
   }
 
   setTranslationLanguage(language: TranslationLanguage): void {
@@ -232,6 +248,18 @@ export class SettingsService {
   setThroughputRouting(enabled: boolean): void {
     this.throughputRouting.set(enabled);
     this.safeWrite(THROUGHPUT_ROUTING_KEY, String(enabled));
+  }
+
+  /** Whether story exercises should be limited to multiple-choice (card) exercises only.
+   *  When enabled, the AI still generates 3 exercises per word but all are \"mc\",
+   *  mixing German→native and native→German directions. */
+  readonly storyOnlyMcExercises = signal<boolean>(
+    localStorage.getItem(STORY_ONLY_MC_KEY) === 'true'
+  );
+
+  setStoryOnlyMcExercises(enabled: boolean): void {
+    this.storyOnlyMcExercises.set(enabled);
+    this.safeWrite(STORY_ONLY_MC_KEY, String(enabled));
   }
 
   setImageStyle(style: string): void {

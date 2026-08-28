@@ -244,6 +244,27 @@
         When enabled, OpenRouter prioritizes the highest-throughput provider instead of the default price-based load balancing.
       </p>
     </div>
+
+    <!-- Provider selection for the selected text model -->
+    @if (selectedTextModelProviders().length > 0) {
+      <div class="provider-selection">
+        <mat-form-field appearance="outline" class="tts-select">
+          <mat-label>Custom Provider (optional)</mat-label>
+          <mat-select
+            [value]="settingsService.textModelProvider()"
+            (valueChange)="settingsService.setTextModelProvider($event)"
+          >
+            <mat-option [value]="null">None (use default routing)</mat-option>
+            @for (provider of selectedTextModelProviders(); track provider) {
+              <mat-option [value]="provider">{{ provider }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <p class="settings-description">
+          Select a specific provider for this model. "None" uses OpenRouter's default load balancing (price-based or throughput-based).
+        </p>
+      </div>
+    }
   </mat-card>
 
   <mat-card class="settings-card">

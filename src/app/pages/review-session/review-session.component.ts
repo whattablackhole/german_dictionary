@@ -1,9 +1,11 @@
 import { Component, computed, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { Word, ExampleSentence } from '../../models/word';
 import { SrsService, SrsGrade } from '../../services/srs.service';
 import { WordService } from '../../services/word.service';
@@ -15,20 +17,25 @@ import { ImageGenerationService } from '../../services/image-generation.service'
 import { SentenceCacheService } from '../../services/sentence-cache.service';
 import { SentenceGenerationService } from '../../services/sentence-generation.service';
 
+type CardDirection = 'de-native' | 'native-de';
+
 interface SessionCard {
   word: Word;
   revealed: boolean;
   grade: SrsGrade | null;
+  direction: CardDirection;
 }
 
 @Component({
   selector: 'app-review-session',
   imports: [
     CommonModule,
+    FormsModule,
     MatIconModule,
     MatButtonModule,
     MatProgressBarModule,
     MatProgressSpinnerModule,
+    MatSlideToggleModule,
   ],
   templateUrl: './review-session.component.html',
   styleUrl: './review-session.component.scss',
@@ -38,6 +45,9 @@ export class ReviewSessionComponent {
   readonly cards = signal<SessionCard[]>([]);
   readonly currentIndex = signal(0);
   readonly sessionFinished = signal(false);
+  
+  /** Whether to include both directions (de->native and native->de) */
+  readonly bidirectional = signal(false);
 
   readonly currentCard = computed(() => {
     const c = this.cards();
@@ -159,15 +169,108 @@ export class ReviewSessionComponent {
       words = this.wordService.getWords();
     }
 
-    // Shuffle for variety
-    const shuffled = [...words].sort(() => Math.random() - 0.5);
+    const useBidirectional = this.bidirectional();
+
+    if (!useBidirectional) {
+      // Simple shuffle for single direction
+      const shuffled = [...words].sort(() => Math.random() - 0.5);
+      this.sessionType.set(type);
+      this.cards.set(
+        shuffled.map((w) => ({ word: w, revealed: false, grade: null, direction: 'de-native' as CardDirection }))
+      );
+      this.currentIndex.set(0);
+      this.sessionFinished.set(false);
+      return;
+    }
+
+    // Bidirectional mode: create de-native and native-de cards with proper shuffling
+    // 1. Shuffle for de-native order
+    const deNativeOrder = [...words].sort(() => Math.random() - 0.5);
+    
+    // 2. Shuffle again for native-de order (different order)
+    const nativeDeOrder = [...words].sort(() => Math.random() - 0.5);
+
+    // 3. Create de-native cards
+    const deNativeCards = deNativeOrder.map((w) => ({ 
+      word: w, 
+      revealed: false, 
+      grade: null, 
+      direction: 'de-native' as CardDirection 
+    }));
+
+    // 4. Create native-de cards in the second shuffled order
+    const nativeDeCards = nativeDeOrder.map((w) => ({ 
+      word: w, 
+      revealed: false, 
+      grade: null, 
+      direction: 'native-de' as CardDirection 
+    }));
+
+    // 5. Merge: insert each native-de card after its de-native counterpart
+    //    but at a random position after it (not immediately after)
+    const mergedCards = this.mergeBidirectionalCards(deNativeCards, nativeDeCards);
 
     this.sessionType.set(type);
-    this.cards.set(
-      shuffled.map((w) => ({ word: w, revealed: false, grade: null }))
-    );
+    this.cards.set(mergedCards);
     this.currentIndex.set(0);
     this.sessionFinished.set(false);
+  }
+
+  /**
+   * Merges de-native and native-de cards ensuring each native-de appears
+   * after its corresponding de-native card, but shuffled (not immediately after).
+   */
+  private mergeBidirectionalCards(
+    deNativeCards: SessionCard[],
+    nativeDeCards: SessionCard[]
+  ): SessionCard[] {
+    // Create a map from word ID to native-de card for quick lookup
+    const nativeDeMap = new Map<string, SessionCard>();
+    for (const card of nativeDeCards) {
+      nativeDeMap.set(card.word.id, card);
+    }
+
+    const result: SessionCard[] = [];
+    const remainingNativeDe = new Map(nativeDeMap); // Cards not yet placed
+
+    // First pass: add all de-native cards
+    for (const deNativeCard of deNativeCards) {
+      result.push(deNativeCard);
+    }
+
+    // Second pass: insert each native-de card at a random position 
+    // after its de-native card
+    for (const deNativeCard of deNativeCards) {
+      const nativeDeCard = remainingNativeDe.get(deNativeCard.word.id);
+      if (!nativeDeCard) continue;
+
+      // Find the index of the de-native card in result
+      const deNativeIndex = result.indexOf(deNativeCard);
+      if (deNativeIndex === -1) continue;
+
+      // Insert at a random position after deNativeIndex
+      // Range: deNativeIndex + 1 to result.length (inclusive for append)
+      const maxInsertPos = result.length;
+      const minInsertPos = deNativeIndex + 1;
+      
+      // If there's room to shuffle (not immediately after), pick random position
+      let insertPos: number;
+      if (maxInsertPos > minInsertPos) {
+        insertPos = minInsertPos + Math.floor(Math.random() * (maxInsertPos - minInsertPos + 1));
+      } else {
+        insertPos = maxInsertPos; // Append at end
+      }
+
+      result.splice(insertPos, 0, nativeDeCard);
+      remainingNativeDe.delete(deNativeCard.word.id);
+    }
+
+    // Any remaining native-de cards (shouldn't happen, but safety)
+    for (const card of remainingNativeDe.values()) {
+      result.push(card);
+    }
+
+    return result;
   }
 
   revealCard(): void {

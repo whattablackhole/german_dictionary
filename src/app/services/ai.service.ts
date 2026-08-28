@@ -116,12 +116,20 @@ interface RawDeclensionExercise {
 export interface GeneratedStoryExercise {
   /** The German target word this exercise trains */
   word: string;
-  type: 'mc' | 'cloze' | 'sentence';
+  type: 'mc' | 'mc-sentence' | 'cloze' | 'sentence';
 
   // mc — multiple choice translation
   mcPrompt?: string;
   mcOptions?: string[];
   mcCorrect?: string;
+  /** Direction of an mc exercise. 'de-native': prompt is the German word, options are native translations.
+   *  'native-de': prompt is the native word, options are German forms. Defaults to 'de-native'. */
+  mcDirection?: 'de-native' | 'native-de';
+
+  // mc-sentence — pick the correct German word to fill a blanked sentence
+  mcSentence?: string;
+  mcSentenceOptions?: string[];
+  mcSentenceCorrect?: string;
 
   // cloze — word in a sentence
   clozeSentence?: string;
@@ -149,6 +157,8 @@ export interface TextModelOption {
   contextLength?: number;
   /** Whether the model is a free tier model (id contains `:free`). */
   free?: boolean;
+  /** Available providers for this model (from OpenRouter `endpoints` or similar). */
+  providers?: string[];
 }
 
 const API_KEY_STORAGE = 'german-dictionary-openrouter-key';
@@ -202,6 +212,27 @@ export class AiService {
   }
 
   /**
+   * Returns the OpenRouter `provider` object with a specific provider name
+   * when a custom provider is selected in settings, otherwise an empty object.
+   */
+  private providerField(): { provider?: { order: string[] } } {
+    const provider = this.settingsService.textModelProvider();
+    return provider ? { provider: { order: [provider] } } : {};
+  }
+
+  /**
+   * Combines throughput routing and custom provider settings for API requests.
+   * Custom provider takes precedence over throughput routing.
+   */
+  private combinedProviderField(): { provider?: { sort?: 'throughput'; order?: string[] } } {
+    const customProvider = this.settingsService.textModelProvider();
+    if (customProvider) {
+      return { provider: { order: [customProvider] } };
+    }
+    return this.throughputProviderField();
+  }
+
+  /**
    * Fetch available text/chat models from OpenRouter API.
    * Filters for models that support chat completions.
    */
@@ -234,6 +265,12 @@ export class AiService {
       const modality = model.architecture?.modality ?? '';
       if (modality === 'image') continue;
 
+      // Extract available providers from endpoints
+      const endpoints = model.endpoints ?? [];
+      const providers = endpoints
+        .map((e: any) => e.provider_name ?? e.provider ?? '')
+        .filter((p: string) => p.length > 0);
+
       models.push({
         id,
         label: model.name ?? id,
@@ -245,6 +282,7 @@ export class AiService {
             ? model.context_length
             : undefined,
         free: id.includes(':free'),
+        providers: providers.length > 0 ? providers : undefined,
       });
     }
 
@@ -336,7 +374,7 @@ Example response format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -494,7 +532,7 @@ Word: "${german}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -640,7 +678,7 @@ Word: "${german}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -839,7 +877,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -949,7 +987,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -1030,7 +1068,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1149,7 +1187,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.3,
       }),
@@ -1229,7 +1267,7 @@ Student's query: "${userQuery}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.3,
       }),
@@ -1310,7 +1348,7 @@ Student's translation: "${userInput}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1397,7 +1435,7 @@ Generate exactly ${config.sentenceCount} sentences.`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -1463,7 +1501,7 @@ German sentence: "${text}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1507,6 +1545,9 @@ German sentence: "${text}"`;
     storyDomain: string;
     storyText?: string;
     translationLanguage: 'en' | 'ru';
+    /** Limit exercises to multiple-choice (card) exercises only. Still generates 3 per word,
+     *  mixing German→native and native→German directions. */
+    onlyMc?: boolean;
   }): Promise<GeneratedStoryExercise[]> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -1517,6 +1558,7 @@ German sentence: "${text}"`;
     }
 
     const langName = config.translationLanguage === 'ru' ? 'Russian' : 'English';
+    const onlyMc = config.onlyMc === true;
     const storyBlock = config.storyText
       ? `The student has read the following German story at CEFR level ${config.storyLevel} about "${config.storyDomain}":\n"""\n${config.storyText}\n"""\n`
       : `The student is at CEFR level ${config.storyLevel} and the story theme is "${config.storyDomain}".\n`;
@@ -1529,36 +1571,9 @@ German sentence: "${text}"`;
       const wordsJson = JSON.stringify(chunk);
       const count = chunk.length * 3;
 
-      const prompt = `You are a German language teacher. ${storyBlock}
-For EACH word in the list below, generate EXACTLY 3 vocabulary exercises (3 exercises per word):
-1. "mc" — multiple choice: show the German word and provide exactly 4 answer options — its translation in ${langName} plus 3 plausible distractor translations.
-2. "cloze" — word in a sentence: a German sentence containing the word, where the target word is blanked with "___". The student must type the German word. Provide the hint = the word's translation in ${langName}.
-3. "sentence" — translate the sentence: a German sentence containing the word and its ${langName} translation. The student must type the German sentence.
-
-Words: ${wordsJson}
-
-Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
-- "word": the target German word (copy it exactly from the input list)
-- "type": exactly "mc", "cloze" or "sentence"
-- "mcPrompt": (only for type "mc") the German word to translate, with the article for nouns (e.g. "der Apfel")
-- "mcOptions": (only for type "mc") array of exactly 4 translations in ${langName}, including the correct one, in random order
-- "mcCorrect": (only for type "mc") the correct translation
-- "clozeSentence": (only for type "cloze") the full German sentence with the word
-- "clozeBlankWords": (only for type "cloze") array of the EXACT substrings of clozeSentence that should be replaced with "___" (e.g. ["Schuhe"]; for a separable verb like "Ich hole dich ab" use ["hole", "ab"]; never include the article for nouns)
-- "clozeHint": (only for type "cloze") the ${langName} translation of the target word
-- "sentenceGerman": (only for type "sentence") the German sentence the student must type
-- "sentenceNative": (only for type "sentence") the ${langName} translation of that sentence
-
-Rules:
-- Prefer using sentences from the provided story when the target word appears there; otherwise write a short natural sentence (5-15 words) at CEFR level ${config.storyLevel}.
-- The three exercises for a word may reuse a story sentence; otherwise vary the sentences.
-- Keep sentences concise, natural and level-appropriate.
-- The mc options must be translations in ${langName} (not German words). Distractors must be plausible (similar meaning area or part of speech, similar difficulty).
-- For nouns in "mcPrompt" include the article and the base form.
-- Generate exactly ${count} exercises.
-
-Example format:
-{"exercises":[{"word":"Apfel","type":"mc","mcPrompt":"der Apfel","mcOptions":["apple","pear","banana","orange"],"mcCorrect":"apple","clozeSentence":"","clozeBlankWords":[],"clozeHint":"","sentenceGerman":"","sentenceNative":""}]}`;
+      const prompt = onlyMc
+        ? this.buildOnlyMcStoryExercisesPrompt(storyBlock, wordsJson, count, langName, config.storyLevel)
+        : this.buildMixedStoryExercisesPrompt(storyBlock, wordsJson, count, langName, config.storyLevel);
 
       const response = await fetch(environment.openRouterApiUrl, {
         method: 'POST',
@@ -1569,7 +1584,7 @@ Example format:
         body: JSON.stringify({
           model: this.settingsService.textModel(),
           messages: [{ role: 'user', content: prompt }],
-          ...(this.throughputProviderField()),
+          ...(this.combinedProviderField()),
           response_format: { type: 'json_object' },
           temperature: 0.5,
         }),
@@ -1608,9 +1623,17 @@ Example format:
 
     // Validate: keep only well-formed exercises
     const valid = allExercises.filter((e) => {
-      if (!e.word || !['mc', 'cloze', 'sentence'].includes(e.type)) return false;
+      if (!e.word || !['mc', 'mc-sentence', 'cloze', 'sentence'].includes(e.type)) return false;
       if (e.type === 'mc') {
         return !!e.mcPrompt && !!e.mcCorrect && Array.isArray(e.mcOptions) && e.mcOptions.length >= 2;
+      }
+      if (e.type === 'mc-sentence') {
+        return (
+          !!e.mcSentence &&
+          !!e.mcSentenceCorrect &&
+          Array.isArray(e.mcSentenceOptions) &&
+          e.mcSentenceOptions.length >= 2
+        );
       }
       if (e.type === 'cloze') {
         return !!e.clozeSentence && Array.isArray(e.clozeBlankWords) && e.clozeBlankWords.length > 0;
@@ -1618,11 +1641,134 @@ Example format:
       return !!e.sentenceGerman && !!e.sentenceNative;
     });
 
-    if (valid.length < config.words.length) {
+    // In default (mixed) mode we keep the original lenient behavior: any valid exercises are accepted.
+    if (!onlyMc) {
+      if (valid.length < config.words.length) {
+        throw new Error('AI could not generate complete exercises. Try again.');
+      }
+      return valid;
+    }
+
+    // In only-mc mode we want exactly 3 distinct, non-repeated exercise types per word:
+    //   1. mc de-native, 2. mc native-de, 3. mc-sentence (select correct German word for a blanked sentence).
+    const normalizedGen: GeneratedStoryExercise[] = [];
+    const allowedTypes = new Set<GeneratedStoryExercise['type']>(['mc', 'mc-sentence']);
+    for (const w of config.words) {
+      const perWord = valid.filter(
+        (e) => e.word?.trim().toLowerCase() === w.german.trim().toLowerCase()
+      );
+      const mcDe = perWord.find(
+        (e) => e.type === 'mc' && e.mcDirection === 'de-native'
+      );
+      const mcNativeDe = perWord.find(
+        (e) => e.type === 'mc' && e.mcDirection === 'native-de'
+      );
+      const mcSentence = perWord.find((e) => e.type === 'mc-sentence');
+      const picked: GeneratedStoryExercise[] = [];
+      for (const ex of [mcDe, mcNativeDe, mcSentence]) {
+        if (ex) picked.push(ex);
+      }
+      // Guard against infinite loops / weird output: only use types we accept.
+      for (let tries = 0; tries < 50 && picked.length < 3; tries++) {
+        const extra = perWord.find(
+          (e) => !picked.includes(e) && allowedTypes.has(e.type)
+        );
+        if (!extra) break;
+        picked.push(extra);
+      }
+      if (picked.length < 3) {
+        throw new Error('AI could not generate complete exercises. Try again.');
+      }
+      normalizedGen.push(...picked);
+    }
+
+    if (normalizedGen.length < config.words.length * 3) {
       throw new Error('AI could not generate complete exercises. Try again.');
     }
 
-    return valid;
+    return normalizedGen;
+  }
+
+  /** Prompt for the default mode: 3 mixed exercise types per word (mc, cloze, sentence). */
+  private buildMixedStoryExercisesPrompt(
+    storyBlock: string,
+    wordsJson: string,
+    count: number,
+    langName: string,
+    storyLevel: DifficultyLevel
+  ): string {
+    return `You are a German language teacher. ${storyBlock}
+For EACH word in the list below, generate EXACTLY 3 vocabulary exercises (3 exercises per word):
+1. "mc" — multiple choice: show the German word and provide exactly 4 answer options — its translation in ${langName} plus 3 plausible distractor translations.
+2. "cloze" — word in a sentence: a German sentence containing the word, where the target word is blanked with "___". The student must type the German word. Provide the hint = the word's translation in ${langName}.
+3. "sentence" — translate the sentence: a German sentence containing the word and its ${langName} translation. The student must type the German sentence.
+
+Words: ${wordsJson}
+
+Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
+- "word": the target German word (copy it exactly from the input list)
+- "type": exactly "mc", "cloze" or "sentence"
+- "mcDirection": (only for type "mc") exactly "de-native"
+- "mcPrompt": (only for type "mc") the German word to translate, with the article for nouns (e.g. "der Apfel")
+- "mcOptions": (only for type "mc") array of exactly 4 translations in ${langName}, including the correct one, in random order
+- "mcCorrect": (only for type "mc") the correct translation
+- "clozeSentence": (only for type "cloze") the full German sentence with the word
+- "clozeBlankWords": (only for type "cloze") array of the EXACT substrings of clozeSentence that should be replaced with "___" (e.g. ["Schuhe"]; for a separable verb like "Ich hole dich ab" use ["hole", "ab"]; never include the article for nouns)
+- "clozeHint": (only for type "cloze") the ${langName} translation of the target word
+- "sentenceGerman": (only for type "sentence") the German sentence the student must type
+- "sentenceNative": (only for type "sentence") the ${langName} translation of that sentence
+
+Rules:
+- Prefer using sentences from the provided story when the target word appears there; otherwise write a short natural sentence (5-15 words) at CEFR level ${storyLevel}.
+- The three exercises for a word may reuse a story sentence; otherwise vary the sentences.
+- Keep sentences concise, natural and level-appropriate.
+- The mc options must be translations in ${langName} (not German words). Distractors must be plausible (similar meaning area or part of speech, similar difficulty).
+- For nouns in "mcPrompt" include the article and the base form.
+- Generate exactly ${count} exercises.
+
+Example format:
+{"exercises":[{"word":"Apfel","type":"mc","mcDirection":"de-native","mcPrompt":"der Apfel","mcOptions":["apple","pear","banana","orange"],"mcCorrect":"apple","clozeSentence":"","clozeBlankWords":[],"clozeHint":"","sentenceGerman":"","sentenceNative":""}]}`;
+  }
+
+  /** Prompt for the only-mc mode: 3 non-repeated multiple-choice exercises per word:
+   *  one de→native, one native→de, one sentence-blank (select the correct German word). */
+  private buildOnlyMcStoryExercisesPrompt(
+    storyBlock: string,
+    wordsJson: string,
+    count: number,
+    langName: string,
+    storyLevel: DifficultyLevel
+  ): string {
+    return `You are a German language teacher. ${storyBlock}
+For EACH word in the list below, generate EXACTLY 3 multiple-choice (card) exercises (3 exercises per word). The three must be DIFFERENT exercise types (no repeated combinations):
+1. type "mc" with "mcDirection" "de-native": show the German word (with article for nouns) as the prompt; the 4 answer options are translations in ${langName}; the correct one is the translation.
+2. type "mc" with "mcDirection" "native-de": show the ${langName} translation as the prompt; the 4 answer options are German words (with article for nouns); the correct one is the German word.
+3. type "mc-sentence": show a German sentence with the target word replaced by "___" as the prompt; the 4 answer options are German words (with article for nouns); the student picks the correct German word that fits the blank.
+
+Words: ${wordsJson}
+
+Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
+- "word": the target German word (copy it exactly from the input list)
+- "type": exactly "mc" or "mc-sentence"
+- "mcDirection": (only for type "mc") exactly "de-native" or "native-de"
+- "mcPrompt": (only for type "mc") for "de-native", the German word to translate (with the article for nouns, e.g. "der Apfel"); for "native-de", the ${langName} translation the student must identify
+- "mcOptions": (only for type "mc") array of exactly 4 options — for "de-native" 4 translations in ${langName} (including the correct one); for "native-de" 4 German forms with articles for nouns (including the correct one), in random order
+- "mcCorrect": (only for type "mc") the correct option from mcOptions (the ${langName} translation for "de-native", or the German word for "native-de")
+- "mcSentence": (only for type "mc-sentence") the German sentence with the target word replaced by "___" (e.g. "Ich esse einen ___.")
+- "mcSentenceOptions": (only for type "mc-sentence") array of exactly 4 German word options (with article for nouns), in random order, including the correct one
+- "mcSentenceCorrect": (only for type "mc-sentence") the correct German word that fills the blank
+
+Rules:
+- For "mc-sentence", prefer using a sentence from the provided story when the target word appears there; otherwise write a short natural sentence (5-12 words) at CEFR level ${storyLevel}. Replace ONLY the target word with "___" (for separable verbs blank the whole verb: e.g. "Ich ___ den Film ___" for "sehe ... an").
+- For "de-native" exercises the options must be translations in ${langName}; for "native-de" and "mc-sentence" the options must be German words (include the article for nouns). Distractors must be plausible (similar meaning area or part of speech, similar difficulty).
+- Generate exactly ${count} exercises (per word: one "de-native" mc, one "native-de" mc, one "mc-sentence").
+
+Example (de→native):
+{"exercises":[{"word":"Apfel","type":"mc","mcDirection":"de-native","mcPrompt":"der Apfel","mcOptions":["apple","pear","banana","orange"],"mcCorrect":"apple"}]}
+Example (native→de):
+{"exercises":[{"word":"Apfel","type":"mc","mcDirection":"native-de","mcPrompt":"apple","mcOptions":["der Apfel","die Birne","die Banane","die Orange"],"mcCorrect":"der Apfel"}]}
+Example (mc-sentence):
+{"exercises":[{"word":"Apfel","type":"mc-sentence","mcSentence":"Ich esse jeden Tag einen ___.","mcSentenceOptions":["Apfel","Birne","Banane","Orange"],"mcSentenceCorrect":"Apfel"}]}`;
   }
 
   async generatePrepositionExercise(
@@ -1675,7 +1821,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.5,
       }),
@@ -1807,7 +1953,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.5,
       }),
@@ -1958,7 +2104,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -2202,7 +2348,7 @@ ${rawText}`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
         max_tokens: 8192,
@@ -2291,7 +2437,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.throughputProviderField()),
+        ...(this.combinedProviderField()),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),

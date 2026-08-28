@@ -1,6 +1,6 @@
 import { DifficultyLevel } from './word';
 
-export type StoryExerciseType = 'mc' | 'cloze' | 'sentence';
+export type StoryExerciseType = 'mc' | 'mc-sentence' | 'cloze' | 'sentence';
 
 export interface StoryExercise {
   id: string;
@@ -14,6 +14,14 @@ export interface StoryExercise {
   mcPrompt?: string;
   mcOptions?: string[];
   mcCorrect?: string;
+  /** Direction of an mc exercise. 'de-native' (default): prompt is the German word, options are native translations.
+   *  'native-de': prompt is the native word, options are German forms. */
+  mcDirection?: 'de-native' | 'native-de';
+
+  // mc-sentence — pick the correct German word to fill a blanked sentence
+  mcSentence?: string;
+  mcSentenceOptions?: string[];
+  mcSentenceCorrect?: string;
 
   // Cloze: fill in the missing German word in a sentence
   clozeSentence?: string;

@@ -259,6 +259,56 @@
   padding-top: 12px;
 }
 
+// ── Native → German front ──
+.card-native-front {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  text-align: center;
+  padding: 32px 28px;
+}
+
+.card-native-word {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface, #333);
+  line-height: 1.3;
+}
+
+.card-hint {
+  color: var(--mat-sys-on-surface-variant, #bbb);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.card-native-back {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface-variant, #666);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+// ── Bidirectional toggle ──
+.bidirectional-toggle {
+  margin-top: 32px;
+  padding: 16px 24px;
+  border: 2px solid var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 16px;
+  background: var(--mat-sys-surface, #fff);
+  text-align: left;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+
+  mat-slide-toggle {
+    margin-bottom: 8px;
+  }
+}
+
 // ── Back of card ──
 .card-back {
   flex: 1;

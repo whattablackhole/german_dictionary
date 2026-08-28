@@ -1181,6 +1181,7 @@ export class StoriesComponent implements OnInit, OnDestroy {
         storyDomain: story.domain,
         storyText: story.german,
         translationLanguage: this.settingsService.translationLanguage(),
+        onlyMc: this.settingsService.storyOnlyMcExercises(),
       });
 
       const exercises = generated
@@ -1286,6 +1287,22 @@ export class StoriesComponent implements OnInit, OnDestroy {
           mcPrompt: g.mcPrompt,
           mcOptions: options,
           mcCorrect: g.mcCorrect,
+          mcDirection: g.mcDirection ?? 'de-native',
+        };
+      }
+      case 'mc-sentence': {
+        if (!g.mcSentence || !g.mcSentenceCorrect || !Array.isArray(g.mcSentenceOptions)) return null;
+        const opts = g.mcSentenceOptions
+          .map((o) => String(o).trim())
+          .filter((o) => o.length > 0);
+        if (!opts.includes(g.mcSentenceCorrect)) opts.push(g.mcSentenceCorrect);
+        if (opts.length < 2) return null;
+        return {
+          ...base,
+          type: 'mc-sentence',
+          mcSentence: g.mcSentence,
+          mcSentenceOptions: opts,
+          mcSentenceCorrect: g.mcSentenceCorrect,
         };
       }
       case 'cloze': {

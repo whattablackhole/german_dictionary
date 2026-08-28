@@ -922,7 +922,12 @@
 .exercise-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  .only-mc-toggle {
+    font-size: 13px;
+  }
 
   .generate-exercises-btn {
     display: inline-flex;

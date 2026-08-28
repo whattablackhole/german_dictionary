@@ -129,10 +129,19 @@ export class SettingsComponent implements OnInit {
     return found ? found.label : current;
   });
 
+  /** Available providers for the currently selected text model */
+  readonly selectedTextModelProviders = computed<string[]>(() => {
+    const current = this.settingsService.textModel();
+    const found = this.dynamicTextModels().find((m) => m.id === current);
+    return found?.providers ?? [];
+  });
+
   onTextModelSelected(id: string): void {
     this.settingsService.setTextModel(id);
     const found = this.dynamicTextModels().find((m) => m.id === id);
     this.textModelSearchInput.set(found ? found.label : id);
+    // Clear provider when model changes
+    this.settingsService.setTextModelProvider(null);
   }
 
   readonly currentModelVoices = computed(() => {

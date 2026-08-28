@@ -48,6 +48,7 @@ const BACKUP_KEYS: string[] = [
   'german-dictionary-show-sentences-srs',
   'german-dictionary-translation-api-url',
   'german-dictionary-throughput-routing',
+  'german-dictionary-story-only-mc-exercises',
 ];
 
 const SENTENCE_NOTES_PREFIX = 'sentence-note-';

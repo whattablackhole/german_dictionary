@@ -120,6 +120,14 @@
   text-align: center;
 }
 
+.mc-direction-hint {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface-variant);
+  text-align: center;
+  margin: -6px 0 10px;
+}
+
 .options-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

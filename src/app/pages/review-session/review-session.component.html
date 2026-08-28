@@ -46,6 +46,16 @@
           <span class="option-desc">Full vocabulary review</span>
         </button>
       </div>
+
+      <!-- Bidirectional toggle -->
+      <div class="bidirectional-toggle">
+        <mat-slide-toggle [(ngModel)]="bidirectional" [ngModelOptions]="{standalone: true}">
+          Bidirectional (Native → German + German → Native)
+        </mat-slide-toggle>
+        <p class="settings-description">
+          When enabled, each word appears twice: once German→Native and once Native→German.
+        </p>
+      </div>
     </div>
   } @else {
     <!-- Active session -->
@@ -63,36 +73,46 @@
       @if (card) {
         <div class="flashcard" [class.revealed]="card.revealed">
           @if (!card.revealed) {
-            <!-- Front of card: image + German word -->
+            <!-- Front of card -->
             <div class="card-front" (click)="revealCard()">
-              @if (currentImage()) {
-                <img
-                  class="card-image"
-                  [src]="currentImage()"
-                  alt="Image for {{ card.word.german }}"
-                />
+              @if (card.direction === 'de-native') {
+                <!-- German → Native: Show German word + image -->
+                @if (currentImage()) {
+                  <img
+                    class="card-image"
+                    [src]="currentImage()"
+                    alt="Image for {{ card.word.german }}"
+                  />
+                }
+                <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
+                  @if (card.word.gender && card.word.partOfSpeech === 'noun') {
+                    <span class="card-article">{{ card.word.gender }}</span>
+                  }
+                  <span class="card-word">{{ card.word.german }}</span>
+                </div>
+                <div class="card-front-actions">
+                  @if (!currentImage() && !generatingImage()) {
+                    <button
+                      class="generate-image-btn"
+                      (click)="$event.stopPropagation(); generateCurrentWordImage()"
+                      title="Generate image for this word"
+                    >
+                      <mat-icon>image</mat-icon>
+                      Generate Image
+                    </button>
+                  } @else if (generatingImage()) {
+                    <mat-spinner diameter="20" />
+                  }
+                </div>
+              } @else {
+                <!-- Native → German: Show native translation -->
+                <div class="card-native-front">
+                  <div class="card-native-word">{{ getTranslation(card.word) }}</div>
+                  <div class="card-hint">Tap to reveal German word</div>
+                </div>
               }
-              <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
-                @if (card.word.gender && card.word.partOfSpeech === 'noun') {
-                  <span class="card-article">{{ card.word.gender }}</span>
-                }
-                <span class="card-word">{{ card.word.german }}</span>
-              </div>
-              <div class="card-front-actions">
-                @if (!currentImage() && !generatingImage()) {
-                  <button
-                    class="generate-image-btn"
-                    (click)="$event.stopPropagation(); generateCurrentWordImage()"
-                    title="Generate image for this word"
-                  >
-                    <mat-icon>image</mat-icon>
-                    Generate Image
-                  </button>
-                } @else if (generatingImage()) {
-                  <mat-spinner diameter="20" />
-                }
-              </div>
-              @if (settingsService.showSentencesInSrs() && currentSentences() && currentSentences()!.length > 0) {
+
+              @if (settingsService.showSentencesInSrs() && currentSentences() && currentSentences()!.length > 0 && card.direction === 'de-native') {
                 <div class="card-sentences">
                   <span class="sentences-label">Example sentences:</span>
                   @for (s of currentSentences()!; track s.german) {
@@ -100,7 +120,7 @@
                   }
                 </div>
               }
-              @if (settingsService.showSentencesInSrs() && !currentSentences() && !generatingSentences()) {
+              @if (settingsService.showSentencesInSrs() && !currentSentences() && !generatingSentences() && card.direction === 'de-native') {
                 <div class="card-front-actions">
                   <button
                     class="generate-sentences-btn"
@@ -117,52 +137,98 @@
                   <span class="gen-label">Generating sentences...</span>
                 </div>
               }
-              <div class="card-hint">Tap to reveal translation</div>
             </div>
           } @else {
-            <!-- Back of card: translation and details -->
+            <!-- Back of card -->
             <div class="card-back">
-              <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
-                @if (card.word.gender && card.word.partOfSpeech === 'noun') {
-                  <span class="card-article">{{ card.word.gender }}</span>
-                }
-                <span class="card-word">{{ card.word.german }}</span>
-                <button class="speak-btn" (click)="speakWord(card.word)" title="Pronounce">
-                  <mat-icon>volume_up</mat-icon>
-                </button>
-              </div>
+              @if (card.direction === 'de-native') {
+                <!-- German → Native: Show translation and details -->
+                <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
+                  @if (card.word.gender && card.word.partOfSpeech === 'noun') {
+                    <span class="card-article">{{ card.word.gender }}</span>
+                  }
+                  <span class="card-word">{{ card.word.german }}</span>
+                  <button class="speak-btn" (click)="speakWord(card.word)" title="Pronounce">
+                    <mat-icon>volume_up</mat-icon>
+                  </button>
+                </div>
 
-              <div class="card-translation">{{ getTranslation(card.word) }}</div>
+                <div class="card-translation">{{ getTranslation(card.word) }}</div>
 
-              <div class="card-details">
-                <span class="card-pos">{{ getPosLabel(card.word) }}</span>
-                <span class="card-level">{{ card.word.level }}</span>
-                @if (card.word.verbType) {
-                  <span class="card-verb-type">{{ getVerbTypeLabel(card.word.verbType) }}</span>
-                }
-              </div>
-
-              @if (card.word.partOfSpeech === 'noun' && (card.word.pluralForm || card.word.pluralFormation)) {
-                <div class="card-noun-details">
-                  <span class="detail-label">Plural:</span>
-                  <span class="detail-value">{{ card.word.pluralForm ?? '—' }}</span>
-                  @if (card.word.pluralFormation) {
-                    <span class="detail-formation">{{ card.word.pluralFormation }}</span>
+                <div class="card-details">
+                  <span class="card-pos">{{ getPosLabel(card.word) }}</span>
+                  <span class="card-level">{{ card.word.level }}</span>
+                  @if (card.word.verbType) {
+                    <span class="card-verb-type">{{ getVerbTypeLabel(card.word.verbType) }}</span>
                   }
                 </div>
-              }
 
-              @if (card.word.partOfSpeech === 'verb') {
-                <div class="card-verb-details">
-                  @if (card.word.simplePast) {
-                    <span class="detail-label">Präteritum:</span>
-                    <span class="detail-value">{{ card.word.simplePast }}</span>
+                @if (card.word.partOfSpeech === 'noun' && (card.word.pluralForm || card.word.pluralFormation)) {
+                  <div class="card-noun-details">
+                    <span class="detail-label">Plural:</span>
+                    <span class="detail-value">{{ card.word.pluralForm ?? '—' }}</span>
+                    @if (card.word.pluralFormation) {
+                      <span class="detail-formation">{{ card.word.pluralFormation }}</span>
+                    }
+                  </div>
+                }
+
+                @if (card.word.partOfSpeech === 'verb') {
+                  <div class="card-verb-details">
+                    @if (card.word.simplePast) {
+                      <span class="detail-label">Präteritum:</span>
+                      <span class="detail-value">{{ card.word.simplePast }}</span>
+                    }
+                    @if (card.word.pastParticiple) {
+                      <span class="detail-label">Partizip II:</span>
+                      <span class="detail-value highlight">{{ card.word.pastParticiple }}</span>
+                    }
+                  </div>
+                }
+              } @else {
+                <!-- Native → German: Show German word and details -->
+                <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
+                  @if (card.word.gender && card.word.partOfSpeech === 'noun') {
+                    <span class="card-article">{{ card.word.gender }}</span>
                   }
-                  @if (card.word.pastParticiple) {
-                    <span class="detail-label">Partizip II:</span>
-                    <span class="detail-value highlight">{{ card.word.pastParticiple }}</span>
+                  <span class="card-word">{{ card.word.german }}</span>
+                  <button class="speak-btn" (click)="speakWord(card.word)" title="Pronounce">
+                    <mat-icon>volume_up</mat-icon>
+                  </button>
+                </div>
+
+                <div class="card-native-back">{{ getTranslation(card.word) }}</div>
+
+                <div class="card-details">
+                  <span class="card-pos">{{ getPosLabel(card.word) }}</span>
+                  <span class="card-level">{{ card.word.level }}</span>
+                  @if (card.word.verbType) {
+                    <span class="card-verb-type">{{ getVerbTypeLabel(card.word.verbType) }}</span>
                   }
                 </div>
+
+                @if (card.word.partOfSpeech === 'noun' && (card.word.pluralForm || card.word.pluralFormation)) {
+                  <div class="card-noun-details">
+                    <span class="detail-label">Plural:</span>
+                    <span class="detail-value">{{ card.word.pluralForm ?? '—' }}</span>
+                    @if (card.word.pluralFormation) {
+                      <span class="detail-formation">{{ card.word.pluralFormation }}</span>
+                    }
+                  </div>
+                }
+
+                @if (card.word.partOfSpeech === 'verb') {
+                  <div class="card-verb-details">
+                    @if (card.word.simplePast) {
+                      <span class="detail-label">Präteritum:</span>
+                      <span class="detail-value">{{ card.word.simplePast }}</span>
+                    }
+                    @if (card.word.pastParticiple) {
+                      <span class="detail-label">Partizip II:</span>
+                      <span class="detail-value highlight">{{ card.word.pastParticiple }}</span>
+                    }
+                  </div>
+                }
               }
 
               @if (card.grade === null) {

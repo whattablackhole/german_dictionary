@@ -57,9 +57,27 @@
       @switch (item.exercise.type) {
         @case ('mc') {
           <div class="question-prompt">{{ item.exercise.mcPrompt }}</div>
+          @if (item.exercise.mcDirection === 'native-de') {
+            <div class="mc-direction-hint">Choose the correct German word</div>
+          } @else {
+            <div class="mc-direction-hint">Choose the correct translation</div>
+          }
           @if (!item.answered) {
             <div class="options-grid">
               @for (opt of item.exercise.mcOptions; track opt) {
+                <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
+              }
+            </div>
+          }
+        }
+        @case ('mc-sentence') {
+          <div class="sentence-card">
+            <div class="sentence-label">Choose the correct German word to complete the sentence:</div>
+            <div class="sentence-text">{{ item.exercise.mcSentence }}</div>
+          </div>
+          @if (!item.answered) {
+            <div class="options-grid">
+              @for (opt of item.exercise.mcSentenceOptions; track opt) {
                 <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
               }
             </div>

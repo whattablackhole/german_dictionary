@@ -101,6 +101,7 @@ export class StoryExercisesComponent implements OnInit {
   typeLabel(type: StoryExerciseType): string {
     switch (type) {
       case 'mc': return 'Choose the correct translation';
+      case 'mc-sentence': return 'Select the correct German word';
       case 'cloze': return 'Fill in the missing word';
       case 'sentence': return 'Translate the sentence';
       default: return '';
@@ -110,6 +111,7 @@ export class StoryExercisesComponent implements OnInit {
   typeIcon(type: StoryExerciseType): string {
     switch (type) {
       case 'mc': return 'checklist';
+      case 'mc-sentence': return 'rule';
       case 'cloze': return 'edit_note';
       case 'sentence': return 'translate';
       default: return 'quiz';
@@ -169,15 +171,25 @@ export class StoryExercisesComponent implements OnInit {
 
   selectOption(option: string): void {
     const item = this.currentItem();
-    if (!item || item.answered || item.exercise.type !== 'mc') return;
-    const correct = option === item.exercise.mcCorrect;
+    if (!item || item.answered) return;
+    if (item.exercise.type !== 'mc' && item.exercise.type !== 'mc-sentence') return;
+
+    const correct =
+      item.exercise.type === 'mc-sentence'
+        ? option === item.exercise.mcSentenceCorrect
+        : option === item.exercise.mcCorrect;
+    const correctAnswer =
+      item.exercise.type === 'mc-sentence'
+        ? item.exercise.mcSentenceCorrect
+        : item.exercise.mcCorrect;
+
     item.selectedOption = option;
     this.answerItem(
       item,
       correct,
       correct
         ? ''
-        : `Not quite. The correct translation is "${item.exercise.mcCorrect}".`
+        : `Not quite. The correct answer is "${correctAnswer}".`
     );
   }
 

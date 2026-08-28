@@ -34,8 +34,8 @@ CHROME_WINDOW_CLASS = "Chrome_WidgetWin_1"
 CAPTION_BUBBLE_CLASS = "CaptionBubble"
 CAPTION_LABEL_CLASS = "CaptionBubbleLabel"
 
-# How long to wait (in seconds) after text stops changing before flushing
-FLUSH_TIMEOUT = 1.5
+# Minimum stable polls before considering text final
+MIN_STABLE_POLLS = 3
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -222,7 +222,9 @@ class LiveCaptionCapture:
         self.caption_window = None
         self.last_write_time = time.time()
         self.last_flushed_text = ""  # Last complete text we wrote to file
-        self.last_new_text = ""  # Track the last new text we extracted
+        self.last_written_segments = []  # List of segments already written to file
+        self.text_stable_count = 0  # How many polls text has been stable
+        self.min_stable_polls = MIN_STABLE_POLLS  # Require text to be stable for N polls before flush
 
     def _write_to_file(self, text: str):
         """Append new caption text to the output file with a timestamp."""
@@ -236,6 +238,11 @@ class LiveCaptionCapture:
 
         print(f"[{timestamp}] {text}")
         self.last_write_time = time.time()
+        # Track written segments for deduplication
+        self.last_written_segments.append(text)
+        # Keep only last 20 segments
+        if len(self.last_written_segments) > 20:
+            self.last_written_segments = self.last_written_segments[-20:]
 
     def _write_header(self):
         """Write a header to the output file."""
@@ -273,7 +280,7 @@ class LiveCaptionCapture:
     def _extract_new_text(self, current_text: str) -> str:
         """
         Extract only the new portion of text that hasn't been written yet.
-        Handles both append-only and rewrite scenarios.
+        Handles both append-only and rewrite scenarios with deduplication.
         """
         if not current_text:
             return ""
@@ -282,14 +289,34 @@ class LiveCaptionCapture:
         if not self.last_flushed_text:
             return current_text
 
-        # If the current text starts with the last flushed text, extract the new part
+        # Case 0: Current text is a prefix of last flushed (caption reset/truncated)
+        # Don't write anything - wait for it to grow again
+        if self.last_flushed_text.startswith(current_text):
+            return ""
+
+        # Case 1: Current text starts with last flushed text (normal append)
         if current_text.startswith(self.last_flushed_text):
             new_part = current_text[len(self.last_flushed_text):].strip()
+            if self._is_duplicate_segment(new_part):
+                return ""
             return new_part
 
-        # If the current text is shorter or completely different, it's a new segment
-        # Check if there's any overlap at the end
-        # Find the longest suffix of last_flushed that is a prefix of current
+        # Case 2: Current text CONTAINS last_flushed_text but doesn't start with it
+        # This happens when Chrome re-sends the full accumulated transcript
+        if self.last_flushed_text in current_text:
+            # Check if current_text is essentially the same full transcript
+            # (last_flushed_text appears somewhere in the middle/end)
+            idx = current_text.find(self.last_flushed_text)
+            if idx > 0:
+                # The flushed text appears later in the current text - likely a full repeat
+                # Only consider text AFTER the flushed text as potentially new
+                after_flushed = current_text[idx + len(self.last_flushed_text):].strip()
+                if self._is_duplicate_segment(after_flushed):
+                    return ""
+                return after_flushed
+            # If idx == 0, it would have been caught by Case 1
+
+        # Case 3: Find overlap at boundaries (suffix of flushed = prefix of current)
         overlap = 0
         min_len = min(len(self.last_flushed_text), len(current_text))
         for i in range(min_len, 0, -1):
@@ -298,33 +325,54 @@ class LiveCaptionCapture:
                 break
 
         if overlap > 0:
-            # There's overlap - extract the new part after the overlap
             new_part = current_text[overlap:].strip()
+            if self._is_duplicate_segment(new_part):
+                return ""
             return new_part
         else:
-            # Completely different text - return as-is (new segment)
+            # Completely different text - check if it's a duplicate of a recent segment
+            if self._is_duplicate_segment(current_text):
+                return ""
             return current_text
+
+    def _is_duplicate_segment(self, text: str) -> bool:
+        """Check if a text segment was already written recently."""
+        if not text:
+            return True
+        # Check against recently written segments (last 10)
+        for segment in self.last_written_segments[-10:]:
+            if segment == text:
+                return True
+            # Also check if text is contained in a recent segment or vice versa
+            if text in segment or segment in text:
+                # If one is substring of another and they're similar length, it's a duplicate
+                if abs(len(text) - len(segment)) < max(len(text), len(segment)) * 0.3:
+                    return True
+        return False
 
     def _process_text_update(self, current_text: str):
         """
         Process a caption text update.
-        Uses time-based flushing to avoid writing every single word update.
+        Uses stability-based flushing: waits for text to be stable for N polls before writing.
         """
         if not current_text:
             return
 
         if current_text == self.last_text:
-            # Text hasn't changed - check if we should flush based on timeout
-            if (self.last_text and
-                self.last_text != self.last_flushed_text and
-                time.time() - self.last_write_time > FLUSH_TIMEOUT):
+            # Text hasn't changed - increment stability counter
+            self.text_stable_count += 1
+            
+            # Flush if text has been stable long enough and we have new content
+            if (self.text_stable_count >= self.min_stable_polls and
+                self.last_text != self.last_flushed_text):
                 new_text = self._extract_new_text(self.last_text)
                 if new_text:
                     self._write_to_file(new_text)
                     self.last_flushed_text = self.last_text
             return
 
-        # Text changed
+        # Text changed - reset stability counter
+        self.text_stable_count = 0
         self.last_text = current_text
 
         # If this looks like a complete sentence (ends with sentence-ending punctuation),
