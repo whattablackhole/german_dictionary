@@ -164,23 +164,15 @@ export class StoriesComponent implements OnInit, OnDestroy {
       .filter((w) => w.length > 0);
   });
 
-  /** Number of exercises that will be generated for the current selection.
-   *  Toggle OFF: words × 3. Toggle ON: words × 3 base card exercises + form extras
-   *  (noun +1 plural, verb +2 Präteritum/Perfekt, adjective +2 comparative/superlative). */
+  /** Number of exercises shown on the Generate button.
+   *  Toggle OFF: words × 3 (mc + cloze + sentence).
+   *  Toggle ON: no count — the AI determines how many form exercises each word gets,
+   *  so any exact number could be wrong. */
   readonly exerciseGenerationCount = computed(() => {
-    const words = this.selectedExerciseWords();
-    const base = words.length * 3;
-    if (!this.settingsService.storyOnlyMcExercises()) return base;
-    const dictionary = this.wordService.getWords();
-    let extras = 0;
-    for (const w of words) {
-      const found = dictionary.find((d) => d.german.toLowerCase() === w.toLowerCase());
-      if (!found) continue;
-      if (found.partOfSpeech === 'noun') extras += 1;
-      else if (found.partOfSpeech === 'verb') extras += 2;
-      else if (found.partOfSpeech === 'adjective') extras += 2;
+    if (!this.settingsService.storyOnlyMcExercises()) {
+      return this.selectedExerciseWords().length * 3;
     }
-    return base + extras;
+    return null;
   });
 
   // Sentence Notes Mode

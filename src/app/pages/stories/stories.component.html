@@ -220,7 +220,11 @@
                 } @else {
                   <ng-container>
                     <mat-icon>quiz</mat-icon>
-                    Generate Exercises ({{ exerciseGenerationCount() }})
+                    @if (exerciseGenerationCount(); as count) {
+                      Generate Exercises ({{ count }})
+                    } @else {
+                      Generate Exercises
+                    }
                   </ng-container>
                 }
               </button>

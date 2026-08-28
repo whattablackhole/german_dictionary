@@ -1625,34 +1625,25 @@ German sentence: "${text}"`;
             : new Error('AI could not generate exercises. Try again.');
         }
 
-        // Request B — forms: only for nouns/verbs/adjectives with known grammar data.
-        const formWords = chunk.filter((w) =>
-          ['noun', 'verb', 'adjective'].includes(w.partOfSpeech ?? '')
+        // Request B — forms: the AI identifies which words need inflection exercises
+        // (nouns → plural, verbs → Präteritum/Perfekt, adjectives → comparative/superlative),
+        // including words that are not in the vocabulary (e.g. a conjugated form like "wäscht").
+        const formsJson = JSON.stringify(chunk);
+        const formsPrompt = this.buildFormsPrompt(
+          storyBlock,
+          formsJson,
+          langName,
+          config.storyLevel
         );
-        if (formWords.length > 0) {
-          const formsJson = JSON.stringify(formWords);
-          const formCount = formWords.reduce((sum, w) => {
-            if (w.partOfSpeech === 'verb') return sum + 2;
-            if (w.partOfSpeech === 'adjective') return sum + 2;
-            return sum + 1; // noun → plural
-          }, 0);
-          const formsPrompt = this.buildFormsPrompt(
-            storyBlock,
-            formsJson,
-            formCount,
-            langName,
-            config.storyLevel
+        try {
+          formExercises = await this.requestStoryExercises(apiKey, formsPrompt);
+        } catch (err) {
+          // Graceful fallback: forms are a bonus — keep going with recognition exercises only.
+          console.warn(
+            'Story exercise forms request failed; continuing with recognition exercises only.',
+            err
           );
-          try {
-            formExercises = await this.requestStoryExercises(apiKey, formsPrompt);
-          } catch (err) {
-            // Graceful fallback: forms are a bonus — keep going with recognition exercises only.
-            console.warn(
-              'Story exercise forms request failed; continuing with recognition exercises only.',
-              err
-            );
-            formExercises = [];
-          }
+          formExercises = [];
         }
 
         allExercises.push(...recogExercises, ...formExercises);
@@ -1772,20 +1763,19 @@ German sentence: "${text}"`;
       }
       normalizedGen.push(...base);
 
-      const pos = w.partOfSpeech;
-      if (pos === 'noun') {
-        const p = perWord.find((e) => e.type === 'mc-plural');
-        if (p) normalizedGen.push(p);
-      } else if (pos === 'verb') {
-        const past = perWord.find((e) => e.type === 'mc-verb-past');
-        const perfect = perWord.find((e) => e.type === 'mc-verb-perfect');
-        if (past) normalizedGen.push(past);
-        if (perfect) normalizedGen.push(perfect);
-      } else if (pos === 'adjective') {
-        const comp = perWord.find((e) => e.type === 'mc-comparative');
-        const sup = perWord.find((e) => e.type === 'mc-superlative');
-        if (comp) normalizedGen.push(comp);
-        if (sup) normalizedGen.push(sup);
+      // Append any AI-produced form exercises for this word, keyed by exercise type.
+      // We don't rely on our own part-of-speech knowledge — the AI decides which forms apply
+      // (e.g. it can detect "wäscht" is a verb even if it's not in the vocabulary).
+      const formTypes: GeneratedStoryExercise['type'][] = [
+        'mc-plural',
+        'mc-verb-past',
+        'mc-verb-perfect',
+        'mc-comparative',
+        'mc-superlative',
+      ];
+      for (const ft of formTypes) {
+        const fe = perWord.find((e) => e.type === ft);
+        if (fe) normalizedGen.push(fe);
       }
     }
 
@@ -1926,19 +1916,22 @@ Example (mc-sentence):
   }
 
   /** Prompt for only-mc Request B: inflection/form exercises for nouns, verbs and adjectives.
-   *  Dictionary-provided pluralForm / simplePast / pastParticiple are injected as ground truth. */
+   *  The AI itself determines each word's part of speech (including words not in the vocabulary,
+   *  e.g. a conjugated form like "wäscht") and generates the appropriate forms. Dictionary-provided
+   *  pluralForm / simplePast / pastParticiple are injected as a reference when available. */
   private buildFormsPrompt(
     storyBlock: string,
     wordsJson: string,
-    count: number,
     langName: string,
     storyLevel: DifficultyLevel
   ): string {
     return `You are a German language teacher. ${storyBlock}
-For EACH word below, generate the requested German inflection (form) exercises. The words already contain grammar data: "partOfSpeech", and for nouns "pluralForm", for verbs "simplePast" and "pastParticiple". Generate ONLY these types per part of speech:
-- "noun": one "mc-plural" exercise — select the correct plural form of the noun. The correct answer must be the provided "pluralForm".
-- "verb": one "mc-verb-past" (select the correct Präteritum / simple past form) and one "mc-verb-perfect" (select the correct Perfekt / present perfect form, e.g. "hat gespielt", "ist gegangen"). The correct answers must be based on the provided "simplePast" and "pastParticiple".
-- "adjective": one "mc-comparative" (select the comparative form, e.g. "kleiner") and one "mc-superlative" (select the superlative form, e.g. "am kleinsten").
+Below is a list of German words a student selected from a story. For each word, FIRST determine its part of speech yourself (the list sometimes contains inflected/derived forms that are not in the dictionary, e.g. "wäscht" is the 3rd person of "waschen", "besser" is the comparative of "gut", "Äpfel" is the plural of "Apfel"). Then generate ONLY the appropriate inflection (form) exercises:
+- If the word is a NOUN: generate one "mc-plural" exercise — select the correct plural form of the noun.
+- If the word is a VERB: generate one "mc-verb-past" (correct Präteritum / simple past form, e.g. "ging") and one "mc-verb-perfect" (correct Perfekt form, e.g. "ist gegangen").
+- If the word is an ADJECTIVE: generate one "mc-comparative" (e.g. "kleiner") and one "mc-superlative" (e.g. "am kleinsten").
+- For any OTHER part of speech (adverbs, pronouns, prepositions, conjunctions, etc.): generate NOTHING for that word (skip it).
+Some words in the list may carry optional grammar data: "partOfSpeech", "pluralForm", "simplePast", "pastParticiple". Use these as a REFERENCE to confirm the correct answers when present, but if a field is missing you must determine the correct form yourself.
 
 Words: ${wordsJson}
 
@@ -1947,13 +1940,13 @@ Respond with JSON only (no markdown) as an object with a single key "exercises" 
 - "type": exactly "mc-plural", "mc-verb-past", "mc-verb-perfect", "mc-comparative" or "mc-superlative"
 - "mcPluralPrompt": (only for "mc-plural") the German noun in singular, with article (e.g. "der Apfel")
 - "mcPluralOptions": (only for "mc-plural") array of exactly 4 German plural forms (with article, e.g. "die Äpfel"), in random order, including the correct one
-- "mcPluralCorrect": (only for "mc-plural") the correct plural form — exactly the provided "pluralForm"
+- "mcPluralCorrect": (only for "mc-plural") the correct plural form (use the provided "pluralForm" if present, otherwise determine it yourself)
 - "mcVerbPastPrompt": (only for "mc-verb-past") the infinitive the student must conjugate, e.g. "spielen (Präteritum)"
 - "mcVerbPastOptions": (only for "mc-verb-past") array of exactly 4 German conjugated forms, in random order, including the correct one
-- "mcVerbPastCorrect": (only for "mc-verb-past") the correct Präteritum form — based on the provided "simplePast"
+- "mcVerbPastCorrect": (only for "mc-verb-past") the correct Präteritum form (use the provided "simplePast" if present, otherwise determine it yourself)
 - "mcVerbPerfectPrompt": (only for "mc-verb-perfect") the infinitive, e.g. "spielen (Perfekt)"
 - "mcVerbPerfectOptions": (only for "mc-verb-perfect") array of exactly 4 German Perfekt forms (with haben/sein auxiliary), in random order, including the correct one
-- "mcVerbPerfectCorrect": (only for "mc-verb-perfect") the correct Perfekt form — the provided "pastParticiple" with the correct auxiliary (haben or sein)
+- "mcVerbPerfectCorrect": (only for "mc-verb-perfect") the correct Perfekt form (use the provided "pastParticiple" with the correct haben/sein auxiliary if present, otherwise determine it yourself)
 - "mcComparativePrompt": (only for "mc-comparative") the positive adjective, e.g. "klein (Komparativ)"
 - "mcComparativeOptions": (only for "mc-comparative") array of exactly 4 German comparative forms, in random order, including the correct one
 - "mcComparativeCorrect": (only for "mc-comparative") the correct comparative form (e.g. "kleiner")
@@ -1962,11 +1955,11 @@ Respond with JSON only (no markdown) as an object with a single key "exercises" 
 - "mcSuperlativeCorrect": (only for "mc-superlative") the correct superlative form (e.g. "am kleinsten")
 
 Rules:
-- ALWAYS use the provided grammar data as ground truth for the correct answers: "pluralForm" for nouns, "simplePast" for mc-verb-past, "pastParticiple" (with haben/sein) for mc-verb-perfect.
+- Use the provided grammar data ("pluralForm" for nouns, "simplePast" for mc-verb-past, "pastParticiple" with haben/sein for mc-verb-perfect) as a reference when present; otherwise determine the correct forms yourself.
 - Options must be plausible distractors of the same part of speech and similar difficulty (e.g. other plural endings, other past participles, other comparative/superlative patterns).
 - For irregular forms (e.g. gut → besser → am besten), use the correct irregular form.
 - Prefer level-appropriate forms at CEFR level ${storyLevel}.
-- Generate exactly ${count} exercises total.
+- IMPORTANT: output one or more exercises ONLY for words that are nouns, verbs or adjectives. Skip other words entirely (do NOT invent form exercises for them).
 
 Example (plural):
 {"exercises":[{"word":"Apfel","type":"mc-plural","mcPluralPrompt":"der Apfel","mcPluralOptions":["die Äpfel","die Apfels","die Äpfeln","die Apfel"],"mcPluralCorrect":"die Äpfel"}]}
