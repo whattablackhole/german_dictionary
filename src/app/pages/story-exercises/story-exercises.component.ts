@@ -102,6 +102,11 @@ export class StoryExercisesComponent implements OnInit {
     switch (type) {
       case 'mc': return 'Choose the correct translation';
       case 'mc-sentence': return 'Select the correct German word';
+      case 'mc-plural': return 'Select the correct plural form';
+      case 'mc-verb-past': return 'Select the correct past form';
+      case 'mc-verb-perfect': return 'Select the correct past perfect form';
+      case 'mc-comparative': return 'Select the correct comparative form';
+      case 'mc-superlative': return 'Select the correct superlative form';
       case 'cloze': return 'Fill in the missing word';
       case 'sentence': return 'Translate the sentence';
       default: return '';
@@ -112,6 +117,11 @@ export class StoryExercisesComponent implements OnInit {
     switch (type) {
       case 'mc': return 'checklist';
       case 'mc-sentence': return 'rule';
+      case 'mc-plural': return 'groups';
+      case 'mc-verb-past': return 'history';
+      case 'mc-verb-perfect': return 'task_alt';
+      case 'mc-comparative': return 'trending_up';
+      case 'mc-superlative': return 'offline_pin';
       case 'cloze': return 'edit_note';
       case 'sentence': return 'translate';
       default: return 'quiz';
@@ -171,18 +181,9 @@ export class StoryExercisesComponent implements OnInit {
 
   selectOption(option: string): void {
     const item = this.currentItem();
-    if (!item || item.answered) return;
-    if (item.exercise.type !== 'mc' && item.exercise.type !== 'mc-sentence') return;
-
-    const correct =
-      item.exercise.type === 'mc-sentence'
-        ? option === item.exercise.mcSentenceCorrect
-        : option === item.exercise.mcCorrect;
-    const correctAnswer =
-      item.exercise.type === 'mc-sentence'
-        ? item.exercise.mcSentenceCorrect
-        : item.exercise.mcCorrect;
-
+    if (!item || item.answered || !this.isMcType(item.exercise.type)) return;
+    const correctAnswer = this.getMcCorrect(item.exercise);
+    const correct = option === correctAnswer;
     item.selectedOption = option;
     this.answerItem(
       item,
@@ -191,6 +192,61 @@ export class StoryExercisesComponent implements OnInit {
         ? ''
         : `Not quite. The correct answer is "${correctAnswer}".`
     );
+  }
+
+  /** Whether an exercise type uses the card-style option-button UI. */
+  private isMcType(type: StoryExerciseType): boolean {
+    return (
+      type === 'mc' ||
+      type === 'mc-sentence' ||
+      type === 'mc-plural' ||
+      type === 'mc-verb-past' ||
+      type === 'mc-verb-perfect' ||
+      type === 'mc-comparative' ||
+      type === 'mc-superlative'
+    );
+  }
+
+  /** Returns the answer options for any card-style exercise. */
+  getMcOptions(ex: StoryExercise): string[] {
+    switch (ex.type) {
+      case 'mc': return ex.mcOptions ?? [];
+      case 'mc-sentence': return ex.mcSentenceOptions ?? [];
+      case 'mc-plural': return ex.mcPluralOptions ?? [];
+      case 'mc-verb-past': return ex.mcVerbPastOptions ?? [];
+      case 'mc-verb-perfect': return ex.mcVerbPerfectOptions ?? [];
+      case 'mc-comparative': return ex.mcComparativeOptions ?? [];
+      case 'mc-superlative': return ex.mcSuperlativeOptions ?? [];
+      default: return [];
+    }
+  }
+
+  /** Returns the question prompt text for any card-style exercise. */
+  getMcPrompt(ex: StoryExercise): string {
+    switch (ex.type) {
+      case 'mc': return ex.mcPrompt ?? '';
+      case 'mc-sentence': return ex.mcSentence ?? '';
+      case 'mc-plural': return ex.mcPluralPrompt ?? '';
+      case 'mc-verb-past': return ex.mcVerbPastPrompt ?? '';
+      case 'mc-verb-perfect': return ex.mcVerbPerfectPrompt ?? '';
+      case 'mc-comparative': return ex.mcComparativePrompt ?? '';
+      case 'mc-superlative': return ex.mcSuperlativePrompt ?? '';
+      default: return '';
+    }
+  }
+
+  /** Returns the correct answer label for any card-style exercise. */
+  private getMcCorrect(ex: StoryExercise): string {
+    switch (ex.type) {
+      case 'mc': return ex.mcCorrect ?? '';
+      case 'mc-sentence': return ex.mcSentenceCorrect ?? '';
+      case 'mc-plural': return ex.mcPluralCorrect ?? '';
+      case 'mc-verb-past': return ex.mcVerbPastCorrect ?? '';
+      case 'mc-verb-perfect': return ex.mcVerbPerfectCorrect ?? '';
+      case 'mc-comparative': return ex.mcComparativeCorrect ?? '';
+      case 'mc-superlative': return ex.mcSuperlativeCorrect ?? '';
+      default: return '';
+    }
   }
 
   checkCloze(): void {

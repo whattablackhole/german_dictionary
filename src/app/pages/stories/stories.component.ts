@@ -164,6 +164,25 @@ export class StoriesComponent implements OnInit, OnDestroy {
       .filter((w) => w.length > 0);
   });
 
+  /** Number of exercises that will be generated for the current selection.
+   *  Toggle OFF: words × 3. Toggle ON: words × 3 base card exercises + form extras
+   *  (noun +1 plural, verb +2 Präteritum/Perfekt, adjective +2 comparative/superlative). */
+  readonly exerciseGenerationCount = computed(() => {
+    const words = this.selectedExerciseWords();
+    const base = words.length * 3;
+    if (!this.settingsService.storyOnlyMcExercises()) return base;
+    const dictionary = this.wordService.getWords();
+    let extras = 0;
+    for (const w of words) {
+      const found = dictionary.find((d) => d.german.toLowerCase() === w.toLowerCase());
+      if (!found) continue;
+      if (found.partOfSpeech === 'noun') extras += 1;
+      else if (found.partOfSpeech === 'verb') extras += 2;
+      else if (found.partOfSpeech === 'adjective') extras += 2;
+    }
+    return base + extras;
+  });
+
   // Sentence Notes Mode
   readonly sentenceNotesMode = signal(false);
   readonly selectedSentenceIndex = signal<number | null>(null);
@@ -1172,6 +1191,10 @@ export class StoriesComponent implements OnInit, OnDestroy {
           german: w,
           translationEn: found?.translationEn,
           translationRu: found?.translationRu,
+          partOfSpeech: found?.partOfSpeech,
+          pluralForm: found?.pluralForm,
+          simplePast: found?.simplePast,
+          pastParticiple: found?.pastParticiple,
         };
       });
 
@@ -1303,6 +1326,81 @@ export class StoriesComponent implements OnInit, OnDestroy {
           mcSentence: g.mcSentence,
           mcSentenceOptions: opts,
           mcSentenceCorrect: g.mcSentenceCorrect,
+        };
+      }
+      case 'mc-plural': {
+        if (!g.mcPluralPrompt || !g.mcPluralCorrect || !Array.isArray(g.mcPluralOptions)) return null;
+        const opts = g.mcPluralOptions
+          .map((o) => String(o).trim())
+          .filter((o) => o.length > 0);
+        if (!opts.includes(g.mcPluralCorrect)) opts.push(g.mcPluralCorrect);
+        if (opts.length < 2) return null;
+        return {
+          ...base,
+          type: 'mc-plural',
+          mcPluralPrompt: g.mcPluralPrompt,
+          mcPluralOptions: opts,
+          mcPluralCorrect: g.mcPluralCorrect,
+        };
+      }
+      case 'mc-verb-past': {
+        if (!g.mcVerbPastPrompt || !g.mcVerbPastCorrect || !Array.isArray(g.mcVerbPastOptions)) return null;
+        const opts = g.mcVerbPastOptions
+          .map((o) => String(o).trim())
+          .filter((o) => o.length > 0);
+        if (!opts.includes(g.mcVerbPastCorrect)) opts.push(g.mcVerbPastCorrect);
+        if (opts.length < 2) return null;
+        return {
+          ...base,
+          type: 'mc-verb-past',
+          mcVerbPastPrompt: g.mcVerbPastPrompt,
+          mcVerbPastOptions: opts,
+          mcVerbPastCorrect: g.mcVerbPastCorrect,
+        };
+      }
+      case 'mc-verb-perfect': {
+        if (!g.mcVerbPerfectPrompt || !g.mcVerbPerfectCorrect || !Array.isArray(g.mcVerbPerfectOptions)) return null;
+        const opts = g.mcVerbPerfectOptions
+          .map((o) => String(o).trim())
+          .filter((o) => o.length > 0);
+        if (!opts.includes(g.mcVerbPerfectCorrect)) opts.push(g.mcVerbPerfectCorrect);
+        if (opts.length < 2) return null;
+        return {
+          ...base,
+          type: 'mc-verb-perfect',
+          mcVerbPerfectPrompt: g.mcVerbPerfectPrompt,
+          mcVerbPerfectOptions: opts,
+          mcVerbPerfectCorrect: g.mcVerbPerfectCorrect,
+        };
+      }
+      case 'mc-comparative': {
+        if (!g.mcComparativePrompt || !g.mcComparativeCorrect || !Array.isArray(g.mcComparativeOptions)) return null;
+        const opts = g.mcComparativeOptions
+          .map((o) => String(o).trim())
+          .filter((o) => o.length > 0);
+        if (!opts.includes(g.mcComparativeCorrect)) opts.push(g.mcComparativeCorrect);
+        if (opts.length < 2) return null;
+        return {
+          ...base,
+          type: 'mc-comparative',
+          mcComparativePrompt: g.mcComparativePrompt,
+          mcComparativeOptions: opts,
+          mcComparativeCorrect: g.mcComparativeCorrect,
+        };
+      }
+      case 'mc-superlative': {
+        if (!g.mcSuperlativePrompt || !g.mcSuperlativeCorrect || !Array.isArray(g.mcSuperlativeOptions)) return null;
+        const opts = g.mcSuperlativeOptions
+          .map((o) => String(o).trim())
+          .filter((o) => o.length > 0);
+        if (!opts.includes(g.mcSuperlativeCorrect)) opts.push(g.mcSuperlativeCorrect);
+        if (opts.length < 2) return null;
+        return {
+          ...base,
+          type: 'mc-superlative',
+          mcSuperlativePrompt: g.mcSuperlativePrompt,
+          mcSuperlativeOptions: opts,
+          mcSuperlativeCorrect: g.mcSuperlativeCorrect,
         };
       }
       case 'cloze': {

@@ -116,7 +116,7 @@ interface RawDeclensionExercise {
 export interface GeneratedStoryExercise {
   /** The German target word this exercise trains */
   word: string;
-  type: 'mc' | 'mc-sentence' | 'cloze' | 'sentence';
+  type: 'mc' | 'mc-sentence' | 'mc-plural' | 'mc-verb-past' | 'mc-verb-perfect' | 'mc-comparative' | 'mc-superlative' | 'cloze' | 'sentence';
 
   // mc — multiple choice translation
   mcPrompt?: string;
@@ -130,6 +130,31 @@ export interface GeneratedStoryExercise {
   mcSentence?: string;
   mcSentenceOptions?: string[];
   mcSentenceCorrect?: string;
+
+  // mc-plural — pick the correct plural form of a noun
+  mcPluralPrompt?: string;
+  mcPluralOptions?: string[];
+  mcPluralCorrect?: string;
+
+  // mc-verb-past — pick the correct Präteritum (simple past) form of a verb
+  mcVerbPastPrompt?: string;
+  mcVerbPastOptions?: string[];
+  mcVerbPastCorrect?: string;
+
+  // mc-verb-perfect — pick the correct Perfekt (past perfect) form of a verb
+  mcVerbPerfectPrompt?: string;
+  mcVerbPerfectOptions?: string[];
+  mcVerbPerfectCorrect?: string;
+
+  // mc-comparative — pick the correct comparative form of an adjective
+  mcComparativePrompt?: string;
+  mcComparativeOptions?: string[];
+  mcComparativeCorrect?: string;
+
+  // mc-superlative — pick the correct superlative form of an adjective
+  mcSuperlativePrompt?: string;
+  mcSuperlativeOptions?: string[];
+  mcSuperlativeCorrect?: string;
 
   // cloze — word in a sentence
   clozeSentence?: string;
@@ -1540,13 +1565,22 @@ German sentence: "${text}"`;
    * Words are processed in chunks to keep each AI response a manageable size.
    */
   async generateStoryExercises(config: {
-    words: { german: string; translationEn?: string; translationRu?: string }[];
+    words: {
+      german: string;
+      translationEn?: string;
+      translationRu?: string;
+      partOfSpeech?: string;
+      pluralForm?: string;
+      simplePast?: string;
+      pastParticiple?: string;
+    }[];
     storyLevel: DifficultyLevel;
     storyDomain: string;
     storyText?: string;
     translationLanguage: 'en' | 'ru';
-    /** Limit exercises to multiple-choice (card) exercises only. Still generates 3 per word,
-     *  mixing German→native and native→German directions. */
+    /** Limit exercises to multiple-choice (card) exercises only. Still generates 3 base card exercises per word
+     *  (de→native, native→de, sentence-blank) plus form-specific exercises for nouns (plural),
+     *  verbs (Präteritum + Perfekt) and adjectives (comparative + superlative). */
     onlyMc?: boolean;
   }): Promise<GeneratedStoryExercise[]> {
     const apiKey = this.getApiKey();
@@ -1569,61 +1603,91 @@ German sentence: "${text}"`;
     for (let i = 0; i < config.words.length; i += CHUNK_SIZE) {
       const chunk = config.words.slice(i, i + CHUNK_SIZE);
       const wordsJson = JSON.stringify(chunk);
-      const count = chunk.length * 3;
 
-      const prompt = onlyMc
-        ? this.buildOnlyMcStoryExercisesPrompt(storyBlock, wordsJson, count, langName, config.storyLevel)
-        : this.buildMixedStoryExercisesPrompt(storyBlock, wordsJson, count, langName, config.storyLevel);
+      if (onlyMc) {
+        // Request A — recognition: 3 base card exercises per word for every word.
+        const recogCount = chunk.length * 3;
+        const recogPrompt = this.buildRecognitionPrompt(
+          storyBlock,
+          wordsJson,
+          recogCount,
+          langName,
+          config.storyLevel
+        );
+        let recogExercises: GeneratedStoryExercise[] = [];
+        let formExercises: GeneratedStoryExercise[] = [];
 
-      const response = await fetch(environment.openRouterApiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.settingsService.textModel(),
-          messages: [{ role: 'user', content: prompt }],
-          ...(this.combinedProviderField()),
-          response_format: { type: 'json_object' },
-          temperature: 0.5,
-        }),
-      });
+        try {
+          recogExercises = await this.requestStoryExercises(apiKey, recogPrompt);
+        } catch (err) {
+          throw err instanceof Error
+            ? err
+            : new Error('AI could not generate exercises. Try again.');
+        }
 
-      if (!response.ok) {
-        this.handleError(response);
+        // Request B — forms: only for nouns/verbs/adjectives with known grammar data.
+        const formWords = chunk.filter((w) =>
+          ['noun', 'verb', 'adjective'].includes(w.partOfSpeech ?? '')
+        );
+        if (formWords.length > 0) {
+          const formsJson = JSON.stringify(formWords);
+          const formCount = formWords.reduce((sum, w) => {
+            if (w.partOfSpeech === 'verb') return sum + 2;
+            if (w.partOfSpeech === 'adjective') return sum + 2;
+            return sum + 1; // noun → plural
+          }, 0);
+          const formsPrompt = this.buildFormsPrompt(
+            storyBlock,
+            formsJson,
+            formCount,
+            langName,
+            config.storyLevel
+          );
+          try {
+            formExercises = await this.requestStoryExercises(apiKey, formsPrompt);
+          } catch (err) {
+            // Graceful fallback: forms are a bonus — keep going with recognition exercises only.
+            console.warn(
+              'Story exercise forms request failed; continuing with recognition exercises only.',
+              err
+            );
+            formExercises = [];
+          }
+        }
+
+        allExercises.push(...recogExercises, ...formExercises);
+      } else {
+        const count = chunk.length * 3;
+        const prompt = this.buildMixedStoryExercisesPrompt(
+          storyBlock,
+          wordsJson,
+          count,
+          langName,
+          config.storyLevel
+        );
+        const exercises = await this.requestStoryExercises(apiKey, prompt);
+        allExercises.push(...exercises);
       }
-
-      const data = await response.json();
-      const text: string | undefined = data.choices?.[0]?.message?.content;
-      if (!text) {
-        throw new Error('AI returned no result.');
-      }
-
-      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      const jsonText = jsonMatch ? jsonMatch[1] : text;
-
-      let parsed: GeneratedStoryExercise[] | { exercises: GeneratedStoryExercise[] };
-      try {
-        parsed = JSON.parse(jsonText);
-      } catch {
-        throw new Error('AI returned an invalid response.');
-      }
-
-      const exercises = Array.isArray(parsed)
-        ? parsed
-        : (parsed as { exercises: GeneratedStoryExercise[] }).exercises ?? [];
-
-      if (!Array.isArray(exercises) || exercises.length === 0) {
-        throw new Error('AI could not generate exercises. Try again.');
-      }
-
-      allExercises.push(...exercises);
     }
 
     // Validate: keep only well-formed exercises
     const valid = allExercises.filter((e) => {
-      if (!e.word || !['mc', 'mc-sentence', 'cloze', 'sentence'].includes(e.type)) return false;
+      if (
+        !e.word ||
+        ![
+          'mc',
+          'mc-sentence',
+          'mc-plural',
+          'mc-verb-past',
+          'mc-verb-perfect',
+          'mc-comparative',
+          'mc-superlative',
+          'cloze',
+          'sentence',
+        ].includes(e.type)
+      ) {
+        return false;
+      }
       if (e.type === 'mc') {
         return !!e.mcPrompt && !!e.mcCorrect && Array.isArray(e.mcOptions) && e.mcOptions.length >= 2;
       }
@@ -1633,6 +1697,46 @@ German sentence: "${text}"`;
           !!e.mcSentenceCorrect &&
           Array.isArray(e.mcSentenceOptions) &&
           e.mcSentenceOptions.length >= 2
+        );
+      }
+      if (e.type === 'mc-plural') {
+        return (
+          !!e.mcPluralPrompt &&
+          !!e.mcPluralCorrect &&
+          Array.isArray(e.mcPluralOptions) &&
+          e.mcPluralOptions.length >= 2
+        );
+      }
+      if (e.type === 'mc-verb-past') {
+        return (
+          !!e.mcVerbPastPrompt &&
+          !!e.mcVerbPastCorrect &&
+          Array.isArray(e.mcVerbPastOptions) &&
+          e.mcVerbPastOptions.length >= 2
+        );
+      }
+      if (e.type === 'mc-verb-perfect') {
+        return (
+          !!e.mcVerbPerfectPrompt &&
+          !!e.mcVerbPerfectCorrect &&
+          Array.isArray(e.mcVerbPerfectOptions) &&
+          e.mcVerbPerfectOptions.length >= 2
+        );
+      }
+      if (e.type === 'mc-comparative') {
+        return (
+          !!e.mcComparativePrompt &&
+          !!e.mcComparativeCorrect &&
+          Array.isArray(e.mcComparativeOptions) &&
+          e.mcComparativeOptions.length >= 2
+        );
+      }
+      if (e.type === 'mc-superlative') {
+        return (
+          !!e.mcSuperlativePrompt &&
+          !!e.mcSuperlativeCorrect &&
+          Array.isArray(e.mcSuperlativeOptions) &&
+          e.mcSuperlativeOptions.length >= 2
         );
       }
       if (e.type === 'cloze') {
@@ -1649,44 +1753,94 @@ German sentence: "${text}"`;
       return valid;
     }
 
-    // In only-mc mode we want exactly 3 distinct, non-repeated exercise types per word:
-    //   1. mc de-native, 2. mc native-de, 3. mc-sentence (select correct German word for a blanked sentence).
+    // Only-mc mode: every word must have its 3 base recognition exercises.
+    // Form exercises (plural / verb past / verb perfect / comparative / superlative) are
+    // best-effort: they are added when present, but their absence must NOT fail the session.
     const normalizedGen: GeneratedStoryExercise[] = [];
-    const allowedTypes = new Set<GeneratedStoryExercise['type']>(['mc', 'mc-sentence']);
     for (const w of config.words) {
       const perWord = valid.filter(
         (e) => e.word?.trim().toLowerCase() === w.german.trim().toLowerCase()
       );
-      const mcDe = perWord.find(
-        (e) => e.type === 'mc' && e.mcDirection === 'de-native'
-      );
-      const mcNativeDe = perWord.find(
-        (e) => e.type === 'mc' && e.mcDirection === 'native-de'
-      );
+      const mcDe = perWord.find((e) => e.type === 'mc' && e.mcDirection === 'de-native');
+      const mcNativeDe = perWord.find((e) => e.type === 'mc' && e.mcDirection === 'native-de');
       const mcSentence = perWord.find((e) => e.type === 'mc-sentence');
-      const picked: GeneratedStoryExercise[] = [];
-      for (const ex of [mcDe, mcNativeDe, mcSentence]) {
-        if (ex) picked.push(ex);
-      }
-      // Guard against infinite loops / weird output: only use types we accept.
-      for (let tries = 0; tries < 50 && picked.length < 3; tries++) {
-        const extra = perWord.find(
-          (e) => !picked.includes(e) && allowedTypes.has(e.type)
-        );
-        if (!extra) break;
-        picked.push(extra);
-      }
-      if (picked.length < 3) {
+      const base = [mcDe, mcNativeDe, mcSentence].filter(
+        (e): e is GeneratedStoryExercise => !!e
+      );
+      if (base.length < 3) {
         throw new Error('AI could not generate complete exercises. Try again.');
       }
-      normalizedGen.push(...picked);
-    }
+      normalizedGen.push(...base);
 
-    if (normalizedGen.length < config.words.length * 3) {
-      throw new Error('AI could not generate complete exercises. Try again.');
+      const pos = w.partOfSpeech;
+      if (pos === 'noun') {
+        const p = perWord.find((e) => e.type === 'mc-plural');
+        if (p) normalizedGen.push(p);
+      } else if (pos === 'verb') {
+        const past = perWord.find((e) => e.type === 'mc-verb-past');
+        const perfect = perWord.find((e) => e.type === 'mc-verb-perfect');
+        if (past) normalizedGen.push(past);
+        if (perfect) normalizedGen.push(perfect);
+      } else if (pos === 'adjective') {
+        const comp = perWord.find((e) => e.type === 'mc-comparative');
+        const sup = perWord.find((e) => e.type === 'mc-superlative');
+        if (comp) normalizedGen.push(comp);
+        if (sup) normalizedGen.push(sup);
+      }
     }
 
     return normalizedGen;
+  }
+
+  /** Sends a single story-exercise prompt to the AI and returns the raw parsed exercise objects. */
+  private async requestStoryExercises(
+    apiKey: string,
+    prompt: string
+  ): Promise<GeneratedStoryExercise[]> {
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.settingsService.textModel(),
+        messages: [{ role: 'user', content: prompt }],
+        ...(this.combinedProviderField()),
+        response_format: { type: 'json_object' },
+        temperature: 0.5,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: GeneratedStoryExercise[] | { exercises: GeneratedStoryExercise[] };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const exercises = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { exercises: GeneratedStoryExercise[] }).exercises ?? [];
+
+    if (!Array.isArray(exercises) || exercises.length === 0) {
+      throw new Error('AI could not generate exercises. Try again.');
+    }
+
+    return exercises;
   }
 
   /** Prompt for the default mode: 3 mixed exercise types per word (mc, cloze, sentence). */
@@ -1730,9 +1884,9 @@ Example format:
 {"exercises":[{"word":"Apfel","type":"mc","mcDirection":"de-native","mcPrompt":"der Apfel","mcOptions":["apple","pear","banana","orange"],"mcCorrect":"apple","clozeSentence":"","clozeBlankWords":[],"clozeHint":"","sentenceGerman":"","sentenceNative":""}]}`;
   }
 
-  /** Prompt for the only-mc mode: 3 non-repeated multiple-choice exercises per word:
-   *  one de→native, one native→de, one sentence-blank (select the correct German word). */
-  private buildOnlyMcStoryExercisesPrompt(
+  /** Prompt for only-mc Request A: 3 base card exercises per word
+   *  (de→native, native→de, sentence-blank) — same types for every word. */
+  private buildRecognitionPrompt(
     storyBlock: string,
     wordsJson: string,
     count: number,
@@ -1769,6 +1923,61 @@ Example (native→de):
 {"exercises":[{"word":"Apfel","type":"mc","mcDirection":"native-de","mcPrompt":"apple","mcOptions":["der Apfel","die Birne","die Banane","die Orange"],"mcCorrect":"der Apfel"}]}
 Example (mc-sentence):
 {"exercises":[{"word":"Apfel","type":"mc-sentence","mcSentence":"Ich esse jeden Tag einen ___.","mcSentenceOptions":["Apfel","Birne","Banane","Orange"],"mcSentenceCorrect":"Apfel"}]}`;
+  }
+
+  /** Prompt for only-mc Request B: inflection/form exercises for nouns, verbs and adjectives.
+   *  Dictionary-provided pluralForm / simplePast / pastParticiple are injected as ground truth. */
+  private buildFormsPrompt(
+    storyBlock: string,
+    wordsJson: string,
+    count: number,
+    langName: string,
+    storyLevel: DifficultyLevel
+  ): string {
+    return `You are a German language teacher. ${storyBlock}
+For EACH word below, generate the requested German inflection (form) exercises. The words already contain grammar data: "partOfSpeech", and for nouns "pluralForm", for verbs "simplePast" and "pastParticiple". Generate ONLY these types per part of speech:
+- "noun": one "mc-plural" exercise — select the correct plural form of the noun. The correct answer must be the provided "pluralForm".
+- "verb": one "mc-verb-past" (select the correct Präteritum / simple past form) and one "mc-verb-perfect" (select the correct Perfekt / present perfect form, e.g. "hat gespielt", "ist gegangen"). The correct answers must be based on the provided "simplePast" and "pastParticiple".
+- "adjective": one "mc-comparative" (select the comparative form, e.g. "kleiner") and one "mc-superlative" (select the superlative form, e.g. "am kleinsten").
+
+Words: ${wordsJson}
+
+Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
+- "word": the target German word (copy it exactly from the input list)
+- "type": exactly "mc-plural", "mc-verb-past", "mc-verb-perfect", "mc-comparative" or "mc-superlative"
+- "mcPluralPrompt": (only for "mc-plural") the German noun in singular, with article (e.g. "der Apfel")
+- "mcPluralOptions": (only for "mc-plural") array of exactly 4 German plural forms (with article, e.g. "die Äpfel"), in random order, including the correct one
+- "mcPluralCorrect": (only for "mc-plural") the correct plural form — exactly the provided "pluralForm"
+- "mcVerbPastPrompt": (only for "mc-verb-past") the infinitive the student must conjugate, e.g. "spielen (Präteritum)"
+- "mcVerbPastOptions": (only for "mc-verb-past") array of exactly 4 German conjugated forms, in random order, including the correct one
+- "mcVerbPastCorrect": (only for "mc-verb-past") the correct Präteritum form — based on the provided "simplePast"
+- "mcVerbPerfectPrompt": (only for "mc-verb-perfect") the infinitive, e.g. "spielen (Perfekt)"
+- "mcVerbPerfectOptions": (only for "mc-verb-perfect") array of exactly 4 German Perfekt forms (with haben/sein auxiliary), in random order, including the correct one
+- "mcVerbPerfectCorrect": (only for "mc-verb-perfect") the correct Perfekt form — the provided "pastParticiple" with the correct auxiliary (haben or sein)
+- "mcComparativePrompt": (only for "mc-comparative") the positive adjective, e.g. "klein (Komparativ)"
+- "mcComparativeOptions": (only for "mc-comparative") array of exactly 4 German comparative forms, in random order, including the correct one
+- "mcComparativeCorrect": (only for "mc-comparative") the correct comparative form (e.g. "kleiner")
+- "mcSuperlativePrompt": (only for "mc-superlative") the positive adjective, e.g. "klein (Superlativ)"
+- "mcSuperlativeOptions": (only for "mc-superlative") array of exactly 4 German superlative forms, in random order, including the correct one
+- "mcSuperlativeCorrect": (only for "mc-superlative") the correct superlative form (e.g. "am kleinsten")
+
+Rules:
+- ALWAYS use the provided grammar data as ground truth for the correct answers: "pluralForm" for nouns, "simplePast" for mc-verb-past, "pastParticiple" (with haben/sein) for mc-verb-perfect.
+- Options must be plausible distractors of the same part of speech and similar difficulty (e.g. other plural endings, other past participles, other comparative/superlative patterns).
+- For irregular forms (e.g. gut → besser → am besten), use the correct irregular form.
+- Prefer level-appropriate forms at CEFR level ${storyLevel}.
+- Generate exactly ${count} exercises total.
+
+Example (plural):
+{"exercises":[{"word":"Apfel","type":"mc-plural","mcPluralPrompt":"der Apfel","mcPluralOptions":["die Äpfel","die Apfels","die Äpfeln","die Apfel"],"mcPluralCorrect":"die Äpfel"}]}
+Example (verb past):
+{"exercises":[{"word":"spielen","type":"mc-verb-past","mcVerbPastPrompt":"spielen (Präteritum)","mcVerbPastOptions":["spielte","spielt","spielte gespielt","gespielt"],"mcVerbPastCorrect":"spielte"}]}
+Example (verb perfect):
+{"exercises":[{"word":"gehen","type":"mc-verb-perfect","mcVerbPerfectPrompt":"gehen (Perfekt)","mcVerbPerfectOptions":["ist gegangen","hat gegangen","gegangen","ging"],"mcVerbPerfectCorrect":"ist gegangen"}]}
+Example (comparative):
+{"exercises":[{"word":"klein","type":"mc-comparative","mcComparativePrompt":"klein (Komparativ)","mcComparativeOptions":["kleiner","am kleinsten","kleinste","kleines"],"mcComparativeCorrect":"kleiner"}]}
+Example (superlative):
+{"exercises":[{"word":"klein","type":"mc-superlative","mcSuperlativePrompt":"klein (Superlativ)","mcSuperlativeOptions":["am kleinsten","kleiner","kleinste","am klein"],"mcSuperlativeCorrect":"am kleinsten"}]}`;
   }
 
   async generatePrepositionExercise(

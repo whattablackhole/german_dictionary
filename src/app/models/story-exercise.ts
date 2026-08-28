@@ -1,6 +1,15 @@
 import { DifficultyLevel } from './word';
 
-export type StoryExerciseType = 'mc' | 'mc-sentence' | 'cloze' | 'sentence';
+export type StoryExerciseType =
+  | 'mc'
+  | 'mc-sentence'
+  | 'mc-plural'
+  | 'mc-verb-past'
+  | 'mc-verb-perfect'
+  | 'mc-comparative'
+  | 'mc-superlative'
+  | 'cloze'
+  | 'sentence';
 
 export interface StoryExercise {
   id: string;
@@ -22,6 +31,31 @@ export interface StoryExercise {
   mcSentence?: string;
   mcSentenceOptions?: string[];
   mcSentenceCorrect?: string;
+
+  // mc-plural — pick the correct plural form of a noun
+  mcPluralPrompt?: string;
+  mcPluralOptions?: string[];
+  mcPluralCorrect?: string;
+
+  // mc-verb-past — pick the correct Präteritum (simple past) form of a verb
+  mcVerbPastPrompt?: string;
+  mcVerbPastOptions?: string[];
+  mcVerbPastCorrect?: string;
+
+  // mc-verb-perfect — pick the correct Perfekt (past perfect) form of a verb
+  mcVerbPerfectPrompt?: string;
+  mcVerbPerfectOptions?: string[];
+  mcVerbPerfectCorrect?: string;
+
+  // mc-comparative — pick the correct comparative form of an adjective
+  mcComparativePrompt?: string;
+  mcComparativeOptions?: string[];
+  mcComparativeCorrect?: string;
+
+  // mc-superlative — pick the correct superlative form of an adjective
+  mcSuperlativePrompt?: string;
+  mcSuperlativeOptions?: string[];
+  mcSuperlativeCorrect?: string;
 
   // Cloze: fill in the missing German word in a sentence
   clozeSentence?: string;

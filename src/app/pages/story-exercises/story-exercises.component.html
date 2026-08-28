@@ -83,6 +83,56 @@
             </div>
           }
         }
+        @case ('mc-plural') {
+          <div class="question-prompt">{{ getMcPrompt(item.exercise) }}</div>
+          @if (!item.answered) {
+            <div class="options-grid">
+              @for (opt of getMcOptions(item.exercise); track opt) {
+                <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
+              }
+            </div>
+          }
+        }
+        @case ('mc-verb-past') {
+          <div class="question-prompt">{{ getMcPrompt(item.exercise) }}</div>
+          @if (!item.answered) {
+            <div class="options-grid">
+              @for (opt of getMcOptions(item.exercise); track opt) {
+                <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
+              }
+            </div>
+          }
+        }
+        @case ('mc-verb-perfect') {
+          <div class="question-prompt">{{ getMcPrompt(item.exercise) }}</div>
+          @if (!item.answered) {
+            <div class="options-grid">
+              @for (opt of getMcOptions(item.exercise); track opt) {
+                <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
+              }
+            </div>
+          }
+        }
+        @case ('mc-comparative') {
+          <div class="question-prompt">{{ getMcPrompt(item.exercise) }}</div>
+          @if (!item.answered) {
+            <div class="options-grid">
+              @for (opt of getMcOptions(item.exercise); track opt) {
+                <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
+              }
+            </div>
+          }
+        }
+        @case ('mc-superlative') {
+          <div class="question-prompt">{{ getMcPrompt(item.exercise) }}</div>
+          @if (!item.answered) {
+            <div class="options-grid">
+              @for (opt of getMcOptions(item.exercise); track opt) {
+                <button class="option-btn" (click)="selectOption(opt)">{{ opt }}</button>
+              }
+            </div>
+          }
+        }
         @case ('cloze') {
           <div class="sentence-card">
             <div class="sentence-label">Fill in the missing German word:</div>
