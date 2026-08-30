@@ -311,6 +311,15 @@
         </mat-select>
       </mat-form-field>
 
+      <mat-form-field appearance="outline" class="list-filter-select">
+        <mat-label>Priority</mat-label>
+        <mat-select [(ngModel)]="priorityFilter">
+          <mat-option value="all">All</mat-option>
+          <mat-option value="priority">Prioritized</mat-option>
+          <mat-option value="nonpriority">Not prioritized</mat-option>
+        </mat-select>
+      </mat-form-field>
+
       <span class="list-filter-count">{{ words().length }} shown</span>
     </div>
 
@@ -367,6 +376,15 @@
                 } @else {
                   <mat-spinner diameter="18" class="image-spinner" />
                 }
+                <button
+                  mat-icon-button
+                  [color]="isPriority(word) ? 'primary' : ''"
+                  aria-label="{{ isPriority(word) ? 'Remove priority' : 'Mark as prioritized' }} for {{ word.german }}"
+                  [title]="isPriority(word) ? 'Prioritized (click to remove)' : 'Mark as prioritized'"
+                  (click)="togglePriority(word)"
+                >
+                  <mat-icon>{{ isPriority(word) ? 'star' : 'star_border' }}</mat-icon>
+                </button>
                 <button
                   mat-icon-button
                   color="primary"

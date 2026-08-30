@@ -736,3 +736,100 @@
     opacity: 0.9;
   }
 }
+
+/* Priority filter row */
+.priority-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  .priority-filter-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .priority-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 14px;
+    background: transparent;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+      color: #f9a825;
+    }
+
+    &:hover {
+      border-color: var(--mat-sys-primary);
+    }
+
+    &.selected {
+      background: var(--mat-sys-primary);
+      color: var(--mat-sys-on-primary);
+      border-color: var(--mat-sys-primary);
+
+      mat-icon {
+        color: var(--mat-sys-on-primary);
+      }
+    }
+  }
+}
+
+/* Priority star badge on forced word items */
+.priority-star {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  color: #f9a825;
+  flex-shrink: 0;
+}
+
+/* Practice mode header */
+.mode-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+
+  .section-title {
+    margin: 0;
+  }
+}
+
+.max-words-field {
+  margin-top: 8px;
+  max-width: 180px;
+}
+
+/* Session error */
+.session-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(211, 47, 47, 0.1);
+  border: 1px solid rgba(211, 47, 47, 0.3);
+  color: #c62828;
+  font-size: 13px;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+}

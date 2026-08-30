@@ -86,6 +86,17 @@
             >
               <mat-icon>volume_up</mat-icon>
             </button>
+            <button
+              mat-icon-button
+              class="result-priority-btn"
+              [class.priority-on]="isSelectedPriority()"
+              [attr.aria-label]="isSelectedPriority() ? 'Remove priority' : 'Mark as prioritized'"
+              [matTooltip]="isSelectedPriority() ? 'Remove priority' : 'Mark as prioritized'"
+              matTooltipPosition="above"
+              (click)="togglePriority()"
+            >
+              <mat-icon>{{ isSelectedPriority() ? 'star' : 'star_border' }}</mat-icon>
+            </button>
           </div>
 
           <div class="result-meta">

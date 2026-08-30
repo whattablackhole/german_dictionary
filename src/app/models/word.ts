@@ -47,6 +47,8 @@ export interface Word {
   level: DifficultyLevel;
   mastery: number;
   usageCount: number;
+  /** Marked as prioritized / "especially important to me" by the user. */
+  priority?: boolean;
   createdAt: string;
   // Verb-specific fields (optional)
   verbType?: VerbType;

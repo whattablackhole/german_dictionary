@@ -251,6 +251,21 @@
     color: var(--mat-sys-primary);
     flex-shrink: 0;
   }
+
+  .result-priority-btn {
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+    flex-shrink: 0;
+
+    &.priority-on {
+      color: #f9a825;
+    }
+
+    mat-icon {
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+    }
+  }
 }
 
 .result-meta {

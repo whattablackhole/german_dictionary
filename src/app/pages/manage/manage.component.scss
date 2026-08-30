@@ -3,8 +3,10 @@
 }
 
 .manage-container {
-  max-width: 800px;
+  max-width: none;
+  width: 100%;
   padding: 24px;
+  box-sizing: border-box;
 }
 
 .page-title {
@@ -286,20 +288,20 @@
 .word-table-header,
 .word-table-row {
   display: grid;
-  grid-template-columns: 70px 60px 1fr 1fr 60px 90px 120px;
+  grid-template-columns: 70px 60px 1fr 1fr 60px 90px 150px;
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
 
   @media (max-width: 900px) {
-    grid-template-columns: 60px 50px 1fr 1fr 50px 80px 100px;
+    grid-template-columns: 60px 50px 1fr 1fr 50px 80px 130px;
     gap: 8px;
     padding: 8px;
     font-size: 13px;
   }
 
   @media (max-width: 700px) {
-    grid-template-columns: 40px 40px 1fr 1fr 40px 70px 80px;
+    grid-template-columns: 40px 40px 1fr 1fr 40px 70px 110px;
     gap: 6px;
     padding: 6px;
     font-size: 12px;
@@ -382,17 +384,21 @@
 
 .actions-cell {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  align-items: center;
   gap: 4px;
 }
 
 .actions-header {
-  text-align: right;
+  text-align: center;
 }
 
 .word-table-image {
   width: 24px;
   height: 24px;
+  /* Match the mat-icon-button (40px box, 8px padding around its 24px icon) */
+  padding: 8px;
+  box-sizing: content-box;
   border-radius: 4px;
   object-fit: cover;
   vertical-align: middle;
@@ -450,7 +456,7 @@
 
 .word-table-row {
   display: grid;
-  grid-template-columns: 70px 60px 1fr 1fr 60px 90px 90px;
+  grid-template-columns: 70px 60px 1fr 1fr 60px 90px 150px;
   align-items: center;
   padding: 8px 12px;
   gap: 8px;

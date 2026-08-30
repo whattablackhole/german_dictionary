@@ -1,6 +1,6 @@
-<div class="practice-container">
+﻿<div class="practice-container">
   <h1 class="page-title">{{ reviewMastered() ? 'Review Mastered Words' : 'Word Practice' }}</h1>
-  <p class="page-subtitle">{{ reviewMastered() ? 'Reviewing words you already know' : 'Fill in the missing German word in each sentence' }}</p>
+  <p class="page-subtitle">{{ reviewMastered() ? 'Reviewing words you already know' : 'Practice German words with a mix of exercises' }}</p>
 
   @if (!practiceStarted()) {
     <div class="start-layout">
@@ -134,7 +134,7 @@
               </div>
             }
           </div>
-          <p class="section-hint">Forced words are guaranteed to appear in generated exercises</p>
+          <p class="section-hint">Choose words to practice. Filter by search, date or priority.</p>
 
           <div class="forced-words-filters">
             <mat-form-field appearance="outline" class="word-search-field">
@@ -159,11 +159,7 @@
             <div class="date-filters">
               <mat-form-field appearance="outline" class="date-field">
                 <mat-label>From date</mat-label>
-                <input
-                  matInput
-                  type="date"
-                  [(ngModel)]="wordDateFrom"
-                />
+                <input matInput type="date" [(ngModel)]="wordDateFrom" />
                 @if (wordDateFrom()) {
                   <button
                     matSuffix
@@ -178,11 +174,7 @@
 
               <mat-form-field appearance="outline" class="date-field">
                 <mat-label>To date</mat-label>
-                <input
-                  matInput
-                  type="date"
-                  [(ngModel)]="wordDateTo"
-                />
+                <input matInput type="date" [(ngModel)]="wordDateTo" />
                 @if (wordDateTo()) {
                   <button
                     matSuffix
@@ -194,6 +186,31 @@
                   </button>
                 }
               </mat-form-field>
+            </div>
+
+            <div class="priority-filter-row">
+              <span class="priority-filter-label">Priority:</span>
+              <button
+                class="priority-filter-btn"
+                [class.selected]="wordPriorityFilter() === 'all'"
+                (click)="wordPriorityFilter.set('all')"
+              >
+                All
+              </button>
+              <button
+                class="priority-filter-btn"
+                [class.selected]="wordPriorityFilter() === 'priority'"
+                (click)="wordPriorityFilter.set('priority')"
+              >
+                <mat-icon>star</mat-icon> Prioritized
+              </button>
+              <button
+                class="priority-filter-btn"
+                [class.selected]="wordPriorityFilter() === 'nonpriority'"
+                (click)="wordPriorityFilter.set('nonpriority')"
+              >
+                Not prioritized
+              </button>
             </div>
           </div>
 
@@ -208,6 +225,9 @@
                   {{ isWordForced(word.id) ? 'check_box' : 'check_box_outline_blank' }}
                 </mat-icon>
                 <span class="word-german">{{ word.german }}</span>
+                @if (isPriorityWord(word)) {
+                  <mat-icon class="priority-star" title="Prioritized">star</mat-icon>
+                }
                 <span class="word-translation">{{ word.translationEn }}</span>
                 <span class="word-level">{{ word.level }}</span>
               </button>
@@ -218,27 +238,67 @@
           </div>
         </div>
 
+        <!-- Practice Mode -->
+        <div class="settings-section">
+          <div class="mode-header">
+            <h2 class="section-title">Practice Mode</h2>
+            <mat-slide-toggle [(ngModel)]="selectedWordsOnly" [disabled]="generating()">
+              Selected words only
+            </mat-slide-toggle>
+          </div>
+          <p class="section-hint">
+            @if (selectedWordsOnly()) {
+              Generates exercises ONLY for the words you selected, presented out of order, ignoring accumulated progress.
+            } @else {
+              Respects your accumulated progress (in-progress and new words from your practice history).
+            }
+          </p>
+          @if (selectedWordsOnly()) {
+            <mat-form-field appearance="outline" class="max-words-field">
+              <mat-label>Max words</mat-label>
+              <input matInput type="number" min="1" max="50" [(ngModel)]="maxWords" [disabled]="generating()" />
+            </mat-form-field>
+          }
+        </div>
+
         <div class="settings-section">
           <h2 class="section-title">Session Preview</h2>
-          <p class="section-hint">
-            Regular practice: up to 5 in-progress words + up to 5 new words (total ~10).
-          </p>
-          <div class="mode-buttons">
-            <div class="preview-stat">
-              <mat-icon>replay</mat-icon>
-              <span>In progress: <strong>{{ availableInProgress().length }}</strong></span>
+          @if (selectedWordsOnly()) {
+            <p class="section-hint">A fresh session is generated out of order for the selected words.</p>
+            <div class="mode-buttons">
+              <div class="preview-stat">
+                <mat-icon>star</mat-icon>
+                <span>Selected: <strong>{{ forcedWordCount() }}</strong> word{{ forcedWordCount() === 1 ? '' : 's' }}</span>
+              </div>
             </div>
-            <div class="preview-stat">
-              <mat-icon>fiber_new</mat-icon>
-              <span>New: <strong>{{ availableNew().length }}</strong></span>
+          } @else {
+            <p class="section-hint">
+              Regular practice: in-progress words first, then new words (total ~10).
+            </p>
+            <div class="mode-buttons">
+              <div class="preview-stat">
+                <mat-icon>replay</mat-icon>
+                <span>In progress: <strong>{{ availableInProgress().length }}</strong></span>
+              </div>
+              <div class="preview-stat">
+                <mat-icon>fiber_new</mat-icon>
+                <span>New: <strong>{{ availableNew().length }}</strong></span>
+              </div>
             </div>
-          </div>
+          }
         </div>
+
+        @if (sessionError()) {
+          <div class="session-error">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ sessionError() }}</span>
+          </div>
+        }
 
         @if (generating()) {
           <div class="generating-indicator">
             <mat-spinner diameter="24" />
-            <span>Generating word exercises with AI...</span>
+            <span>Generating exercises with AI...</span>
           </div>
         }
 
@@ -247,7 +307,13 @@
           (click)="startPractice()"
           [disabled]="generating()"
         >
-          Start Practice
+          @if (selectedWordsOnly()) {
+            Start Practice (Selected Words)
+          } @else if (reviewMastered()) {
+            Review Mastered
+          } @else {
+            Start Practice
+          }
         </button>
       </div>
 
@@ -280,139 +346,13 @@
         </div>
       }
     </div>
-  } @else if (practiceFinished()) {
-    <div class="results-screen">
-      <h2 class="results-title">Practice Complete!</h2>
-      <div class="score-display">
-        <span class="score-number">{{ correctCount() }}</span>
-        <span class="score-total">/ {{ totalExercises() }}</span>
-      </div>
-      <p class="score-label">
-        {{ correctCount() === totalExercises() ? 'Perfect! 🎉' : 'words answered correctly' }}
-      </p>
-      <button class="start-button" (click)="restart()">Back to Start</button>
-    </div>
   } @else {
-    <div class="practice-screen">
-      <div class="progress">
-        <span>Word {{ currentNumber() }} of {{ totalExercises() }}</span>
-        <span>Correct: {{ correctCount() }}</span>
-      </div>
-
-      <div class="sentence-card">
-        <div class="sentence-label">Fill in the missing word:</div>
-        <div class="sentence-text">
-          @if (currentExercise(); as current) {
-            @if (result() !== null) {
-              {{ buildFilledSentence(current.exercise, userInput()) }}
-            } @else {
-              {{ buildBlankSentence(current.exercise) }}
-            }
-          }
-        </div>
-        <div class="sentence-hint">
-          <mat-icon>translate</mat-icon>
-          <span>Hint: {{ currentExercise() ? getHint(currentExercise()!.exercise) : '' }}</span>
-        </div>
-        <div class="sentence-meta">
-          <span class="level-badge">{{ currentExercise()?.exercise?.level }}</span>
-          <span class="domain-badge">{{ currentExercise()?.exercise?.domain }}</span>
-        </div>
-      </div>
-
-      <div class="input-section">
-        <input
-          class="answer-input"
-          [(ngModel)]="userInput"
-          placeholder="Type the German word..."
-          [disabled]="result() !== null"
-          (keydown.enter)="checkAnswer()"
-        />
-        @if (result() === null) {
-          <button class="submit-button" (click)="checkAnswer()" [disabled]="!userInput().trim()">
-            Check Answer
-          </button>
-        }
-      </div>
-
-      @if (result() !== null) {
-        <div class="result-section" [class.correct]="result()" [class.incorrect]="!result()">
-          <div class="result-header">
-            @if (result()) {
-              <mat-icon class="result-icon correct-icon">check_circle</mat-icon>
-              <span>Correct! ✓</span>
-            } @else {
-              <mat-icon class="result-icon incorrect-icon">cancel</mat-icon>
-              <span>Not quite right</span>
-            }
-          </div>
-
-          <div class="full-sentence">
-            <strong>Sentence:</strong> {{ currentExercise() ? buildFilledSentence(currentExercise()!.exercise, expectedAnswer(currentExercise()!.exercise)) : '' }}
-            <button mat-icon-button aria-label="Pronounce sentence" (click)="speakWord()">
-              <mat-icon>volume_up</mat-icon>
-            </button>
-          </div>
-
-          @if (!result()) {
-            <div class="correct-answer">
-              <strong>Correct word:</strong> {{ currentExercise() ? expectedAnswer(currentExercise()!.exercise) : '' }}
-            </div>
-            <div class="feedback-text">
-              You typed: "{{ userInput() }}". The correct answer is "{{ currentExercise() ? expectedAnswer(currentExercise()!.exercise) : '' }}".
-            </div>
-          }
-
-          @if (translationLoading()) {
-            <div class="translation-block loading">
-              <mat-icon>translate</mat-icon>
-              <span>Translating...</span>
-            </div>
-          } @else if (translation(); as t) {
-            <div class="translation-block">
-              <mat-icon>translate</mat-icon>
-              <span>{{ t }}</span>
-            </div>
-          }
-
-          <div class="mastery-actions">
-            <button
-              class="mastery-btn negative"
-              [class.selected]="masteryFeedback() === -10"
-              (click)="adjustMastery(-10)"
-            >
-              @if (masteryFeedback() === -10) {
-                <mat-icon>check</mat-icon>
-              }
-              Still learning (−10)
-            </button>
-            <button
-              class="mastery-btn positive"
-              [class.selected]="masteryFeedback() === 10"
-              (click)="adjustMastery(10)"
-            >
-              @if (masteryFeedback() === 10) {
-                <mat-icon>check</mat-icon>
-              }
-              Got it (+10)
-            </button>
-            <button
-              class="mastery-btn mastered"
-              [class.selected]="masteryFeedback() === 100"
-              (click)="adjustMastery(100)"
-            >
-              @if (masteryFeedback() === 100) {
-                <mat-icon>check</mat-icon>
-              }
-              Mastered (100)
-            </button>
-          </div>
-
-          <button class="next-button" (click)="nextExercise()">
-            {{ currentNumber() >= totalExercises() ? 'See Results' : 'Next Word' }}
-          </button>
-        </div>
-      }
-    </div>
+    <app-exercise-list
+      [exercises]="sessionExercises()"
+      [showMasteryActions]="true"
+      (complete)="onSessionComplete($event)"
+      (quit)="onSessionQuit($event)"
+      (masteryAdjust)="onMasteryAdjust($event)"
+    />
   }
 </div>

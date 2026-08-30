@@ -195,6 +195,14 @@ export class WordService {
     this.save();
   }
 
+  /** Marks/unmarks a word as prioritized. */
+  setPriority(wordId: string, priority: boolean): void {
+    this.words.update((words) =>
+      words.map((w) => (w.id === wordId ? { ...w, priority } : w))
+    );
+    this.save();
+  }
+
   incrementUsage(germanWords: string[]): void {
     if (germanWords.length === 0) {
       return;
@@ -255,6 +263,7 @@ export class WordService {
             partOfSpeech: w.partOfSpeech ?? 'noun',
             mastery: (w as Word).mastery ?? 0,
             usageCount: (w as Word).usageCount ?? 0,
+            priority: (w as Word).priority ?? false,
             gender: w.gender ?? (w.partOfSpeech === 'noun' ? seed?.gender ?? 'der' : null),
             translationEn: w.translationEn ?? legacy.translation ?? seed?.translationEn ?? '',
             translationRu:

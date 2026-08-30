@@ -44,6 +44,7 @@ export class ManageComponent {
   readonly posFilter = signal<PartOfSpeech | ''>('');
   readonly levelFilter = signal<DifficultyLevel | ''>('');
   readonly genderFilter = signal<Gender | ''>('');
+  readonly priorityFilter = signal<'all' | 'priority' | 'nonpriority'>('all');
 
   readonly words = computed(() => {
     let words = this.allWords();
@@ -51,6 +52,7 @@ export class ManageComponent {
     const pos = this.posFilter();
     const level = this.levelFilter();
     const gender = this.genderFilter();
+    const priority = this.priorityFilter();
 
     if (search) {
       words = words.filter(
@@ -68,6 +70,11 @@ export class ManageComponent {
     }
     if (gender) {
       words = words.filter((w) => w.gender === gender);
+    }
+    if (priority === 'priority') {
+      words = words.filter((w) => w.priority === true);
+    } else if (priority === 'nonpriority') {
+      words = words.filter((w) => !w.priority);
     }
     return words;
   });
@@ -352,6 +359,14 @@ export class ManageComponent {
 
   toggleExpand(wordId: string): void {
     this.expandedRowId.update((current) => (current === wordId ? null : wordId));
+  }
+
+  isPriority(word: Word): boolean {
+    return word.priority === true;
+  }
+
+  togglePriority(word: Word): void {
+    this.wordService.setPriority(word.id, !this.isPriority(word));
   }
 
   getTranslation(word: Word): string {

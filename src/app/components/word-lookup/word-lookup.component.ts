@@ -60,6 +60,27 @@ export class WordLookupComponent {
   // Add-to-vocab feedback
   readonly addedFeedback = signal(false);
 
+  /** Whether the currently selected vocabulary word is prioritized (reactive). */
+  readonly isSelectedPriority = computed<boolean>(() => {
+    const word = this.selectedWord();
+    if (!word) return false;
+    return (
+      this.wordService
+        .words()
+        .find((w) => w.id === word.id)?.priority === true
+    );
+  });
+
+  /** Toggles the priority flag on the currently selected vocabulary word. */
+  togglePriority(): void {
+    const word = this.selectedWord();
+    if (!word) return;
+    this.wordService.setPriority(word.id, !this.isSelectedPriority());
+    // Refresh the selected-word reference so the view stays in sync.
+    const fresh = this.wordService.getWords().find((w) => w.id === word.id);
+    if (fresh) this.selectedWord.set(fresh);
+  }
+
   /** Live matching words as the user types (exact or partial across all forms). */
   readonly liveMatches = computed<Word[]>(() => {
     const query = normalize(this.searchInput());
