@@ -313,6 +313,19 @@ body {
   }
 }
 
+// Material buttons render text/spinners/icons inside `.mdc-button__label`, which
+// is a plain inline `<span>` by default. A `mat-spinner` (`display: block`) inside
+// it would break onto its own line and take vertical space instead of aligning
+// left-center next to the text. Make the label a centered flex row so spinners,
+// icons, and text align properly while keeping Material's 8px icon spacing.
+.mdc-button .mdc-button__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 // Rounded input fields
 .mat-mdc-text-field-wrapper {
   border-radius: var(--mat-sys-corner-medium) !important;

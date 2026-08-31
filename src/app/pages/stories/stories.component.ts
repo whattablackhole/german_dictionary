@@ -151,7 +151,8 @@ export class StoriesComponent implements OnInit, OnDestroy {
   // Vocabulary exercise word selection
   readonly exerciseSelectionMode = signal(false);
   /** Ordered list of selected word groups. Each group is an ordered array of token indices
-   *  (single words = length 1; Ctrl+click groups contiguous words into one unit, e.g. "mache an"). */
+   *  (single words = length 1; Ctrl+click groups words into one unit, e.g. "mache an" —
+   *  the words may be separated by other tokens in the story, as with separable verbs). */
   readonly exerciseSelectedGroups = signal<number[][]>([]);
   readonly exerciseGenerating = signal(false);
   readonly exerciseError = signal('');
@@ -974,22 +975,44 @@ export class StoriesComponent implements OnInit, OnDestroy {
     this.exerciseError.set('');
   }
 
-  /** Ctrl+left-click: group this word with the previously selected one as a single unit. */
+  /** Ctrl+left-click: group this word with the previously selected one as a single unit.
+   *  The words do not have to be adjacent — e.g. "mache" and "an" can be separated by
+   *  other tokens in the sentence (separable verbs). */
   groupExerciseSelection(index: number): void {
     const groups = this.exerciseSelectedGroups().map((g) => [...g]);
+
     if (groups.length > 0) {
       const last = groups[groups.length - 1];
-      const adjacent =
-        last[last.length - 1] + 1 === index || last[0] - 1 === index;
-      if (!last.includes(index) && adjacent) {
-        groups[groups.length - 1] = [...last, index].sort((a, b) => a - b);
-        this.exerciseSelectedGroups.set(groups);
+
+      // Toggle off: if the word is already part of the current unit, remove it.
+      if (last.includes(index)) {
+        const updated = last.filter((i) => i !== index);
+        groups[groups.length - 1] = updated;
+        this.exerciseSelectedGroups.set(
+          updated.length > 0 ? groups : groups.slice(0, -1)
+        );
         this.exerciseError.set('');
         return;
       }
+
+      // Remove the word from any earlier group so groups never overlap.
+      const cleaned = groups
+        .map((g) => g.filter((i) => i !== index))
+        .filter((g) => g.length > 0);
+
+      // Add the clicked word to the current unit, regardless of how far away it is.
+      // Sorting by token index keeps the label in reading order (e.g. "mache an").
+      const current = [...cleaned[cleaned.length - 1], index].sort(
+        (a, b) => a - b
+      );
+      cleaned[cleaned.length - 1] = current;
+      this.exerciseSelectedGroups.set(cleaned);
+      this.exerciseError.set('');
+      return;
     }
-    // Not adjacent to the last group → start a new single-word group
-    this.exerciseSelectedGroups.set([...groups, [index]]);
+
+    // No groups yet → start a single-word group
+    this.exerciseSelectedGroups.set([[index]]);
     this.exerciseError.set('');
   }
 
