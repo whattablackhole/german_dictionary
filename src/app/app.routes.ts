@@ -64,6 +64,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'story-questions',
+    loadComponent: () =>
+      import('./pages/story-questions/story-questions.component').then(
+        (m) => m.StoryQuestionsComponent
+      ),
+  },
+  {
     path: 'sentence-builder',
     loadComponent: () =>
       import('./pages/sentence-builder/sentence-builder.component').then(

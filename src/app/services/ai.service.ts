@@ -1,6 +1,11 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
-import { Gender, DifficultyLevel, PartOfSpeech } from '../models/word';
+import {
+  Gender,
+  DifficultyLevel,
+  PartOfSpeech,
+  TranslationLanguage,
+} from '../models/word';
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
 import { SettingsService } from './settings.service';
@@ -164,6 +169,27 @@ export interface GeneratedStoryExercise {
   // sentence — translate the whole sentence
   sentenceGerman?: string;
   sentenceNative?: string;
+}
+
+/** A story comprehension question as returned by the AI (for active recall). */
+export interface GeneratedStoryQuestion {
+  /** The comprehension question in German. */
+  question: string;
+  /** Native translation of the question (in the user's settings language). */
+  translation: string;
+  /** The German model answer (a full sentence). */
+  answer: string;
+  /** Optional hint word/phrase. */
+  hint?: string;
+}
+
+/** AI grading result for a typed story-comprehension answer. */
+export interface StoryAnswerFeedback {
+  correct: boolean;
+  score: number;
+  feedback: string;
+  /** The corrected/natural German answer. */
+  correctedText: string;
 }
 
 export interface DeclensionAnswerResult {
@@ -1411,6 +1437,171 @@ Student's translation: "${userInput}"`;
       errors: parsed.errors ?? [],
       feedback: parsed.feedback ?? '',
       correctedText: parsed.correctedText?.trim() || correctGerman,
+    };
+  }
+
+  /**
+   * Generates German reading-comprehension questions about a story for active
+   * recall training. The learner reads the question and answers it in German
+   * from memory.
+   */
+  async generateStoryQuestions(config: {
+    storyTitle: string;
+    storyGerman: string;
+    level: DifficultyLevel;
+    translationLanguage: TranslationLanguage;
+    count: number;
+  }): Promise<GeneratedStoryQuestion[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const langName =
+      config.translationLanguage === 'en' ? 'English' : 'Russian';
+
+    const prompt = `You are a German language teacher. Generate ${config.count} comprehension questions about the following German story.
+The questions are for ACTIVE RECALL training: the learner reads the question and must answer it in German from memory.
+
+Requirements:
+- Write each question in German at CEFR level ${config.level}.
+- The questions must test understanding of the story details (who, what, where, when, why, sequence of events, character motivations). Do NOT ask for word-for-word quotes.
+- Provide a clear, correct model answer in German (a full sentence).
+- Provide the question translation in ${langName} so learners who are stuck can understand what is asked.
+- Optionally provide a short hint (a single German word or phrase that nudges toward the answer).
+- Questions must be answerable from the story alone. Do not require outside knowledge.
+
+Story title: "${config.storyTitle}"
+Story:
+"""${config.storyGerman}"""
+
+Respond with JSON only (no markdown) using exactly this shape:
+{"questions":[{"question":"...","translation":"...","answer":"...","hint":"..."}]}`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.settingsService.textModel(),
+        messages: [{ role: 'user', content: prompt }],
+        ...(this.combinedProviderField()),
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: GeneratedStoryQuestion[] | { questions: GeneratedStoryQuestion[] };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const questions = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { questions: GeneratedStoryQuestion[] }).questions ?? [];
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      throw new Error('AI could not generate questions. Try again.');
+    }
+
+    return questions
+      .filter((q) => !!q.question?.trim() && !!q.answer?.trim())
+      .slice(0, config.count);
+  }
+
+  /**
+   * Grades the learner's typed German answer to a story-comprehension question
+   * against the model answer (factual accuracy + German quality, 0-100).
+   */
+  async checkStoryAnswer(
+    userInput: string,
+    question: string,
+    correctAnswer: string
+  ): Promise<StoryAnswerFeedback> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const prompt = `You are a German language teacher. Grade the student's answer to a reading-comprehension question about a German story.
+Respond with JSON only (no markdown) using exactly these fields:
+- "correct": boolean (true if the answer conveys the correct facts, even with minor language mistakes)
+- "score": number (0-100, combining factual accuracy and German quality)
+- "feedback": string (short encouraging feedback in English, pointing out what was right and what was missing or wrong)
+- "correctedText": string (the student's answer rewritten into natural, grammatically correct German that fully answers the question. If correct is true, this can equal the student's input.)
+
+Rules:
+- The student answers in German. Meaning over form: reward correct content even with spelling or grammar slips.
+- Only mark correct if the answer contains the key facts of the model answer.
+- If the student's input is empty or not in German, mark incorrect with score 0.
+- "correctedText" must preserve the student's intended meaning while fixing all errors and completing the answer.
+
+Question: "${question}"
+Model answer: "${correctAnswer}"
+Student's answer: "${userInput}"`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.settingsService.textModel(),
+        messages: [{ role: 'user', content: prompt }],
+        ...(this.combinedProviderField()),
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: {
+      correct?: boolean;
+      score?: number;
+      feedback?: string;
+      correctedText?: string;
+    };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    return {
+      correct: parsed.correct ?? false,
+      score: parsed.score ?? 0,
+      feedback: parsed.feedback ?? '',
+      correctedText: parsed.correctedText?.trim() || correctAnswer,
     };
   }
 

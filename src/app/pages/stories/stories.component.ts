@@ -27,6 +27,10 @@ import { GrammarNotesService } from '../../services/grammar-notes.service';
 import { SentenceNotesService } from '../../services/sentence-notes.service';
 import { StoryExerciseHistoryService } from '../../services/story-exercise-history.service';
 import { StoryExerciseHistoryEntry } from '../../models/story-exercise-history';
+import { StoryQuestion } from '../../models/story-question';
+import { StoryQuestionHistoryEntry } from '../../models/story-question-history';
+import { StoryQuestionService } from '../../services/story-question.service';
+import { StoryQuestionHistoryService } from '../../services/story-question-history.service';
 import { toStoryExercise as toStoryExerciseShared } from '../../services/story-exercise-builder';
 
 interface WordToken {
@@ -151,6 +155,10 @@ export class StoriesComponent implements OnInit, OnDestroy {
   readonly exerciseSelectedGroups = signal<number[][]>([]);
   readonly exerciseGenerating = signal(false);
   readonly exerciseError = signal('');
+
+  // Story Questions (active recall) mode
+  readonly storyQuestionsGenerating = signal(false);
+  readonly storyQuestionsError = signal('');
 
   /** Ordered list of German word units selected for exercises (groups joined with a space). */
   readonly selectedExerciseWords = computed<string[]>(() => {
@@ -439,6 +447,8 @@ export class StoriesComponent implements OnInit, OnDestroy {
     private readonly grammarNotesService: GrammarNotesService,
     private readonly sentenceNotesService: SentenceNotesService,
     private readonly historyService: StoryExerciseHistoryService,
+    private readonly storyQuestionService: StoryQuestionService,
+    private readonly questionHistoryService: StoryQuestionHistoryService,
     private readonly router: Router,
     private readonly route: ActivatedRoute
   ) {}
@@ -1220,6 +1230,58 @@ export class StoriesComponent implements OnInit, OnDestroy {
     }
   }
 
+  // ── Story Questions (active recall) ──
+
+  /** Generates comprehension questions about the selected story and starts the
+   *  AI-graded active-recall session. Question count scales with story length
+   *  (roughly one per ~40 words), clamped to 5-10. */
+  async startStoryQuestions(): Promise<void> {
+    const story = this.selectedStory();
+    if (!story) return;
+
+    if (!this.aiService.hasApiKey()) {
+      this.storyQuestionsError.set('No API key set. Add your OpenRouter API key in Settings.');
+      return;
+    }
+
+    this.storyQuestionsGenerating.set(true);
+    this.storyQuestionsError.set('');
+    try {
+      const count = Math.min(10, Math.max(5, Math.ceil(story.wordCount / 40)));
+
+      const generated = await this.aiService.generateStoryQuestions({
+        storyTitle: story.title,
+        storyGerman: story.german,
+        level: story.level,
+        translationLanguage: this.settingsService.translationLanguage(),
+        count,
+      });
+
+      if (generated.length === 0) {
+        this.storyQuestionsError.set('No valid questions could be generated. Try again.');
+        return;
+      }
+
+      const questions: StoryQuestion[] = generated.map((g) => ({
+        id: crypto.randomUUID(),
+        storyId: story.id,
+        question: g.question.trim(),
+        questionTranslation: (g.translation ?? '').trim(),
+        answer: g.answer.trim(),
+        hint: (g.hint ?? '').trim() || undefined,
+      }));
+
+      this.storyQuestionService.setSession(story, questions);
+      this.router.navigate(['/story-questions']);
+    } catch (err) {
+      this.storyQuestionsError.set(
+        err instanceof Error ? err.message : 'Failed to generate questions.'
+      );
+    } finally {
+      this.storyQuestionsGenerating.set(false);
+    }
+  }
+
   // ── Exercise history & replay ──
 
   /** Completed/quit exercise sessions for the currently selected story, newest first. */
@@ -1275,6 +1337,46 @@ export class StoriesComponent implements OnInit, OnDestroy {
   /** Deletes all saved history for a story (called when the story is deleted). */
   clearSessionHistory(storyId: string): void {
     this.historyService.deleteForStory(storyId);
+    this.questionHistoryService.deleteForStory(storyId);
+  }
+
+  // ── Question history & replay ──
+
+  /** Completed/quit question sessions for the currently selected story, newest first. */
+  readonly questionHistory = computed<StoryQuestionHistoryEntry[]>(() => {
+    const id = this.selectedStoryId();
+    if (!id) return [];
+    return this.questionHistoryService.getForStory(id);
+  });
+
+  /** Loads a saved question session into the story question service and replays it. */
+  replayQuestionSession(entryId: string): void {
+    const entry = this.questionHistoryService.getEntryById(entryId);
+    if (!entry || entry.questions.length === 0) return;
+
+    const story = this.storyService.getStoryById(entry.storyId) ?? {
+      id: entry.storyId,
+      title: entry.storyTitle,
+      german: '',
+      translationEn: '',
+      translationRu: '',
+      level: entry.level,
+      domain: '',
+      grammarTopics: [],
+      wordCount: entry.questions.length,
+      createdAt: entry.completedAt,
+    };
+
+    this.stopPlayback();
+    this.closeWordPopup();
+    this.closeSentenceNotePopup();
+    this.storyQuestionService.setSession(story, [...entry.questions]);
+    this.router.navigate(['/story-questions']);
+  }
+
+  /** Deletes a single question history entry. */
+  deleteQuestionEntry(entryId: string): void {
+    this.questionHistoryService.deleteEntry(entryId);
   }
 
   private toStoryExercise(

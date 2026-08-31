@@ -596,6 +596,43 @@
           </div>
         }
 
+        <!-- Story Questions (active recall) -->
+        <div class="story-questions-row">
+          <div class="story-questions-info">
+            <mat-icon>quiz</mat-icon>
+            <div>
+              <div class="story-questions-label">Story Questions</div>
+              <div class="story-questions-desc">
+                Active recall: AI generates comprehension questions and grades your German answers.
+              </div>
+            </div>
+          </div>
+          <button
+            mat-flat-button
+            color="primary"
+            class="start-questions-btn"
+            (click)="startStoryQuestions()"
+            [disabled]="storyQuestionsGenerating()"
+          >
+            @if (storyQuestionsGenerating()) {
+              <mat-spinner diameter="20" />
+              <span>Generating...</span>
+            } @else {
+              <ng-container>
+                <mat-icon>help</mat-icon>
+                <span>Start Story Questions</span>
+              </ng-container>
+            }
+          </button>
+        </div>
+
+        @if (storyQuestionsError()) {
+          <div class="exercise-error">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ storyQuestionsError() }}</span>
+          </div>
+        }
+
         <mat-accordion class="translations-accordion">
           <mat-expansion-panel>
             <mat-expansion-panel-header>
@@ -642,6 +679,47 @@
                     <button
                       class="history-delete-btn"
                       (click)="deleteSessionEntry(entry.id)"
+                      title="Delete this session"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </section>
+
+        <!-- Question History (active recall sessions) -->
+        <section class="exercise-history-section">
+          <h3 class="history-title">Question History</h3>
+          @if (questionHistory().length === 0) {
+            <p class="history-empty">
+              No question sessions yet. Start Story Questions to train active recall.
+            </p>
+          } @else {
+            <div class="history-list">
+              @for (entry of questionHistory(); track entry.id) {
+                <div class="history-entry">
+                  <div class="history-entry-top">
+                    <span class="history-score" [class.history-good]="entry.scorePercent >= 80">
+                      {{ entry.correctCount }}/{{ entry.totalCount }}
+                    </span>
+                    <span class="history-percent">{{ entry.scorePercent }}%</span>
+                    <span class="history-date">{{ formatSessionDate(entry.completedAt) }}</span>
+                  </div>
+                  <div class="history-entry-actions">
+                    <button
+                      class="history-replay-btn"
+                      (click)="replayQuestionSession(entry.id)"
+                      title="Replay this session"
+                    >
+                      <mat-icon>replay</mat-icon>
+                      Replay
+                    </button>
+                    <button
+                      class="history-delete-btn"
+                      (click)="deleteQuestionEntry(entry.id)"
                       title="Delete this session"
                     >
                       <mat-icon>delete</mat-icon>

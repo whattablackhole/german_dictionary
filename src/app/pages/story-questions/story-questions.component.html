@@ -1,0 +1,164 @@
+<div class="story-questions-container">
+  <div class="page-header">
+    <h1 class="page-title">Story Questions</h1>
+    <p class="page-subtitle">
+      {{ story()?.title ?? 'Story questions' }}
+      @if (story(); as s) {
+        <span class="story-badge">{{ s.level }}</span>
+      }
+    </p>
+    <button mat-stroked-button class="back-btn" (click)="backToStories()">
+      <mat-icon>arrow_back</mat-icon>
+      Back to Stories
+    </button>
+  </div>
+
+  @if (totalQuestions() === 0) {
+    <div class="empty-state-large">
+      <mat-icon class="empty-icon">quiz</mat-icon>
+      <p>No questions yet.</p>
+    </div>
+  } @else if (sessionFinished()) {
+    <div class="results-screen">
+      <mat-icon class="results-trophy">emoji_events</mat-icon>
+      <h2>Session Complete!</h2>
+      <p class="score">
+        {{ correctCount() }} / {{ totalQuestions() }} correct ({{ scorePercent() }}%)
+      </p>
+      <div class="results-actions">
+        <button mat-raised-button (click)="restart()">
+          <mat-icon>replay</mat-icon>
+          Practice Again
+        </button>
+        <button mat-stroked-button (click)="backToStories()">
+          <mat-icon>arrow_back</mat-icon>
+          Exit
+        </button>
+      </div>
+    </div>
+  } @else if (sessionActive() && currentItem(); as item) {
+    <div class="session-card">
+      <div class="session-header">
+        <div class="session-title-row">
+          <mat-icon>help_outline</mat-icon>
+          <span>Comprehension Question</span>
+        </div>
+        <div class="session-meta">
+          <span>Question {{ currentNumber() }} of {{ totalQuestions() }}</span>
+          <span>Correct: {{ correctCount() }}</span>
+        </div>
+        <button
+          mat-icon-button
+          class="quit-btn"
+          (click)="quitSession()"
+          title="Quit"
+          aria-label="Quit"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <div class="question-card">
+        <div class="question-text">{{ item.question.question }}</div>
+        <div class="question-actions">
+          <button mat-stroked-button class="speak-btn" (click)="speak(item.question.question)">
+            <mat-icon>volume_up</mat-icon>
+            Listen
+          </button>
+          <button mat-stroked-button class="translate-btn" (click)="toggleTranslation()">
+            <mat-icon>{{ item.showTranslation ? 'visibility_off' : 'visibility' }}</mat-icon>
+            {{ item.showTranslation ? 'Hide Translation' : 'Show Translation' }}
+          </button>
+          @if (item.question.hint) {
+            <button mat-stroked-button class="hint-btn" (click)="toggleHint()">
+              <mat-icon>lightbulb</mat-icon>
+              {{ item.showHint ? 'Hide Hint' : 'Hint' }}
+            </button>
+          }
+        </div>
+        @if (item.showTranslation && item.question.questionTranslation) {
+          <div class="translation-box">{{ item.question.questionTranslation }}</div>
+        }
+        @if (item.showHint && item.question.hint) {
+          <div class="hint-box">
+            <mat-icon>lightbulb</mat-icon>
+            <span>{{ item.question.hint }}</span>
+          </div>
+        }
+      </div>
+
+      @if (!item.answered) {
+        <div class="answer-section">
+          <label class="answer-label">Your answer (in German):</label>
+          <textarea
+            class="answer-input"
+            [(ngModel)]="userInput"
+            rows="4"
+            placeholder="Schreibe deine Antwort auf Deutsch..."
+          ></textarea>
+          <div class="answer-actions">
+            <button
+              mat-raised-button
+              color="primary"
+              (click)="submitAnswer()"
+              [disabled]="verifying() || !userInput().trim()"
+            >
+              @if (verifying()) {
+                <mat-spinner diameter="20" />
+                <span>Checking...</span>
+              } @else {
+                <ng-container>
+                  <mat-icon>check_circle</mat-icon>
+                  <span>Check Answer</span>
+                </ng-container>
+              }
+            </button>
+          </div>
+          @if (submitError()) {
+            <div class="submit-error">
+              <mat-icon>error_outline</mat-icon>
+              <span>{{ submitError() }}</span>
+            </div>
+          }
+        </div>
+      }
+
+      @if (item.answered) {
+        <div class="feedback" [class.correct]="item.correct" [class.wrong]="!item.correct">
+          <mat-icon>{{ item.correct ? 'check_circle' : 'cancel' }}</mat-icon>
+          <div>
+            <strong>{{ item.correct ? 'Correct!' : 'Not quite.' }}</strong>
+            @if (item.feedback) {
+              <span>{{ item.feedback }}</span>
+            }
+          </div>
+        </div>
+
+        @if (item.grade; as g) {
+          <div class="score-display">Score: {{ g.score }}/100</div>
+          @if (!g.correct) {
+            <div class="answer-compare">
+              <div class="compare-row">
+                <span class="compare-label">Your answer:</span>
+                <span class="compare-text original">{{ item.userInput }}</span>
+              </div>
+              <div class="compare-row">
+                <span class="compare-label">Corrected:</span>
+                <span class="compare-text corrected">{{ g.correctedText }}</span>
+              </div>
+            </div>
+          }
+        }
+
+        <button
+          mat-raised-button
+          color="primary"
+          class="next-btn"
+          (click)="nextQuestion()"
+        >
+          {{ currentNumber() >= totalQuestions() ? 'See Results' : 'Next' }}
+        </button>
+      }
+    </div>
+  }
+</div>

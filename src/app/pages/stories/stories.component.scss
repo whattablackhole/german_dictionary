@@ -962,6 +962,54 @@
   }
 }
 
+/* Story Questions (active recall) */
+.story-questions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container-low);
+
+  .story-questions-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+
+    mat-icon {
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+      color: var(--mat-sys-primary);
+    }
+
+    .story-questions-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--mat-sys-on-surface);
+    }
+
+    .story-questions-desc {
+      font-size: 12px;
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  .start-questions-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    mat-spinner,
+    mat-icon {
+      margin: 0;
+    }
+  }
+}
+
 /* Sentence Notes Mode */
 .sentence-span {
   // Keep the span inline so text flows naturally (no column/gap artifacts).
