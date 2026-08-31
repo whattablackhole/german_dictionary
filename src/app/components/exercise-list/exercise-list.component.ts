@@ -15,6 +15,7 @@ import { AiService, TranslationResult } from '../../services/ai.service';
 import { SpeechService } from '../../services/speech.service';
 import { StoryExercise, StoryExerciseType } from '../../models/story-exercise';
 import { StoryExerciseResult } from '../../models/story-exercise-history';
+import { withShuffledOptions } from '../../services/story-exercise-builder';
 
 interface SessionItem {
   exercise: StoryExercise;
@@ -100,7 +101,11 @@ export class ExerciseListComponent implements OnInit {
     }
     this.session.set(
       exercises.map((e) => ({
-        exercise: e,
+        // Re-shuffle options once per session so the correct answer never
+        // sits at a predictable position, even for exercises replayed from
+        // stored history. Grading uses the independent `*Correct` field, so
+        // this is safe, and `restart()` reuses this session (no re-shuffling).
+        exercise: withShuffledOptions(e),
         selectedOption: null,
         answered: false,
         correct: false,
