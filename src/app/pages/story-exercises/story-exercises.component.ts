@@ -36,16 +36,27 @@ export class StoryExercisesComponent {
     this.saveResults(results);
   }
 
-  /** Quits mid-session: persists results so far and returns to Stories. */
+  /** Quits mid-session: persists results so far and returns to the story page
+   *  the exercise session was generated from. */
   onQuit(results: StoryExerciseResult[]): void {
     this.saveResults(results);
-    this.storyExerciseService.clear();
-    this.router.navigate(['/stories']);
+    this.goBackToStory();
   }
 
   backToStories(): void {
+    this.goBackToStory();
+  }
+
+  /** Navigates back to the specific story page for this session's story
+   *  (falls back to the stories list when no session story is known). */
+  private goBackToStory(): void {
+    const story = this.storyExerciseService.story();
     this.storyExerciseService.clear();
-    this.router.navigate(['/stories']);
+    if (story) {
+      this.router.navigate(['/stories', story.id]);
+    } else {
+      this.router.navigate(['/stories']);
+    }
   }
 
   /** Persists the given session results (skips runs with no answered questions). */

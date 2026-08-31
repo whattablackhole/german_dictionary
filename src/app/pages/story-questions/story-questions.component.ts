@@ -203,16 +203,27 @@ export class StoryQuestionsComponent implements OnInit {
     this.userInput.set('');
   }
 
-  /** Quits mid-session: persists results so far and returns to Stories. */
+  /** Quits mid-session: persists results so far and returns to the story page
+   *  the question session was generated from. */
   quitSession(): void {
     this.saveResults(this.buildResults());
-    this.storyQuestionService.clear();
-    this.router.navigate(['/stories']);
+    this.goBackToStory();
   }
 
   backToStories(): void {
+    this.goBackToStory();
+  }
+
+  /** Navigates back to the specific story page for this session's story
+   *  (falls back to the stories list when no session story is known). */
+  private goBackToStory(): void {
+    const story = this.storyQuestionService.story();
     this.storyQuestionService.clear();
-    this.router.navigate(['/stories']);
+    if (story) {
+      this.router.navigate(['/stories', story.id]);
+    } else {
+      this.router.navigate(['/stories']);
+    }
   }
 
   /** Persists the given session results (skips runs with no answered questions). */
