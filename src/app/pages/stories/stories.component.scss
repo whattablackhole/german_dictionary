@@ -425,12 +425,15 @@
   box-shadow: 0 0 0 2px var(--mat-sys-primary);
 }
 
-.story-controls {
+.story-controls,
+.story-controls-extra {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+}
 
+.story-controls {
   button {
     display: flex;
     align-items: center;
@@ -543,13 +546,6 @@
     color: var(--mat-sys-on-primary);
     border-color: var(--mat-sys-primary);
   }
-}
-
-.story-controls-extra {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
 }
 
 /* Word Lookup Toggle */
@@ -1002,10 +998,13 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
 
     mat-spinner,
     mat-icon {
       margin: 0;
+      flex-shrink: 0;
     }
   }
 }

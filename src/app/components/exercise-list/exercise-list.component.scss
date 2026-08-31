@@ -261,6 +261,15 @@
   font-size: 14px;
   margin: 12px 0;
 
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+
   &.correct {
     background: #e8f5e9;
     color: #2e7d32;
