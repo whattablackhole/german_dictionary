@@ -111,7 +111,7 @@ export const TTS_MODELS: TtsModelOption[] = [
     label: 'Fish Audio S2.1 Pro (Free)',
     description: 'Free TTS for testing and prototyping',
     voices: [
-      { id: 'b347db033a6549378b48d00acb0d06cd', label: 'Default voice' },
+      { id: '88b18e0d81474a0ca08e2ea6f9df5ff4', label: 'Default voice' },
     ],
   },
 ];
