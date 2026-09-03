@@ -9,7 +9,11 @@ import {
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
 import { SettingsService } from './settings.service';
-import { isVerbFormLike, verbWordLeaksOutsideBlanks } from '../utils/german';
+import {
+  cleanReferenceText,
+  isVerbFormLike,
+  verbWordLeaksOutsideBlanks,
+} from '../utils/german';
 
 export interface AiSuggestion {
   translationEn: string;
@@ -2670,13 +2674,14 @@ Respond with JSON only (no markdown) as an object with a single key "sentences" 
   Each entry MUST be a verbatim substring of fullSentence (single word, no spaces), same case as in the sentence.
 - "person": exactly one of "ich", "du", "er/sie/es", "wir", "ihr", "sie"
 - "tense": exactly one of "präsens", "präteritum", "perfekt", "plusquamperfekt", "futur i", "futur ii" (lowercase ids)
-- "hintEn": English translation of the full sentence (the blanks marked as "___")
-- "hintRu": Russian translation of the full sentence (the blanks marked as "___")
+- "hintEn": a COMPLETE English translation of the full sentence, all words spelled out — the student uses it as a reference, so never leave the blanked verb out and never use "___" or any placeholder
+- "hintRu": a COMPLETE Russian translation of the full sentence, all words spelled out — the student uses it as a reference, so never leave the blanked verb out and never use "___" or any placeholder
 
 Rules:
 - Keep sentences concise (5-12 words) and natural.
 - Every blank must be a single word; never merge auxiliary and participle into one blank.
 - Do NOT include the literal blank placeholder "___" in fullSentence.
+- hintEn and hintRu must be complete sentences: no blanks, no underscores, no ellipses for the verb.
 - Use the exact field names above.`;
 
     const response = await fetch(environment.openRouterApiUrl, {
@@ -2767,8 +2772,8 @@ Rules:
       blankWords: blanks,
       person,
       tense,
-      hintEn: String(raw.hintEn ?? ''),
-      hintRu: String(raw.hintRu ?? ''),
+      hintEn: cleanReferenceText(String(raw.hintEn ?? '')),
+      hintRu: cleanReferenceText(String(raw.hintRu ?? '')),
     };
   }
   /**

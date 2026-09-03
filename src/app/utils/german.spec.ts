@@ -3,6 +3,7 @@ import {
   GERMAN_TENSES,
   GERMAN_TENSE_LABELS,
   buildBlankSegments,
+  cleanReferenceText,
   isVerbFormLike,
   normalizeGermanText,
   verbWordLeaksOutsideBlanks,
@@ -255,5 +256,32 @@ describe('isVerbFormLike', () => {
     expect(isVerbFormLike('kaufe', 'laufen')).toBe(false);
     expect(isVerbFormLike('müde', 'werden', werdenRefs)).toBe(false);
     expect(isVerbFormLike('', 'werden', werdenRefs)).toBe(false);
+  });
+});
+
+describe('cleanReferenceText', () => {
+  it('keeps a complete reference sentence as-is', () => {
+    expect(
+      cleanReferenceText('I become slowly tired after the long workday.')
+    ).toBe('I become slowly tired after the long workday.');
+  });
+
+  it('removes a single blank placeholder', () => {
+    expect(cleanReferenceText('I ___ tired after work.')).toBe('I tired after work.');
+  });
+
+  it('removes long placeholder runs and collapses whitespace', () => {
+    expect(cleanReferenceText('You ___ ___ really hungry today.')).toBe(
+      'You really hungry today.'
+    );
+  });
+
+  it('trims and collapses inner whitespace', () => {
+    expect(cleanReferenceText('  We   are ready.  ')).toBe('We are ready.');
+  });
+
+  it('handles the empty string', () => {
+    expect(cleanReferenceText('')).toBe('');
+    expect(cleanReferenceText('   ')).toBe('');
   });
 });

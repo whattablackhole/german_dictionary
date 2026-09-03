@@ -315,3 +315,16 @@ export function isVerbFormLike(
 
   return known.some((form) => verbFormsMatch(form, b));
 }
+
+/**
+ * Cleans an AI-provided reference translation so it reads as a complete
+ * sentence. Removes cloze placeholders ("___", "_____"), collapses runs of
+ * whitespace around them and trims the result — a safety net for the case
+ * where a model still marks the blanked verb instead of spelling it out.
+ */
+export function cleanReferenceText(text: string): string {
+  return text
+    .replace(/_+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
