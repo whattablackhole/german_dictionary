@@ -3,6 +3,7 @@ import {
   GERMAN_TENSES,
   GERMAN_TENSE_LABELS,
   buildBlankSegments,
+  isVerbFormLike,
   normalizeGermanText,
   verbWordLeaksOutsideBlanks,
 } from './german';
@@ -143,5 +144,116 @@ describe('verbWordLeaksOutsideBlanks', () => {
   it('rejects a homograph that is not blanked over the real concerned verb', () => {
     // "sein" also means "his"; using it as a possessive pronoun outside blanks.
     expect(verbWordLeaksOutsideBlanks('Das ist sein Buch', ['ist'], 'sein')).toBe(true);
+  });
+});
+
+describe('sentence-drill validation for "werden" (regression)', () => {
+  const refs = {
+    presentThirdPerson: 'wird',
+    simplePast: 'wurde',
+    pastParticiple: 'geworden',
+  };
+
+  // The exact 8 drills the AI returned for "werden" before the bug was fixed
+  // (only "Sie werden … werden" used to survive, everything else was dropped).
+  const drills: { fullSentence: string; blankWords: string[] }[] = [
+    { fullSentence: 'Ich werde nach dem langen Arbeitstag langsam müde.', blankWords: ['werde'] },
+    { fullSentence: 'Du wirst nach dem Training richtig hungrig.', blankWords: ['wirst'] },
+    { fullSentence: 'Er wurde vor dem Gespräch plötzlich sehr nervös.', blankWords: ['wurde'] },
+    { fullSentence: 'Wir sind nach dem Umzug gute Nachbarn geworden.', blankWords: ['sind', 'geworden'] },
+    { fullSentence: 'Es ist nach dem Regen wieder hell geworden.', blankWords: ['ist', 'geworden'] },
+    { fullSentence: 'Ihr wart nach der Wanderung ein richtig gutes Team geworden.', blankWords: ['wart', 'geworden'] },
+    { fullSentence: 'Sie werden bald viel selbstständiger werden.', blankWords: ['werden', 'werden'] },
+    { fullSentence: 'Bis zum Sommer werde ich viel selbstständiger geworden sein.', blankWords: ['werde', 'geworden', 'sein'] },
+  ];
+
+  for (const d of drills) {
+    it(`keeps the drill "${d.fullSentence}"`, () => {
+      expect(buildBlankSegments(d.fullSentence, d.blankWords)).not.toBeNull();
+      expect(
+        d.blankWords.some((w) => isVerbFormLike(w, 'werden', refs))
+      ).toBe(true);
+      expect(verbWordLeaksOutsideBlanks(d.fullSentence, d.blankWords, 'werden')).toBe(
+        false
+      );
+    });
+  }
+});
+
+describe('isVerbFormLike', () => {
+  const werdenRefs = {
+    presentThirdPerson: 'wird',
+    simplePast: 'wurde',
+    pastParticiple: 'geworden',
+  };
+
+  it('accepts inflected forms that do not contain the infinitive (the "werden" case)', () => {
+    expect(isVerbFormLike('werde', 'werden', werdenRefs)).toBe(true);
+    expect(isVerbFormLike('wirst', 'werden', werdenRefs)).toBe(true);
+    expect(isVerbFormLike('wurde', 'werden', werdenRefs)).toBe(true);
+    expect(isVerbFormLike('geworden', 'werden', werdenRefs)).toBe(true);
+    expect(isVerbFormLike('werden', 'werden', werdenRefs)).toBe(true);
+  });
+
+  it('accepts regularly conjugated forms without any reference inflections', () => {
+    expect(isVerbFormLike('mache', 'machen')).toBe(true);
+    expect(isVerbFormLike('machst', 'machen')).toBe(true);
+    expect(isVerbFormLike('macht', 'machen')).toBe(true);
+    expect(isVerbFormLike('machte', 'machen')).toBe(true);
+    expect(isVerbFormLike('gemacht', 'machen')).toBe(true);
+  });
+
+  it('accepts ablaut/umlaut changes in Present and Präteritum', () => {
+    expect(
+      isVerbFormLike('esse', 'essen', {
+        presentThirdPerson: 'isst',
+        simplePast: 'aß',
+        pastParticiple: 'gegessen',
+      })
+    ).toBe(true);
+    expect(
+      isVerbFormLike('läuft', 'laufen', {
+        presentThirdPerson: 'läuft',
+        simplePast: 'lief',
+        pastParticiple: 'gelaufen',
+      })
+    ).toBe(true);
+  });
+
+  it('accepts the separated parts and the participle of trennbare verbs', () => {
+    const refs = {
+      presentThirdPerson: 'ruft an',
+      simplePast: 'rief an',
+      pastParticiple: 'angerufen',
+    };
+    expect(isVerbFormLike('rufe', 'anrufen', refs)).toBe(true);
+    expect(isVerbFormLike('an', 'anrufen', refs)).toBe(true);
+    expect(isVerbFormLike('rief', 'anrufen', refs)).toBe(true);
+    expect(isVerbFormLike('angerufen', 'anrufen', refs)).toBe(true);
+  });
+
+  it('accepts suppletive forms of the fully irregular verbs', () => {
+    const seinRefs = {
+      presentThirdPerson: 'ist',
+      simplePast: 'war',
+      pastParticiple: 'gewesen',
+    };
+    expect(isVerbFormLike('bin', 'sein', seinRefs)).toBe(true);
+    expect(isVerbFormLike('sind', 'sein', seinRefs)).toBe(true);
+    expect(isVerbFormLike('war', 'sein', seinRefs)).toBe(true);
+    expect(isVerbFormLike('hast', 'haben')).toBe(true);
+    expect(isVerbFormLike('hatte', 'haben')).toBe(true);
+  });
+
+  it('rejects a sein-auxiliary blank on its own (the participle carries the drill)', () => {
+    expect(isVerbFormLike('ist', 'werden', werdenRefs)).toBe(false);
+    expect(isVerbFormLike('sind', 'werden', werdenRefs)).toBe(false);
+  });
+
+  it('rejects blanks belonging to a different verb or a non-verb word', () => {
+    expect(isVerbFormLike('gehe', 'werden', werdenRefs)).toBe(false);
+    expect(isVerbFormLike('kaufe', 'laufen')).toBe(false);
+    expect(isVerbFormLike('müde', 'werden', werdenRefs)).toBe(false);
+    expect(isVerbFormLike('', 'werden', werdenRefs)).toBe(false);
   });
 });

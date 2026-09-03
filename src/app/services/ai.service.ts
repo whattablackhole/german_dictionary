@@ -9,7 +9,7 @@ import {
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
 import { SettingsService } from './settings.service';
-import { verbWordLeaksOutsideBlanks } from '../utils/german';
+import { isVerbFormLike, verbWordLeaksOutsideBlanks } from '../utils/german';
 
 export interface AiSuggestion {
   translationEn: string;
@@ -2720,7 +2720,7 @@ Rules:
     }
 
     const normalized = sentences
-      .map((s) => this.normalizeVerbSentence(s, verb))
+      .map((s) => this.normalizeVerbSentence(s, verb, referenceForms))
       .filter((s): s is GeneratedVerbSentence => s !== null);
 
     if (normalized.length === 0) {
@@ -2731,13 +2731,16 @@ Rules:
 /** Validates and cleans a generated sentence object; returns null if unusable. */
   private normalizeVerbSentence(
     raw: GeneratedVerbSentence,
-    verb: string
+    verb: string,
+    referenceForms?: {
+      presentThirdPerson?: string;
+      simplePast?: string;
+      pastParticiple?: string;
+    }
   ): GeneratedVerbSentence | null {
     if (!raw || typeof raw.fullSentence !== 'string') return null;
     const fullSentence = raw.fullSentence.trim();
-    if (!fullSentence || !fullSentence.toLowerCase().includes(verb.toLowerCase())) {
-      return null;
-    }
+    if (!fullSentence) return null;
 
     const rawBlanks = Array.isArray(raw.blankWords) ? raw.blankWords : [];
     const blanks = rawBlanks
@@ -2745,6 +2748,11 @@ Rules:
       .filter((w) => w.length > 0);
     if (blanks.length === 0 || blanks.length > 3) return null;
     if (!blanks.every((w) => fullSentence.includes(w))) return null;
+    // At least one blanked word must be a plausible form of the trained verb.
+    // Inflected forms rarely contain the infinitive string (e.g.
+    // "werde"/"wirst"/"wurde"/"geworden" for "werden"), so instead of requiring
+    // the literal infinitive we compare against the reference inflections.
+    if (!blanks.some((w) => isVerbFormLike(w, verb, referenceForms))) return null;
 
     // Reject homograph abuse: the infinitive must only appear inside the
     // blanks, never as a different word elsewhere in the sentence.
