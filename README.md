@@ -43,6 +43,13 @@ An interactive German language learning application built with [Angular CLI](htt
   - Grammar Explanation Mode toggle — select any text and Alt+Click to open a popup with translation, sentence structure breakdown, grammar notes, and word-level analysis
 - **Preposition Trainer** — AI-generated multiple-choice exercises for German prepositions with case selection (accusative/dative/genitive), hints in English/Russian, and rule explanations
 - **Declension Trainer** — AI-generated declension exercises for articles, adjective endings, nouns, and full phrases across all four cases, with AI-verified answers
+- **Verb Trainer** — 2000+ German verbs (with and without prefixes) in a searchable catalog:
+  - **Sentence drills** — AI-generated sentences for all six finite tenses
+    (Präsens, Präteritum, Perfekt, Plusquamperfekt, Futur I, Futur II), with the whole verb
+    phrase hidden behind inline inputs (including separable prefixes and auxiliaries);
+    Person/Tense multi-filters (default "all") and per-blank local grading with attempt history
+  - **Lazy learning mode** — a verb is AI-enriched and added to your dictionary only when you press **Learn** or **Train** (no bulk background runs)
+  - Attempt history per verb stored in localStorage (basis for future weak-point analysis)
 - **Word Practice** — Practice words with cloze-style sentence completion (optionally forced to selected words)
 - **Review** — Flashcard-style review of learned words with mastery tracking
 - **Word Matching Game** — Match German words with their translations in a timed game
@@ -143,6 +150,27 @@ ng test
 
 Uses the [Vitest](https://vitest.dev/) test runner.
 
+## Verb List (Data)
+
+The **Verb Trainer** catalog (`src/app/data/german-verbs.ts`) contains ~3900 German verb
+infinitives (ranked by frequency) plus prefix metadata:
+
+- **Frequency ranking** — [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords)
+  `de_50k.txt` (OpenSubtitles 2018 corpus token frequencies; content CC BY-SA 4.0, repository MIT)
+- **Verb whitelist** — German Wiktionary categories
+  [„Verb (Deutsch)“](https://de.wiktionary.org/wiki/Kategorie:Verb_(Deutsch)) and
+  [„Verb trennbar (Deutsch)“](https://de.wiktionary.org/wiki/Kategorie:Verb_trennbar_(Deutsch))
+  (CC BY-SA 4.0)
+- **Curated separable verbs** — the app's existing `src/app/data/separable-verbs.ts`
+  (their Russian/English translations are kept)
+
+To regenerate the data file from the sources (one-off build step, downloads are cached
+under `tools/.cache`):
+
+```bash
+node tools/download-german-verbs.mjs
+```
+
 ## Project Structure
 
 ```
@@ -161,6 +189,7 @@ src/
 │   │   ├── stories/            # AI story generator with TTS playback
 │   │   ├── preposition-trainer/ # AI-generated preposition exercises
 │   │   ├── declension-trainer/  # AI-generated declension exercises
+│   │   ├── verbs/             # Verb trainer (lazy import, conjugation drills, prefix practice)
 │   │   ├── duolingo-import/    # Import vocabulary from Duolingo exports
 │   │   ├── manage/             # Word CRUD management
 │   │   └── settings/           # Settings (API key, language, TTS engine)
@@ -174,6 +203,8 @@ src/
 │   │   ├── diary.service.ts         # Diary entry management (localStorage)
 │   │   ├── captions.service.ts      # Captions data management (IndexedDB)
 │   │   ├── grammar-notes.service.ts # Grammar notes management (localStorage)
+│   │   ├── verb-import.service.ts   # Lazy on-demand import of catalog verbs
+│   │   ├── verb-trainer.service.ts  # Verb-trainer attempt history (localStorage)
 │   │   ├── sentence-pattern.service.ts # Pattern history & mastery tracking
 │   │   ├── settings.service.ts      # User settings (language, TTS, article display)
 │   │   ├── backup.service.ts        # Export/import all app data as JSON

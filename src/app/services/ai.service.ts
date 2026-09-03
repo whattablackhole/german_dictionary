@@ -9,6 +9,7 @@ import {
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
 import { SettingsService } from './settings.service';
+import { verbWordLeaksOutsideBlanks } from '../utils/german';
 
 export interface AiSuggestion {
   translationEn: string;
@@ -198,6 +199,63 @@ export interface DeclensionAnswerResult {
   explanation: string;
   alternative?: string;
   score: number;
+}
+
+export interface GeneratedVerbSentence {
+  /** The complete German sentence WITHOUT blanks. */
+  fullSentence: string;
+  /**
+   * The exact words of fullSentence that must be replaced by inline inputs,
+   * one single word per entry (e.g. ["habe", "angerufen"]). Every word of the
+   * finite verb phrase is blanked so the student types the whole form.
+   */
+  blankWords: string[];
+  person: string;
+  tense: string;
+  hintEn: string;
+  hintRu: string;
+}
+
+const VERB_PERSONS = ['ich', 'du', 'er/sie/es', 'wir', 'ihr', 'sie'] as const;
+
+/** Normalizes an AI-provided person label; tolerance for "er" → "er/sie/es". */
+function normalizeVerbPerson(raw: unknown): string | null {
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (value === 'er') return 'er/sie/es';
+  return (VERB_PERSONS as readonly string[]).includes(value) ? value : null;
+}
+
+/** Normalizes an AI-provided tense id, tolerating naming variants. */
+function normalizeVerbTense(raw: unknown): string | null {
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  const aliases: Record<string, string> = {
+    präsens: 'präsens',
+    praesens: 'präsens',
+    present: 'präsens',
+    gegenwart: 'präsens',
+    präteritum: 'präteritum',
+    praeteritum: 'präteritum',
+    imperfekt: 'präteritum',
+    imperfect: 'präteritum',
+    perfekt: 'perfekt',
+    perfect: 'perfekt',
+    'past perfect': 'plusquamperfekt',
+    plusquamperfekt: 'plusquamperfekt',
+    pluperfect: 'plusquamperfekt',
+    'futur i': 'futur i',
+    'futur 1': 'futur i',
+    futur: 'futur i',
+    zukunft: 'futur i',
+    'futur ii': 'futur ii',
+    'futur 2': 'futur ii',
+    'future perfect': 'futur ii',
+  };
+  return aliases[value] ?? null;
 }
 
 export interface TextModelOption {
@@ -2532,6 +2590,179 @@ Rules:
     };
   }
 
+/**
+   * Generates German cloze sentence drills that hide every word of the verb
+   * phrase (finite verb + separable particle + auxiliaries/participles) behind
+   * inline inputs. The expected answers are the blankWords themselves, so the
+   * student's answers are checked locally without extra AI calls.
+   *
+   * @param verb German infinitive to train (e.g. "anrufen").
+   * @param meaning translations used as context in the prompt.
+   * @param persons allowed persons; empty = all six.
+   * @param tenses  allowed tenses; empty = all six.
+   * @param referenceForms known inflections of the verb (if available) used to
+   *   anchor the model to the correct verb and reject homograph abuse.
+   */
+  async generateVerbSentences(
+    verb: string,
+    meaning: { translationEn: string; translationRu: string },
+    persons: string[],
+    tenses: string[],
+    count: number,
+    referenceForms?: {
+      presentThirdPerson?: string;
+      simplePast?: string;
+      pastParticiple?: string;
+    }
+  ): Promise<GeneratedVerbSentence[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const personInstruction =
+      persons.length > 0
+        ? `Use ONLY these persons: ${persons.join(', ')}.`
+        : 'Use all persons: ich, du, er/sie/es, wir, ihr, sie.';
+    const tenseInstruction =
+      tenses.length > 0
+        ? `Use ONLY these tenses: ${tenses.join(', ')}.`
+        : 'Use all tenses: präsens, präteritum, perfekt, plusquamperfekt, futur i, futur ii.';
+
+    // Anchor the model to the actual verb so it cannot accidentally train a
+    // different one or use a homograph (e.g. the article "einen").
+    const referenceParts: string[] = [];
+    if (referenceForms?.presentThirdPerson) {
+      referenceParts.push(`3rd person Präsens: "${referenceForms.presentThirdPerson}"`);
+    }
+    if (referenceForms?.simplePast) {
+      referenceParts.push(`Präteritum: "${referenceForms.simplePast}"`);
+    }
+    if (referenceForms?.pastParticiple) {
+      referenceParts.push(`Partizip II: "${referenceForms.pastParticiple}"`);
+    }
+    const referenceInstruction =
+      referenceParts.length > 0
+        ? `- Known inflections of "${verb}": ${referenceParts.join(
+            '; '
+          )}. The blanks must be conjugated forms of "${verb}" consistent with these inflections.\n`
+        : '';
+
+    // Ask for a few extra sentences so rejected ones can be dropped.
+    const generateCount = Math.min(count + 3, 12);
+
+    const prompt = `You are a German language teacher. Generate ${generateCount} German cloze sentences that practice the verb "${verb}" (${meaning.translationRu ?? '...'}, ${meaning.translationEn ?? '...'}) in natural everyday contexts.
+
+${personInstruction}
+${tenseInstruction}
+- Vary the persons and tenses across the sentences and distribute them evenly over the allowed options.
+- CRITICAL: the sentence MUST use "${verb}" as its MAIN verb, conjugated in the requested person and tense. The blanked words MUST be the conjugated form(s) of "${verb}" itself. It is FORBIDDEN to blank or use any other verb as the sentence's verb.
+- CRITICAL: the word "${verb}" may also be a different word class in German (for example "einen" is the accusative article "a"). Use "${verb}" ONLY inside the blanks, as a real verb. It must NOT appear anywhere else in the sentence in any other function (article, pronoun, preposition, noun, adjective, etc.).
+${referenceInstruction}
+Respond with JSON only (no markdown) as an object with a single key "sentences" containing an array of objects. Each object must have exactly these fields:
+- "fullSentence": the complete natural German sentence WITHOUT blanks
+- "blankWords": array of the EXACT single words from fullSentence that the student must type. Blank EVERY word of the verb phrase:
+  * Präsens/Präteritum, one-word finite form (e.g. "ruft") → ONE blank
+  * Präsens/Präteritum, trennbar verb (e.g. "rufe ... an") → TWO blanks: the finite verb, then the particle
+  * Perfekt / Plusquamperfekt → TWO blanks: the auxiliary (habe/hast/hat/haben/habt/haben or hatte/hattest/...) and the past participle (e.g. "angerufen")
+  * Futur I → TWO blanks: "werde/wirst/wird/werden/werdet/werden" and the infinitive (e.g. "anrufen")
+  * Futur II → THREE blanks: "werde/wirst/wird/...", the past participle, and "haben"
+  Each entry MUST be a verbatim substring of fullSentence (single word, no spaces), same case as in the sentence.
+- "person": exactly one of "ich", "du", "er/sie/es", "wir", "ihr", "sie"
+- "tense": exactly one of "präsens", "präteritum", "perfekt", "plusquamperfekt", "futur i", "futur ii" (lowercase ids)
+- "hintEn": English translation of the full sentence (the blanks marked as "___")
+- "hintRu": Russian translation of the full sentence (the blanks marked as "___")
+
+Rules:
+- Keep sentences concise (5-12 words) and natural.
+- Every blank must be a single word; never merge auxiliary and participle into one blank.
+- Do NOT include the literal blank placeholder "___" in fullSentence.
+- Use the exact field names above.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.settingsService.textModel(),
+        messages: [{ role: 'user', content: prompt }],
+        ...(this.combinedProviderField()),
+        response_format: { type: 'json_object' },
+        temperature: 0.6,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: { sentences?: GeneratedVerbSentence[] };
+    try {
+      parsed = JSON.parse(jsonText) as typeof parsed;
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const sentences = Array.isArray(parsed.sentences) ? parsed.sentences : [];
+    if (sentences.length === 0) {
+      throw new Error('AI could not generate sentences. Try again.');
+    }
+
+    const normalized = sentences
+      .map((s) => this.normalizeVerbSentence(s, verb))
+      .filter((s): s is GeneratedVerbSentence => s !== null);
+
+    if (normalized.length === 0) {
+      throw new Error('AI returned invalid sentences. Try again.');
+    }
+    return normalized.slice(0, count);
+  }
+/** Validates and cleans a generated sentence object; returns null if unusable. */
+  private normalizeVerbSentence(
+    raw: GeneratedVerbSentence,
+    verb: string
+  ): GeneratedVerbSentence | null {
+    if (!raw || typeof raw.fullSentence !== 'string') return null;
+    const fullSentence = raw.fullSentence.trim();
+    if (!fullSentence || !fullSentence.toLowerCase().includes(verb.toLowerCase())) {
+      return null;
+    }
+
+    const rawBlanks = Array.isArray(raw.blankWords) ? raw.blankWords : [];
+    const blanks = rawBlanks
+      .flatMap((b) => String(b).trim().split(/\s+/))
+      .filter((w) => w.length > 0);
+    if (blanks.length === 0 || blanks.length > 3) return null;
+    if (!blanks.every((w) => fullSentence.includes(w))) return null;
+
+    // Reject homograph abuse: the infinitive must only appear inside the
+    // blanks, never as a different word elsewhere in the sentence.
+    if (verbWordLeaksOutsideBlanks(fullSentence, blanks, verb)) return null;
+
+    const person = normalizeVerbPerson(raw.person);
+    const tense = normalizeVerbTense(raw.tense);
+    if (!person || !tense) return null;
+
+    return {
+      fullSentence,
+      blankWords: blanks,
+      person,
+      tense,
+      hintEn: String(raw.hintEn ?? ''),
+      hintRu: String(raw.hintRu ?? ''),
+    };
+  }
   /**
    * Generates speech audio for the given text using the selected TTS model.
    *

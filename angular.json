@@ -80,6 +80,13 @@
           },
           "defaultConfiguration": "production"
         },
+"test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "tsconfig.spec.json",
+            "watch": false
+          }
+        },
         "serve": {
           "builder": "@angular/build:dev-server",
           "configurations": {

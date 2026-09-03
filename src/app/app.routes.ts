@@ -83,6 +83,11 @@ export const routes: Routes = [
       import('./pages/diary/diary.component').then((m) => m.DiaryComponent),
   },
   {
+    path: 'verbs',
+    loadComponent: () =>
+      import('./pages/verbs/verbs.component').then((m) => m.VerbsComponent),
+  },
+  {
     path: 'settings',
     loadComponent: () =>
       import('./pages/settings/settings.component').then(

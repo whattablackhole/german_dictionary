@@ -62,6 +62,7 @@ export class App {
     { path: '/stories', label: 'Stories', icon: 'auto_stories' },
     { path: '/manage', label: 'Manage', icon: 'dataset' },
     { path: '/import', label: 'Import', icon: 'file_download' },
+    { path: '/verbs', label: 'Verb Trainer', icon: 'directions_run' },
     { path: '/settings', label: 'Settings', icon: 'tune' },
   ];
 
@@ -127,6 +128,7 @@ export class App {
       '#6366f1', // indigo - stories
       '#6b7280', // gray - manage
       '#2563eb', // blue - import
+      '#f59e0b', // amber - verb trainer
       '#78716c', // stone - settings
     ];
     return colors[index % colors.length];

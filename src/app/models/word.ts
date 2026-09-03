@@ -52,6 +52,8 @@ export interface Word {
   createdAt: string;
   // Verb-specific fields (optional)
   verbType?: VerbType;
+  /** The dictionary/infinitive form when german is a conjugated form. */
+  infinitive?: string;
   presentThirdPerson?: string;
   simplePast?: string;
   pastParticiple?: string;

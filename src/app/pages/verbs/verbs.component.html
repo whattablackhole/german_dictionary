@@ -1,0 +1,409 @@
+<div class="verbs-container">
+  <h1 class="page-title">Verb Trainer</h1>
+  <p class="page-subtitle">
+    German verbs with and without prefixes — lazily added to your dictionary when you start
+    learning or training each one.
+  </p>
+
+  @if (!selectedVerb()) {
+    <!-- ── Catalog ── -->
+    @if (!hasApiKey()) {
+      <div class="warning-banner">
+        <mat-icon>warning</mat-icon>
+        <span>
+          No AI key configured. Adding or training a verb needs an OpenRouter key — set it in
+          <a routerLink="/settings">Settings</a> first. The catalog itself works offline.
+        </span>
+      </div>
+    }
+
+    @if (infoMessage()) {
+      <div class="info-banner">{{ infoMessage() }}</div>
+    }
+
+    <div class="verb-toolbar">
+      <mat-form-field appearance="outline" class="verb-search-field">
+        <mat-label>Search verbs</mat-label>
+        <mat-icon matPrefix>search</mat-icon>
+        <input
+          matInput
+          [(ngModel)]="search"
+          (ngModelChange)="onSearch()"
+          placeholder="e.g. ankommen, machen, verstehen..."
+        />
+      </mat-form-field>
+      <mat-slide-toggle
+        [checked]="onlyInDictionary()"
+        (change)="setOnlyInDictionary($event.checked)"
+      >
+        Only in dictionary
+      </mat-slide-toggle>
+    </div>
+
+    <mat-chip-set class="prefix-chips" aria-label="Prefix filter">
+      <button
+        mat-chip
+        [class.selected]="prefixFilter() === 'all'"
+        (click)="setPrefixFilter('all')"
+      >
+        All
+      </button>
+      <button
+        mat-chip
+        [class.selected]="prefixFilter() === 'none'"
+        (click)="setPrefixFilter('none')"
+      >
+        No prefix
+      </button>
+      <button
+        mat-chip
+        [class.selected]="prefixFilter() === 'separable'"
+        (click)="setPrefixFilter('separable')"
+      >
+        Trennbar
+      </button>
+      <button
+        mat-chip
+        [class.selected]="prefixFilter() === 'inseparable'"
+        (click)="setPrefixFilter('inseparable')"
+      >
+        Untrennbar
+      </button>
+      @for (prefix of prefixFilters(); track prefix) {
+        <button
+          mat-chip
+          [class.selected]="prefixFilter() === prefix"
+          (click)="setPrefixFilter(prefix)"
+        >
+          {{ prefix }}-
+        </button>
+      }
+    </mat-chip-set>
+
+    <div class="verb-stats">
+      <span class="stat-total">{{ stats().total }} verbs</span>
+      <span>{{ stats().prefixed }} prefixed</span>
+      <span>{{ stats().separable }} trennbar</span>
+      <span class="stat-accent">{{ stats().inDictionary }} in dictionary</span>
+    </div>
+
+    <div class="verb-list" role="list">
+      @for (entry of pagedEntries(); track entry.infinitive) {
+        <div class="verb-row" role="listitem">
+          <div class="verb-main">
+            <span class="verb-word">{{ entry.infinitive }}</span>
+            @if (entry.prefix) {
+              <span
+                class="prefix-badge"
+                [class.badge-separable]="entry.separable === true"
+                [class.badge-inseparable]="entry.separable === false"
+              >
+                {{ entry.prefix }}
+              </span>
+            }
+            @if (entry.separable === true) {
+              <span class="separable-label">trennbar</span>
+            } @else if (entry.separable === false) {
+              <span class="separable-label untrennbar-label">untrennbar</span>
+            }
+            @if (entry.translationRu) {
+              <span class="verb-translation">{{ entry.translationRu }}</span>
+            }
+            <span class="verb-rank">#{{ entry.frequencyRank }}</span>
+          </div>
+          <div class="verb-actions">
+            @if (statusOf(entry) === 'in-dictionary') {
+              <span class="in-dict-label">
+                <mat-icon>check_circle</mat-icon>
+                <span>in dictionary</span>
+              </span>
+            } @else if (statusOf(entry) === 'loading') {
+              <mat-spinner diameter="18"></mat-spinner>
+            } @else {
+              <button mat-stroked-button (click)="addToDictionary(entry)">
+                <mat-icon>library_add</mat-icon>
+                Learn
+              </button>
+            }
+            <button mat-flat-button color="primary" (click)="openTrainer(entry)">
+              <mat-icon>directions_run</mat-icon>
+              Train
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+
+    @if (pageCount() > 1) {
+      <div class="pagination">
+        <button
+          mat-stroked-button
+          [disabled]="currentPage() <= 1"
+          (click)="currentPage.set(currentPage() - 1)"
+        >
+          <mat-icon>chevron_left</mat-icon>
+          Prev
+        </button>
+        <span class="pagination-info">
+          Page {{ currentPage() }} / {{ pageCount() }} · {{ filteredEntries().length }} verbs
+        </span>
+        <button
+          mat-stroked-button
+          [disabled]="currentPage() >= pageCount()"
+          (click)="currentPage.set(currentPage() + 1)"
+        >
+          Next
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    }
+  } @else {
+    <!-- ── Trainer ── -->
+    @let verb = selectedVerb()!;
+
+    <div class="trainer-header">
+      <button mat-button (click)="closeTrainer()">
+        <mat-icon>arrow_back</mat-icon>
+        Catalog
+      </button>
+      <div class="trainer-title">
+        <h2>{{ verb.infinitive }}</h2>
+        @if (verb.prefix) {
+          <span
+            class="prefix-badge"
+            [class.badge-separable]="verb.separable === true"
+            [class.badge-inseparable]="verb.separable === false"
+          >
+            {{ verb.prefix }}
+          </span>
+        }
+        <span class="verb-rank">#{{ verb.frequencyRank }}</span>
+        @if (verb.translationRu) {
+          <span class="verb-translation">{{ verb.translationRu }}</span>
+        }
+        @if (trainerStats().total > 0) {
+          <span class="trainer-accuracy">
+            {{ trainerStats().correct }}/{{ trainerStats().total }} correct
+            ({{ trainerStats().accuracy }}%)
+          </span>
+        }
+      </div>
+      <div class="dictionary-state">
+        @if (lazyWord()) {
+          <mat-icon>check_circle</mat-icon>
+          <span>in dictionary</span>
+        } @else if (lazyLoading()) {
+          <mat-spinner diameter="16"></mat-spinner>
+          <span>adding to dictionary…</span>
+        } @else {
+          <mat-icon>hourglass_empty</mat-icon>
+          <span>will be added on demand</span>
+        }
+      </div>
+    </div>
+
+    @if (trainerError()) {
+      <div class="error-banner">
+        <mat-icon>error_outline</mat-icon>
+        <span>
+          {{ trainerError() }}
+          @if (!hasApiKey()) { Configure your key in <a routerLink="/settings">Settings</a>. }
+        </span>
+      </div>
+    }
+
+    <div class="trainer-controls">
+      <div class="controls-group">
+        <span class="controls-label">Person</span>
+        <mat-chip-set>
+          <button
+            mat-chip
+            [class.selected]="selectedPersons().length === 0"
+            (click)="clearPersonFilters()"
+          >
+            All
+          </button>
+          @for (p of persons; track p) {
+            <button
+              mat-chip
+              [class.selected]="selectedPersons().includes(p)"
+              (click)="togglePerson(p)"
+            >
+              {{ p }}
+            </button>
+          }
+        </mat-chip-set>
+        @if (selectedPersons().length > 0) {
+          <span class="filter-note">filtered to {{ selectedPersons().join(', ') }}</span>
+        }
+      </div>
+      <div class="controls-group">
+        <span class="controls-label">Tense</span>
+        <mat-chip-set>
+          <button
+            mat-chip
+            [class.selected]="selectedTenses().length === 0"
+            (click)="clearTenseFilters()"
+          >
+            All
+          </button>
+          @for (t of tenses; track t) {
+            <button
+              mat-chip
+              [class.selected]="selectedTenses().includes(t)"
+              (click)="toggleTense(t)"
+            >
+              {{ tenseLabel(t) }}
+            </button>
+          }
+        </mat-chip-set>
+        @if (selectedTenses().length > 0) {
+          <span class="filter-note">
+            filtered to {{ selectedTenses().map((t) => tenseLabel(t)).join(', ') }}
+          </span>
+        }
+      </div>
+      <div class="controls-group">
+        <span class="controls-label">Sentences</span>
+        <mat-chip-set>
+          @for (count of [3, 5, 8]; track count) {
+            <button
+              mat-chip
+              [class.selected]="sentenceCount() === count"
+              (click)="setSentenceCount(count)"
+            >
+              {{ count }}
+            </button>
+          }
+        </mat-chip-set>
+      </div>
+    </div>
+
+    <section class="sentence-drill-card">
+      <div class="sentence-drill-header">
+        <h3>Sentence drills</h3>
+        <button
+          mat-flat-button
+          color="primary"
+          [disabled]="generatingSentences()"
+          (click)="generateSentences()"
+        >
+          @if (generatingSentences()) {
+            <mat-spinner diameter="18"></mat-spinner>
+          } @else {
+            <ng-container>
+              <mat-icon>auto_awesome</mat-icon>
+              <span>
+                {{ drillSentences().length ? 'Regenerate' : 'Generate sentences' }}
+              </span>
+            </ng-container>
+          }
+        </button>
+      </div>
+      <p class="sentence-drill-hint">
+        Type the conjugated verb into the blanks. Every word of the verb phrase is hidden —
+        auxiliaries, participles and separable prefixes included.
+      </p>
+
+      @if (generatingSentences()) {
+        <div class="mc-loading">
+          <mat-spinner diameter="24"></mat-spinner>
+          <span>Generating sentences…</span>
+        </div>
+      }
+
+      <div class="sentence-list">
+        @for (drill of drillSentences(); track drill.fullSentence; let drillIndex = $index) {
+          <div
+            class="sentence-card"
+            [class.sentence-correct]="drill.correct === true"
+            [class.sentence-wrong]="drill.correct === false"
+          >
+            <div class="sentence-meta">
+              <span class="tense-tag">{{ tenseLabel(drill.tense) }}</span>
+              <span class="person-tag">{{ drill.person }}</span>
+            </div>
+            <p class="sentence-line">
+              @for (seg of drill.segments; track $index) {
+                @if (seg.blankIndex >= 0) {
+                  <input
+                    class="blank-input"
+                    type="text"
+                    [ngModel]="drill.answers[seg.blankIndex]"
+                    (ngModelChange)="onAnswerChange(drillIndex, seg.blankIndex, $event)"
+                    [class.blank-right]="drill.blankResults?.[seg.blankIndex] === true"
+                    [class.blank-wrong]="drill.blankResults?.[seg.blankIndex] === false"
+                    [attr.size]="blankSize(drill.blankWords[seg.blankIndex])"
+                    [disabled]="drill.correct !== null || generatingSentences()"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    aria-label="Verb form"
+                  />
+                } @else {
+                  <span>{{ seg.text }}</span>
+                }
+              }
+            </p>
+            @if (drill.hintEn || drill.hintRu) {
+              <p class="sentence-hint">
+                @if (drill.hintEn) {
+                  <span class="hint-en">EN: {{ drill.hintEn }}</span>
+                }
+                @if (drill.hintRu) {
+                  <span class="hint-ru">RU: {{ drill.hintRu }}</span>
+                }
+              </p>
+            }
+            <div class="sentence-actions">
+              <button
+                mat-stroked-button
+                color="primary"
+                [disabled]="drill.correct !== null || !allAnswered(drill)"
+                (click)="checkSentence(drillIndex)"
+              >
+                <mat-icon>check</mat-icon>
+                Check
+              </button>
+              @if (drill.correct === true) {
+                <span class="sentence-feedback ok">
+                  <mat-icon>check_circle</mat-icon>
+                  All correct!
+                </span>
+              }
+              @if (drill.correct === false) {
+                <span class="sentence-feedback bad">
+                  <mat-icon>cancel</mat-icon>
+                  Correct: "{{ drill.blankWords.join(' ') }}"
+                </span>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="history-card">
+      <h3>Recent attempts</h3>
+      @if (recentAttempts().length === 0) {
+        <p class="history-empty">No attempts yet for this verb.</p>
+      } @else {
+        <ul class="attempt-list">
+          @for (attempt of recentAttempts(); track attempt.ts) {
+            <li>
+              <span class="attempt-icon" [class.attempt-wrong]="!attempt.correct">
+                {{ attempt.correct ? '✓' : '✗' }}
+              </span>
+              <span class="attempt-desc">{{ tenseLabel(attempt.tense) }} · {{ attempt.person }}:</span>
+              <span class="attempt-answer">{{ attempt.answer }}</span>
+              @if (!attempt.correct) {
+                <span class="attempt-expected">→ {{ attempt.expected }}</span>
+              }
+            </li>
+          }
+        </ul>
+        <button mat-button (click)="verbTrainer.clearHistory()">Clear history</button>
+      }
+    </section>
+  }
+</div>
