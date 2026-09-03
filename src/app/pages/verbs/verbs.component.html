@@ -377,6 +377,18 @@
                   Correct: "{{ drill.blankWords.join(' ') }}"
                 </span>
               }
+              @if (drill.correct !== null) {
+                <button
+                  mat-icon-button
+                  class="sentence-listen"
+                  type="button"
+                  [attr.aria-label]="'Listen to the correct German sentence'"
+                  matTooltip="Listen"
+                  (click)="replaySentence(drill)"
+                >
+                  <mat-icon>volume_up</mat-icon>
+                </button>
+              }
             </div>
           </div>
         }

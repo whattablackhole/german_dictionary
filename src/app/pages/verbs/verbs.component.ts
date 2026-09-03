@@ -9,12 +9,16 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   GERMAN_VERBS,
   GERMAN_PREFIX_GROUPS,
   GermanVerbEntry,
 } from '../../data/german-verbs';
 import { AiService, GeneratedVerbSentence } from '../../services/ai.service';
+import { SettingsService } from '../../services/settings.service';
+import { SpeechService } from '../../services/speech.service';
+import { TtsCacheService } from '../../services/tts-cache.service';
 import { VerbImportService } from '../../services/verb-import.service';
 import { VerbTrainerService } from '../../services/verb-trainer.service';
 import { WordService } from '../../services/word.service';
@@ -63,12 +67,16 @@ interface DrillSentence {
     MatFormFieldModule,
     MatInputModule,
     MatSlideToggleModule,
+    MatTooltipModule,
   ],
   templateUrl: './verbs.component.html',
   styleUrl: './verbs.component.scss',
 })
 export class VerbsComponent {
   private readonly aiService = inject(AiService);
+  private readonly settingsService = inject(SettingsService);
+  private readonly speechService = inject(SpeechService);
+  private readonly ttsCache = inject(TtsCacheService);
   private readonly verbImport = inject(VerbImportService);
   private readonly wordService = inject(WordService);
   readonly verbTrainer = inject(VerbTrainerService);
@@ -370,6 +378,41 @@ export class VerbsComponent {
     if (this.infinitive()) {
       this.wordService.incrementUsage([this.infinitive()]);
     }
+
+    // Pronounce the CORRECT sentence, never the student's typed (possibly
+    // wrong) variant — the prompt word "play only correct version".
+    this.speakSentence(sentence.fullSentence);
+  }
+
+  /**
+   * Pronounces a German sentence using the configured TTS engine: browser
+   * SpeechSynthesis (free) or the OpenAI-style audio model from Settings.
+   * Errors are swallowed so grading never breaks because audio failed.
+   */
+  private async speakSentence(text: string): Promise<void> {
+    if (!text.trim() || this.generatingSentences()) return;
+
+    if (this.settingsService.ttsEngine() === 'openai') {
+      const ttsOptions = {
+        model: this.settingsService.ttsModel(),
+        voice: this.settingsService.ttsVoice(),
+      };
+      try {
+        const cached = await this.ttsCache.getAudio(text, ttsOptions);
+        const dataUrl =
+          cached ?? (await this.aiService.generateSpeech(text, ttsOptions));
+        if (!cached) {
+          await this.ttsCache.setAudio(text, dataUrl, ttsOptions);
+        }
+        const audio = new Audio(dataUrl);
+        await audio.play();
+      } catch {
+        // AI TTS failed — fall back to the built-in browser voice.
+        this.speechService.speak(text);
+      }
+    } else {
+      this.speechService.speak(text);
+    }
   }
 
   onAnswerChange(index: number, blankIndex: number, value: string): void {
@@ -390,6 +433,12 @@ export class VerbsComponent {
   /** Approximate input width from the expected word length. */
   blankSize(word: string): number {
     return Math.max(word.length + 2, 6);
+  }
+
+  /** Replays the correct German version of an already checked drill. */
+  replaySentence(drill: DrillSentence): void {
+    if (drill.correct === null) return;
+    void this.speakSentence(drill.fullSentence);
   }
 
   hasApiKey(): boolean {
