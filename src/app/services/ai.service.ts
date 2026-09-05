@@ -10,6 +10,7 @@ import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
 import { SettingsService } from './settings.service';
 import {
+  buildBlankSegments,
   cleanReferenceText,
   isVerbFormLike,
   verbWordLeaksOutsideBlanks,
@@ -195,6 +196,35 @@ export interface StoryAnswerFeedback {
   feedback: string;
   /** The corrected/natural German answer. */
   correctedText: string;
+}
+
+/** A story sentence with the words the AI removed (0-2) for a cloze exercise. */
+export interface GeneratedStoryClozeSentence {
+  /** The sentence text verbatim, exactly as it appears in the story. */
+  text: string;
+  /** The words removed from this sentence, in the order they appeared (max 2). */
+  removed: string[];
+}
+
+/** A generated "fill in the blanks" task for a story. */
+export interface GeneratedStoryCloze {
+  /** Every story sentence (kept for display), each with its removed words. */
+  sentences: GeneratedStoryClozeSentence[];
+  /** Number of valid removed words after local validation. */
+  removedCount: number;
+}
+
+/** Maximum number of words the AI may remove from a single sentence. */
+const MAX_CLOZE_WORDS_PER_SENTENCE = 2;
+
+/** Strips surrounding punctuation and rejects multi-word or heavily
+ *  punctuated candidates so only a single, clean German word is blanked. */
+function sanitizeClozeWord(raw: string): string {
+  const clean = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').trim();
+  if (!clean || /\s/.test(clean)) return '';
+  if (/^\p{N}+$/u.test(clean)) return '';
+  if (/[.,;:!?()/«»„“”‘’"]/.test(clean)) return '';
+  return clean;
 }
 
 export interface DeclensionAnswerResult {
@@ -1589,7 +1619,124 @@ Respond with JSON only (no markdown) using exactly this shape:
   }
 
   /**
-   * Grades the learner's typed German answer to a story-comprehension question
+   * Generates a "fill in the blanks" (cloze) exercise from a story for
+   * drag-and-drop placement practice. The AI returns every story sentence
+   * verbatim plus the words removed from each (0-2 per sentence, 10-50 total).
+   * Removed words are validated locally: each must occur as a standalone word
+   * in its sentence (checked with buildBlankSegments), otherwise it is dropped.
+   */
+  async generateStoryCloze(config: {
+    storyTitle: string;
+    storyGerman: string;
+    level: DifficultyLevel;
+    count: number;
+  }): Promise<GeneratedStoryCloze> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const prompt = `You are a German language teacher. Create a "fill in the blanks" exercise from the following German story at CEFR level ${config.level}.
+
+Requirements:
+- Return EVERY sentence of the story, in the same order, copied verbatim (character for character).
+- Remove exactly ${config.count} words in total from the story. If you cannot reach exactly ${config.count}, return as many as you can (at least 5).
+- Spread the removals across the sentences: each sentence may lose 0, 1 or 2 words. Never remove more than 2 words from one sentence.
+- Prefer meaningful content words: nouns, verbs (in the exact inflected form used in the story), adjectives, adverbs, and separable verb prefixes.
+- Never remove: articles (der/die/das/ein/eine...), pronouns, prepositions, conjunctions, names, numbers, punctuation, or the very first word of the story.
+- Copy each removed word EXACTLY as it appears in the sentence (same capitalization, umlauts, ß), without any surrounding punctuation.
+- Do not remove two adjacent words in the same sentence (leave at least one word between the two removed words).
+
+Story title: "${config.storyTitle}"
+Story:
+"""${config.storyGerman}"""
+
+Respond with JSON only (no markdown) using exactly this shape:
+{"sentences":[{"text":"<sentence verbatim>","removed":["<word1>","<word2>"]}]}`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.settingsService.textModel(),
+        messages: [{ role: 'user', content: prompt }],
+        ...(this.combinedProviderField()),
+        response_format: { type: 'json_object' },
+        temperature: 0.5,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed:
+      | GeneratedStoryClozeSentence[]
+      | { sentences?: GeneratedStoryClozeSentence[] };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const rawSentences = Array.isArray(parsed)
+      ? parsed
+      : parsed.sentences ?? [];
+    if (!Array.isArray(rawSentences) || rawSentences.length === 0) {
+      throw new Error('AI could not generate the cloze exercise. Try again.');
+    }
+
+    const maxTotal = Math.min(50, Math.max(1, config.count));
+    const sentences: GeneratedStoryClozeSentence[] = [];
+    let removedCount = 0;
+
+    for (const s of rawSentences) {
+      const sentenceText = typeof s?.text === 'string' ? s.text.trim() : '';
+      if (!sentenceText) continue;
+
+      const removed: string[] = [];
+      const rawRemoved = Array.isArray(s.removed) ? s.removed : [];
+      for (const candidate of rawRemoved) {
+        if (removed.length >= MAX_CLOZE_WORDS_PER_SENTENCE) break;
+        if (removedCount >= maxTotal) break;
+        if (typeof candidate !== 'string') continue;
+        const clean = sanitizeClozeWord(candidate);
+        if (!clean) continue;
+        // The word must appear as a standalone word, in order, in this sentence.
+        if (buildBlankSegments(sentenceText, [...removed, clean]) === null) {
+          continue;
+        }
+        removed.push(clean);
+        removedCount += 1;
+      }
+
+      sentences.push({ text: sentenceText, removed });
+    }
+
+    const minRequired = Math.max(5, Math.min(10, Math.round(config.count / 2)));
+    if (removedCount < minRequired) {
+      throw new Error(
+        'The AI could not generate enough missing words for the cloze. Please try again.'
+      );
+    }
+
+    return { sentences, removedCount };
+  }
+
+  /**
+   * Generates German reading-comprehension questions about a story for active
    * against the model answer (factual accuracy + German quality, 0-100).
    */
   async checkStoryAnswer(

@@ -3,6 +3,7 @@ import {
   GERMAN_TENSES,
   GERMAN_TENSE_LABELS,
   buildBlankSegments,
+  buildClozeSegments,
   cleanReferenceText,
   isVerbFormLike,
   normalizeGermanText,
@@ -256,6 +257,47 @@ describe('isVerbFormLike', () => {
     expect(isVerbFormLike('kaufe', 'laufen')).toBe(false);
     expect(isVerbFormLike('müde', 'werden', werdenRefs)).toBe(false);
     expect(isVerbFormLike('', 'werden', werdenRefs)).toBe(false);
+  });
+});
+
+describe('buildClozeSegments', () => {
+  it('trims whitespace around a blank so punctuation stays clean', () => {
+    const segments = buildClozeSegments('Der Hund, lief davon.', ['Hund']);
+    expect(segments).toEqual([
+      { text: 'Der', blankIndex: -1 },
+      { text: '', blankIndex: 0 },
+      { text: ', lief davon.', blankIndex: -1 },
+    ]);
+  });
+
+  it('trims whitespace before a blank at the end of a sentence', () => {
+    const segments = buildClozeSegments('Ich hole dich ab.', ['ab']);
+    expect(segments).toEqual([
+      { text: 'Ich hole dich', blankIndex: -1 },
+      { text: '', blankIndex: 0 },
+      { text: '.', blankIndex: -1 },
+    ]);
+  });
+
+  it('keeps a sentence without blanks intact', () => {
+    const segments = buildClozeSegments('Es war ein schöner Tag.', []);
+    expect(segments).toEqual([{ text: 'Es war ein schöner Tag.', blankIndex: -1 }]);
+  });
+
+  it('handles two blanks and trims both neighbours', () => {
+    const segments = buildClozeSegments('Anna hat gestern Brot gekauft.', ['gestern', 'Brot']);
+    expect(segments).toEqual([
+      { text: 'Anna hat', blankIndex: -1 },
+      { text: '', blankIndex: 0 },
+      { text: '', blankIndex: -1 },
+      { text: '', blankIndex: 1 },
+      { text: 'gekauft.', blankIndex: -1 },
+    ]);
+  });
+
+  it('returns null when a blank cannot be located at a word boundary', () => {
+    expect(buildClozeSegments('Ich rufe dich an.', ['rufe', 'nicht'])).toBeNull();
+    expect(buildClozeSegments('Anna ist da.', ['an'])).toBeNull();
   });
 });
 

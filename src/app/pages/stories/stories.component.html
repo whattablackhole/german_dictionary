@@ -102,7 +102,23 @@
 
       <!-- Saved Stories -->
       <div class="panel-card">
-        <h2 class="panel-title">Saved Stories ({{ stories().length }})</h2>
+        <div class="panel-title-row">
+          <h2 class="panel-title">Saved Stories ({{ stories().length }})</h2>
+          @if (stories().length > 0) {
+            <mat-form-field appearance="outline" class="story-sort-field" subscriptSizing="dynamic">
+              <mat-select
+                [value]="storySortOrder()"
+                (selectionChange)="setStorySortOrder($event.value)"
+                aria-label="Sort saved stories"
+              >
+                <mat-option value="newest">Newest first</mat-option>
+                <mat-option value="oldest">Oldest first</mat-option>
+                <mat-option value="name-asc">Name A → Z</mat-option>
+                <mat-option value="name-desc">Name Z → A</mat-option>
+              </mat-select>
+            </mat-form-field>
+          }
+        </div>
         @if (stories().length === 0) {
           <p class="empty-state">No stories yet. Generate one above!</p>
         } @else {
@@ -115,7 +131,10 @@
               >
                 <span class="story-list-title">{{ story.title }}</span>
                 <span class="story-list-meta">
-                  {{ story.level }} &middot; {{ story.wordCount }} words
+                  <span>{{ story.level }} &middot; {{ story.wordCount }} words</span>
+                  @if (formatStoryDate(story.createdAt)) {
+                    <span class="story-list-date">{{ formatStoryDate(story.createdAt) }}</span>
+                  }
                 </span>
               </button>
             }
@@ -633,6 +652,63 @@
           </div>
         }
 
+        <!-- Story Cloze (fill in the blanks, drag & drop) -->
+        <div class="story-questions-row cloze-row">
+          <div class="story-questions-info cloze-info">
+            <mat-icon>drag_indicator</mat-icon>
+            <div class="cloze-info-body">
+              <div class="story-questions-label">Fill in the Blanks</div>
+              <div class="story-questions-desc">
+                AI removes words from the story; drag them back into the gaps.
+              </div>
+              <div class="cloze-density">
+                <div class="cloze-density-labels">
+                  <span>Missing words per sentence</span>
+                  <span class="cloze-density-value">{{ settingsService.clozeDensity() }}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.25"
+                  max="2"
+                  step="0.25"
+                  class="sentence-slider"
+                  [value]="settingsService.clozeDensity()"
+                  (input)="setClozeDensity($event)"
+                  title="Average number of missing words per sentence"
+                />
+                <div class="cloze-density-labels small">
+                  <span>light</span>
+                  <span>dense</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button
+            mat-flat-button
+            color="primary"
+            class="start-questions-btn"
+            (click)="startStoryCloze()"
+            [disabled]="storyClozeGenerating()"
+          >
+            @if (storyClozeGenerating()) {
+              <mat-spinner diameter="20" />
+              <span>Generating...</span>
+            } @else {
+              <ng-container>
+                <mat-icon>extension</mat-icon>
+                <span>Start Fill-in-the-Blanks</span>
+              </ng-container>
+            }
+          </button>
+        </div>
+
+        @if (storyClozeError()) {
+          <div class="exercise-error">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ storyClozeError() }}</span>
+          </div>
+        }
+
         <mat-accordion class="translations-accordion">
           <mat-expansion-panel>
             <mat-expansion-panel-header>
@@ -720,6 +796,47 @@
                     <button
                       class="history-delete-btn"
                       (click)="deleteQuestionEntry(entry.id)"
+                      title="Delete this session"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </section>
+
+        <!-- Cloze History (fill-in-the-blank sessions) -->
+        <section class="exercise-history-section">
+          <h3 class="history-title">Cloze History</h3>
+          @if (clozeHistory().length === 0) {
+            <p class="history-empty">
+              No cloze sessions yet. Start Fill-in-the-Blanks to practice with drag &amp; drop.
+            </p>
+          } @else {
+            <div class="history-list">
+              @for (entry of clozeHistory(); track entry.id) {
+                <div class="history-entry">
+                  <div class="history-entry-top">
+                    <span class="history-score" [class.history-good]="entry.scorePercent >= 80">
+                      {{ entry.correctCount }}/{{ entry.totalCount }}
+                    </span>
+                    <span class="history-percent">{{ entry.scorePercent }}%</span>
+                    <span class="history-date">{{ formatSessionDate(entry.completedAt) }}</span>
+                  </div>
+                  <div class="history-entry-actions">
+                    <button
+                      class="history-replay-btn"
+                      (click)="replayClozeSession(entry.id)"
+                      title="Replay this session"
+                    >
+                      <mat-icon>replay</mat-icon>
+                      Replay
+                    </button>
+                    <button
+                      class="history-delete-btn"
+                      (click)="deleteClozeEntry(entry.id)"
                       title="Delete this session"
                     >
                       <mat-icon>delete</mat-icon>

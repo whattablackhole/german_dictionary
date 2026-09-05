@@ -71,6 +71,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'story-cloze',
+    loadComponent: () =>
+      import('./pages/story-cloze/story-cloze.component').then(
+        (m) => m.StoryClozeComponent
+      ),
+  },
+  {
     path: 'sentence-builder',
     loadComponent: () =>
       import('./pages/sentence-builder/sentence-builder.component').then(

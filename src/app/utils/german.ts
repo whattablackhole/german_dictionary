@@ -109,6 +109,35 @@ export function buildBlankSegments(
   return segments;
 }
 
+/**
+ * Like `buildBlankSegments`, but trims whitespace adjacent to each blank so a
+ * blank dropped next to punctuation renders cleanly. E.g. with blank "Hund" in
+ * "Der Hund, lief" the segments become "Der", the blank, then ", lief" — the
+ * stray spaces around the gap are removed. Returns null when any blank cannot
+ * be located at a word boundary.
+ */
+export function buildClozeSegments(
+  sentence: string,
+  blanks: string[]
+): BlankSegment[] | null {
+  const raw = buildBlankSegments(sentence, blanks);
+  if (!raw) return null;
+
+  const segments = raw.map((s) => ({ ...s }));
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i].blankIndex < 0) continue;
+    const prev = segments[i - 1];
+    if (prev && prev.blankIndex === -1) {
+      prev.text = prev.text.replace(/\s+$/, '');
+    }
+    const next = segments[i + 1];
+    if (next && next.blankIndex === -1) {
+      next.text = next.text.replace(/^\s+/, '');
+    }
+  }
+  return segments;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

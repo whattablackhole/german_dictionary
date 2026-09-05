@@ -15,6 +15,7 @@ const SHOW_SENTENCES_KEY = 'german-dictionary-show-sentences-srs';
 const THROUGHPUT_ROUTING_KEY = 'german-dictionary-throughput-routing';
 const TRANSLATION_API_URL_KEY = 'german-dictionary-translation-api-url';
 const STORY_ONLY_MC_KEY = 'german-dictionary-story-only-mc-exercises';
+const CLOZE_DENSITY_KEY = 'german-dictionary-cloze-density';
 
 export type TtsEngine = 'browser' | 'openai';
 export type LookupModifier = 'alt' | 'ctrl' | 'meta' | 'shift';
@@ -147,6 +148,9 @@ export class SettingsService {
     localStorage.getItem(IMAGE_STYLE_KEY) ?? 'none'
   );
 
+  /** Average number of missing words per sentence for story cloze exercises (0.25-2). */
+  readonly clozeDensity = signal<number>(this.loadClozeDensity());
+
   /** Custom style prompt text (only used when imageStyle === 'custom') */
   readonly imageStyleCustom = signal<string>(
     localStorage.getItem(IMAGE_STYLE_KEY + '-custom') ?? ''
@@ -180,6 +184,13 @@ export class SettingsService {
   setImageModel(model: string): void {
     this.imageModel.set(model);
     this.safeWrite(IMAGE_MODEL_KEY, model);
+  }
+
+  /** Sets the average number of missing words per sentence used when generating story cloze exercises. */
+  setClozeDensity(density: number): void {
+    const clamped = Math.min(2, Math.max(0.25, density));
+    this.clozeDensity.set(clamped);
+    this.safeWrite(CLOZE_DENSITY_KEY, String(clamped));
   }
 
   setTextModel(model: string): void {
@@ -296,5 +307,12 @@ export class SettingsService {
     } catch (err) {
       console.warn(`Failed to persist setting "${key}" to localStorage.`, err);
     }
+  }
+
+  /** Reads the persisted cloze density, or defaults to 1 (word per sentence). */
+  private loadClozeDensity(): number {
+    const raw = Number(localStorage.getItem(CLOZE_DENSITY_KEY));
+    if (!raw || isNaN(raw)) return 1;
+    return Math.min(2, Math.max(0.25, raw));
   }
 }

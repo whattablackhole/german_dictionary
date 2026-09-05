@@ -31,6 +31,10 @@ import { StoryQuestion } from '../../models/story-question';
 import { StoryQuestionHistoryEntry } from '../../models/story-question-history';
 import { StoryQuestionService } from '../../services/story-question.service';
 import { StoryQuestionHistoryService } from '../../services/story-question-history.service';
+import { StoryCloze } from '../../models/story-cloze';
+import { StoryClozeHistoryEntry } from '../../models/story-cloze-history';
+import { StoryClozeService } from '../../services/story-cloze.service';
+import { StoryClozeHistoryService } from '../../services/story-cloze-history.service';
 import { toStoryExercise as toStoryExerciseShared } from '../../services/story-exercise-builder';
 
 interface WordToken {
@@ -50,6 +54,8 @@ interface PopupPosition {
   x: number;
   y: number;
 }
+
+type StorySortOrder = 'newest' | 'oldest' | 'name-asc' | 'name-desc';
 
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
 
@@ -108,7 +114,26 @@ export class StoriesComponent implements OnInit, OnDestroy {
   readonly sentenceCount = signal(10);
 
   // State
-  readonly stories = computed(() => this.storyService.stories());
+  readonly stories = computed(() => {
+    const list = [...this.storyService.stories()];
+    switch (this.storySortOrder()) {
+      case 'oldest':
+        return list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      case 'name-asc':
+        return list.sort((a, b) =>
+          a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+        );
+      case 'name-desc':
+        return list.sort((a, b) =>
+          b.title.localeCompare(a.title, undefined, { sensitivity: 'base' })
+        );
+      case 'newest':
+      default:
+        return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+  });
+  /** How the saved stories list is sorted. */
+  readonly storySortOrder = signal<StorySortOrder>('newest');
   readonly selectedStoryId = signal<string | null>(null);
   readonly isGenerating = signal(false);
   readonly isPlaying = signal(false);
@@ -160,6 +185,10 @@ export class StoriesComponent implements OnInit, OnDestroy {
   // Story Questions (active recall) mode
   readonly storyQuestionsGenerating = signal(false);
   readonly storyQuestionsError = signal('');
+
+  // Story Cloze (fill in the blanks, drag & drop) mode
+  readonly storyClozeGenerating = signal(false);
+  readonly storyClozeError = signal('');
 
   /** Ordered list of German word units selected for exercises (groups joined with a space). */
   readonly selectedExerciseWords = computed<string[]>(() => {
@@ -450,6 +479,8 @@ export class StoriesComponent implements OnInit, OnDestroy {
     private readonly historyService: StoryExerciseHistoryService,
     private readonly storyQuestionService: StoryQuestionService,
     private readonly questionHistoryService: StoryQuestionHistoryService,
+    private readonly storyClozeService: StoryClozeService,
+    private readonly clozeHistoryService: StoryClozeHistoryService,
     private readonly router: Router,
     private readonly route: ActivatedRoute
   ) {}
@@ -555,6 +586,22 @@ export class StoriesComponent implements OnInit, OnDestroy {
     if (!this.router.url.startsWith(targetUrl)) {
       this.router.navigate([targetUrl], { replaceUrl: true });
     }
+  }
+
+  /** Updates the saved-stories sort order from the sort control. */
+  setStorySortOrder(order: StorySortOrder): void {
+    this.storySortOrder.set(order);
+  }
+
+  /** Compact date for the saved-stories list meta. */
+  formatStoryDate(iso: string): string {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   }
 
   async playStory(): Promise<void> {
@@ -1361,6 +1408,7 @@ export class StoriesComponent implements OnInit, OnDestroy {
   clearSessionHistory(storyId: string): void {
     this.historyService.deleteForStory(storyId);
     this.questionHistoryService.deleteForStory(storyId);
+    this.clozeHistoryService.deleteForStory(storyId);
   }
 
   // ── Question history & replay ──
@@ -1400,6 +1448,119 @@ export class StoriesComponent implements OnInit, OnDestroy {
   /** Deletes a single question history entry. */
   deleteQuestionEntry(entryId: string): void {
     this.questionHistoryService.deleteEntry(entryId);
+  }
+
+  // ── Story Cloze (fill in the blanks, drag & drop) ──
+
+  /** Generates a "fill in the blanks" cloze for the selected story and starts
+   *  the drag-and-drop session. Removed count scales with story length
+   *  (~20% of the words), clamped to 10-50. */
+  async startStoryCloze(): Promise<void> {
+    const story = this.selectedStory();
+    if (!story) return;
+
+    if (!this.aiService.hasApiKey()) {
+      this.storyClozeError.set(
+        'No API key set. Add your OpenRouter API key in Settings.'
+      );
+      return;
+    }
+
+    this.storyClozeGenerating.set(true);
+    this.storyClozeError.set('');
+    try {
+      // Target ~density missing words per sentence (clamped to 5-50 total).
+      const sentenceCount = this.estimateSentenceCount(story.german);
+      const rawCount = Math.round(
+        this.settingsService.clozeDensity() * sentenceCount
+      );
+      const count = Math.min(50, Math.max(5, rawCount));
+
+      const generated = await this.aiService.generateStoryCloze({
+        storyTitle: story.title,
+        storyGerman: story.german,
+        level: story.level,
+        count,
+      });
+
+      if (generated.removedCount === 0) {
+        this.storyClozeError.set('No missing words could be generated. Try again.');
+        return;
+      }
+
+      const cloze: StoryCloze = {
+        id: crypto.randomUUID(),
+        storyId: story.id,
+        sentences: generated.sentences.map((s) => ({
+          text: s.text,
+          removedWords: s.removed,
+        })),
+      };
+
+      this.stopPlayback();
+      this.closeWordPopup();
+      this.closeSentenceNotePopup();
+      this.storyClozeService.setSession(story, cloze);
+      this.router.navigate(['/story-cloze']);
+    } catch (err) {
+      this.storyClozeError.set(
+        err instanceof Error ? err.message : 'Failed to generate the cloze exercise.'
+      );
+    } finally {
+      this.storyClozeGenerating.set(false);
+    }
+  }
+
+  /** Completed/quit cloze sessions for the currently selected story, newest first. */
+  readonly clozeHistory = computed<StoryClozeHistoryEntry[]>(() => {
+    const id = this.selectedStoryId();
+    if (!id) return [];
+    return this.clozeHistoryService.getForStory(id);
+  });
+
+  /** Loads a saved cloze session into the story cloze service and replays it. */
+  replayClozeSession(entryId: string): void {
+    const entry = this.clozeHistoryService.getEntryById(entryId);
+    if (!entry || entry.cloze.sentences.length === 0) return;
+
+    const story = this.storyService.getStoryById(entry.storyId) ?? {
+      id: entry.storyId,
+      title: entry.storyTitle,
+      german: '',
+      translationEn: '',
+      translationRu: '',
+      level: entry.level,
+      domain: '',
+      grammarTopics: [],
+      wordCount: entry.totalCount,
+      createdAt: entry.completedAt,
+    };
+
+    this.stopPlayback();
+    this.closeWordPopup();
+    this.closeSentenceNotePopup();
+    this.storyClozeService.setSession(story, { ...entry.cloze });
+    this.router.navigate(['/story-cloze']);
+  }
+
+  /** Deletes a single cloze history entry. */
+  deleteClozeEntry(entryId: string): void {
+    this.clozeHistoryService.deleteEntry(entryId);
+  }
+
+  /** Updates the average missing-words-per-sentence density from the cloze slider. */
+  setClozeDensity(event: Event): void {
+    const value = parseFloat((event.target as HTMLInputElement).value);
+    if (!isNaN(value)) {
+      this.settingsService.setClozeDensity(value);
+    }
+  }
+
+  /** Rough sentence count for a story paragraph (punctuation-aware). */
+  private estimateSentenceCount(text: string): number {
+    return text
+      .split(/[.!?…]+/)
+      .filter((part) => part.trim().length > 0).length;
   }
 
   private toStoryExercise(

@@ -1,0 +1,220 @@
+<div class="story-cloze-container">
+  <div class="page-header">
+    <h1 class="page-title">Fill in the Blanks</h1>
+    <p class="page-subtitle">
+      {{ story()?.title ?? 'Story cloze' }}
+      @if (story(); as s) {
+        <span class="story-badge">{{ s.level }}</span>
+      }
+    </p>
+    <button mat-stroked-button class="back-btn" (click)="backToStories()">
+      <mat-icon>arrow_back</mat-icon>
+      Back to Story
+    </button>
+  </div>
+
+  @if (cloze() === null) {
+    <div class="empty-state-large">
+      <mat-icon class="empty-icon">drag_indicator</mat-icon>
+      <p>No cloze exercise yet.</p>
+    </div>
+  } @else if (totalBlanks() === 0) {
+    <div class="empty-state-large">
+      <mat-icon class="empty-icon">drag_indicator</mat-icon>
+      <p>This exercise has no missing words.</p>
+    </div>
+  } @else if (finished()) {
+    <div class="results-screen">
+      <mat-icon class="results-trophy">emoji_events</mat-icon>
+      <h2>Session Complete!</h2>
+      <p class="score">
+        {{ correctCount() }} / {{ totalBlanks() }} correct ({{ scorePercent() }}%)
+      </p>
+      <div class="results-actions">
+        <button mat-raised-button (click)="restart()">
+          <mat-icon>replay</mat-icon>
+          Practice Again
+        </button>
+        <button mat-stroked-button (click)="backToStories()">
+          <mat-icon>arrow_back</mat-icon>
+          Exit
+        </button>
+      </div>
+    </div>
+  } @else {
+    <div class="session-card">
+      <div class="session-header">
+        <div class="session-title-row">
+          <mat-icon>drag_indicator</mat-icon>
+          <span>Put the words back in the story</span>
+        </div>
+        <div class="session-meta">
+          <span>{{ placedCount() }} / {{ totalBlanks() }} placed</span>
+          @if (checked()) {
+            <span>Score: {{ scorePercent() }}%</span>
+          }
+        </div>
+        <button
+          mat-icon-button
+          class="quit-btn"
+          (click)="quitSession()"
+          title="Quit"
+          aria-label="Quit"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <div class="instructions">
+        <mat-icon>info</mat-icon>
+        <span>
+          Drag the missing words from the box on the right into the gaps — or tap a
+          word, then tap a gap.
+          @if (!checked()) {
+            Then press <strong>Check Answer</strong>.
+          }
+        </span>
+      </div>
+
+      <div cdkDropListGroup class="cloze-area">
+        <!-- Story with gaps -->
+        <div class="story-card">
+          <div class="story-text">
+            @for (sentence of displaySentences(); track sentence.indexKey) {
+              <span class="cloze-sentence">
+                @for (seg of sentence.segments; track seg.key) {
+                  @if (seg.blankIndex >= 0) {
+                    <span
+                      cdkDropList
+                      class="cloze-slot"
+                      [class.slot-filled]="slotCount(seg.slotKey) > 0"
+                      [class.slot-correct]="isSlotCorrect(seg.slotKey)"
+                      [class.slot-wrong]="
+                        checked() && slotCount(seg.slotKey) > 0 && !isSlotCorrect(seg.slotKey)
+                      "
+                      [class.slot-reveal]="checked() && slotCount(seg.slotKey) === 0"
+                      [cdkDropListData]="slotArray(seg.slotKey)"
+                      (cdkDropListDropped)="onDrop($event)"
+                      (click)="onSlotClick(seg.slotKey)"
+                      [attr.aria-label]="'Gap for a missing word'"
+                    >
+                      @if (slotFirst(seg.slotKey); as placed) {
+                        <span
+                          cdkDrag
+                          class="cloze-chip"
+                          [cdkDragDisabled]="checked()"
+                          [class.chip-correct]="isSlotCorrect(seg.slotKey)"
+                        >
+                          <mat-icon class="chip-handle">drag_indicator</mat-icon>
+                          <span class="chip-word">{{ placed.word }}</span>
+                          @if (!checked()) {
+                            <button
+                              type="button"
+                              class="chip-remove"
+                              (click)="removeFromSlot(seg.slotKey, $event)"
+                              title="Return to word box"
+                              aria-label="Return to word box"
+                            >
+                              <mat-icon>close</mat-icon>
+                            </button>
+                          }
+                        </span>
+                      } @else {
+                        @if (checked() && !isSlotCorrect(seg.slotKey)) {
+                          <span class="slot-answer">{{ correctWordFor(seg.slotKey) }}</span>
+                        } @else {
+                          <span class="slot-placeholder">…</span>
+                        }
+                      }
+                    </span>
+                  } @else {
+                    <span class="cloze-text">{{ seg.text }}</span>
+                  }
+                }
+              </span>
+            }
+          </div>
+        </div>
+
+        <!-- Word bank -->
+        <div class="word-bank">
+          <div class="word-bank-header">
+            <mat-icon>extension</mat-icon>
+            <span>Missing words</span>
+            <span class="word-bank-count">{{ bankPieces().length }}</span>
+            <div class="spacer"></div>
+            @if (selectedBankPiece()) {
+              <button mat-stroked-button class="clear-selection-btn" (click)="clearSelection()">
+                <mat-icon>close</mat-icon>
+                Cancel
+              </button>
+            }
+            <button
+              mat-stroked-button
+              class="reset-btn"
+              (click)="restart()"
+              title="Clear the gaps and shuffle the words"
+            >
+              <mat-icon>restart_alt</mat-icon>
+              Reset
+            </button>
+          </div>
+          <div class="bank-hint">
+            Press and drag each word into its gap in the story. Tap a word, then tap a gap as an alternative.
+          </div>
+          @if (bankPieces().length === 0) {
+            <div class="bank-empty">
+              All words placed!
+              @if (!checked()) {
+                Press <strong>Check Answer</strong>.
+              }
+            </div>
+          } @else {
+            <div
+              cdkDropList
+              class="word-bank-list"
+              [cdkDropListData]="bankPieces()"
+              (cdkDropListDropped)="onDrop($event)"
+            >
+              @for (piece of bankPieces(); track piece.id) {
+                <span
+                  cdkDrag
+                  class="cloze-chip bank-chip"
+                  [cdkDragDisabled]="checked()"
+                  [class.chip-selected]="selectedBankPiece()?.id === piece.id"
+                  (click)="onBankChipClick(piece)"
+                  [attr.aria-label]="'Missing word ' + piece.word"
+                >
+                  <mat-icon class="chip-handle">drag_indicator</mat-icon>
+                  <span class="chip-word">{{ piece.word }}</span>
+                </span>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="cloze-actions">
+        @if (!checked()) {
+          <button mat-raised-button color="primary" (click)="checkAnswers()">
+            <mat-icon>check_circle</mat-icon>
+            Check Answer
+          </button>
+        } @else {
+          <div class="check-summary">
+            <mat-icon [class.ok]="scorePercent() === 100">emoji_events</mat-icon>
+            <span>{{ correctCount() }} / {{ totalBlanks() }} correct ({{ scorePercent() }}%)</span>
+          </div>
+          <button mat-stroked-button (click)="restart()">
+            <mat-icon>replay</mat-icon>
+            Practice Again
+          </button>
+          <button mat-raised-button color="primary" (click)="finishSession()">
+            <mat-icon>flag</mat-icon>
+            Finish
+          </button>
+        }
+      </div>
+    </div>
+  }
+</div>
