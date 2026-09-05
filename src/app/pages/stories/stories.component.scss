@@ -75,6 +75,24 @@
   margin-bottom: 8px;
 }
 
+/* Random-theme dice button inside the theme input */
+.theme-field {
+  mat-suffix {
+    color: var(--mat-sys-primary);
+  }
+
+  .theme-random-btn {
+    --mat-icon-button-touch-target-display: none;
+    color: var(--mat-sys-primary);
+
+    mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+    }
+  }
+}
+
 .chip-section {
   margin-bottom: 12px;
 }
@@ -102,6 +120,14 @@
   color: var(--mat-sys-on-surface-variant);
   cursor: pointer;
   transition: all 0.15s;
+
+  .chip-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    vertical-align: -2px;
+    margin-right: 4px;
+  }
 
   &:hover {
     border-color: var(--mat-sys-primary);
@@ -213,6 +239,25 @@
   font-size: 11px;
   color: var(--mat-sys-on-surface-variant);
 
+  .story-list-meta-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .story-format-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border-radius: 9px;
+    background: rgba(var(--mat-sys-primary-rgb, 21, 101, 192), 0.12);
+    color: var(--mat-sys-primary);
+  }
+
   .story-list-date {
     flex-shrink: 0;
     white-space: nowrap;
@@ -294,6 +339,20 @@
     background: #f3e5f5;
     color: #7b1fa2;
   }
+
+  &.badge-format {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(var(--mat-sys-primary-rgb, 21, 101, 192), 0.14);
+    color: var(--mat-sys-primary);
+
+    .badge-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+  }
 }
 
 .story-text-card {
@@ -309,6 +368,46 @@
 .story-text {
   white-space: pre-wrap;
   color: var(--mat-sys-on-surface);
+}
+
+/* Dialog (scripted conversation) display */
+.dialog-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 8px;
+  line-height: 1.6;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  .dialog-speaker {
+    flex-shrink: 0;
+    min-width: 44px;
+    max-width: 30%;
+    font-weight: 700;
+    color: var(--mat-sys-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dialog-text-span {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &.dialog-narration {
+    padding-left: 54px;
+    color: var(--mat-sys-on-surface-variant);
+    font-style: italic;
+
+    .word-span {
+      color: inherit;
+      font-style: inherit;
+    }
+  }
 }
 
 /* Exercise History Panel */

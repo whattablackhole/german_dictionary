@@ -357,3 +357,63 @@ export function cleanReferenceText(text: string): string {
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
+
+/** A single line of a dialog script (speaker utterance or narration). */
+export interface DialogLine {
+  /** The speaker name (or null for narration lines without a speaker). */
+  speaker: string | null;
+  /** The spoken text (without the speaker prefix and colon). */
+  text: string;
+  /** Character offset of the whole line (including speaker, if any) within the story. */
+  start: number;
+  /** Character offset just past the end of the whole line (excluding trailing newline). */
+  end: number;
+  /** Character offset where the line text begins (skipping the "Name: " prefix for dialogue). */
+  textStart: number;
+}
+
+/**
+ * Splits a story script into dialogue lines. Each physical line is examined:
+ * a line starting with a short speaker name followed by a colon is treated as
+ * a dialogue utterance (speaker + text); everything else becomes narration
+ * (speaker = null). Match rules:
+ *  - The speaker name is capped at 40 chars and cannot contain a newline.
+ *  - Both "Name:" (ASCII) and "Name：" (full-width colon) are recognized.
+ *  - A line that contains no speaker prefix is still returned as narration.
+ *  - Empty lines are skipped.
+ */
+export function parseDialogLines(text: string): DialogLine[] {
+  const lines: DialogLine[] = [];
+  // Split by newline, keeping track of absolute character offsets.
+  const regex = /[^\n]*\n?/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const rawLine = match[0];
+    const start = match.index;
+
+    // Skip the trailing newline char in `end`.
+    const end = rawLine.endsWith('\n') ? start + rawLine.length - 1 : start + rawLine.length;
+    if (end <= start) {
+      // Empty line/no content.
+      if (regex.lastIndex >= text.length) break;
+      continue;
+    }
+
+    const line = rawLine.replace(/\n$/, '');
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+
+    const colonMatch = trimmed.match(/^([^：:\n]{1,40})(?:：|:)\s*(.+)$/);
+    if (colonMatch) {
+      const speaker = colonMatch[1].trim();
+      const textContent = colonMatch[2].trim();
+      // The character offset of the content = start + (index of content within the raw line).
+      const textStart = start + line.indexOf(textContent);
+      lines.push({ speaker, text: textContent, start, end, textStart });
+    } else {
+      lines.push({ speaker: null, text: line.trim(), start, end, textStart: start });
+    }
+  }
+
+  return lines;
+}

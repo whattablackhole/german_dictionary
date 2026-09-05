@@ -8,6 +8,7 @@ import {
 } from '../models/word';
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
+import { StoryFormat } from '../models/story';
 import { SettingsService } from './settings.service';
 import {
   buildBlankSegments,
@@ -1814,12 +1815,85 @@ Student's answer: "${userInput}"`;
     };
   }
 
+  /**
+   * Generates a single random theme/topic for a story that differs from the
+   * themes already used by the user's existing stories. Pass the titles of the
+   * user's most recent stories so the AI avoids repeating them.
+   */
+  async generateRandomTheme(existingTitles: string[]): Promise<string> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const recentBlock =
+      existingTitles.length > 0
+        ? `The user already has stories with these titles (avoid these topics and pick something clearly different):\n${existingTitles
+            .map((t) => `- ${t}`)
+            .join('\n')}`
+        : 'The user has no stories yet, so pick a fun, interesting starting topic.';
+
+    const prompt = `You are a creative German language teacher. Suggest ONE random story theme/topic for a German learning story.
+${recentBlock}
+
+Rules:
+- Pick a concrete, interesting topic (a location, situation, hobby, event, or a mix) that a beginner-to-intermediate learner would enjoy.
+- Keep it to 2-6 words.
+- Respond with JSON only (no markdown) as an object with a single key "theme" containing the theme string.`;
+
+    const response = await fetch(environment.openRouterApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.settingsService.textModel(),
+        messages: [{ role: 'user', content: prompt }],
+        ...(this.combinedProviderField()),
+        response_format: { type: 'json_object' },
+        temperature: 1.2,
+      }),
+    });
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = await response.json();
+    const text: string | undefined = data.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error('AI returned no result.');
+    }
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonText = jsonMatch ? jsonMatch[1] : text;
+
+    let parsed: { theme?: string };
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      throw new Error('AI returned an invalid response.');
+    }
+
+    const theme = parsed.theme?.trim();
+    if (!theme) {
+      throw new Error('AI could not generate a theme. Try again.');
+    }
+    return theme;
+  }
+
   async generateStory(config: {
     theme: string;
     level: DifficultyLevel;
     wordTypes: string[];
     grammarTopics: string[];
     sentenceCount: number;
+    format?: StoryFormat;
+    /** Minimum number of German sentences that make up a single dialog utterance. */
+    minSentencesPerUtterance?: number;
+    /** Maximum number of German sentences that make up a single dialog utterance. */
+    maxSentencesPerUtterance?: number;
   }): Promise<{ title: string; german: string; translationEn: string; translationRu: string }> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -1832,24 +1906,47 @@ Student's answer: "${userInput}"`;
     const grammarInstruction = config.grammarTopics.length > 0
       ? `The story must demonstrate these grammar topics: ${config.grammarTopics.join(', ')}.`
       : '';
+    const isDialog = config.format === 'dialog';
 
-    const prompt = `You are a German language teacher. Generate a cohesive German story at CEFR level ${config.level}.
+    // Guard the min/max bounds so min is never greater than max,
+    // and both default sensibly when not provided.
+    const rawMin = config.minSentencesPerUtterance ?? 1;
+    const rawMax = config.maxSentencesPerUtterance ?? 2;
+    const minUtterance = Math.min(rawMin, rawMax);
+    const maxUtterance = Math.max(rawMin, rawMax);
+
+    const formatInstruction = isDialog
+      ? `Generate a natural German CONVERSATION (a dialog) between 2-3 characters about the theme.
+- Write it as a script: one line per utterance, each line starting with the speaker name, a colon, a space, then the German spoken text.
+- Each utterance must contain between ${minUtterance} and ${maxUtterance} German sentences. A sentence ends with a period, exclamation mark, or question mark.
+- Example (${minUtterance}-${maxUtterance} sentences per line):
+Anna: „Hallo Max! Wie geht es dir?"
+Max: „Mir geht es gut! Und dir?"
+Anna: „Auch gut. Wollen wir morgen zusammen Kaffee trinken? Das wäre toll."
+- A sentence inside a line is separated from the next one by a period, question mark, or exclamation mark — only then does the utterance end and a new speaker begin.
+- Use German quotation marks („...\") around the spoken words and keep each utterance on its own line.
+- You may include a few short narration lines WITHOUT a speaker name and colon — e.g. "Sie setzen sich an einen Tisch." — but keep them rare (at most one or two).
+- Make the dialog natural, coherent and true to the theme, not a list of isolated sentences.
+- Use vocabulary and grammar appropriate for ${config.level} level.`
+      : `Generate a cohesive German story at CEFR level ${config.level}.
+- The story should be natural and coherent, not a list of isolated sentences.
+- The German text must use proper punctuation and capitalization.`;
+
+    const prompt = `You are a German language teacher. ${formatInstruction}
 Respond with JSON only (no markdown) as an object with these fields:
-- "title": a short, engaging title for the story
-- "german": the complete German story text (${config.sentenceCount} sentences, all in one paragraph or with line breaks)
+- "title": a short, engaging title for the story or dialog
+- "german": the complete German text (${config.sentenceCount} sentences${isDialog ? ' / dialog lines' : ''})
 - "translationEn": the complete English translation
 - "translationRu": the complete Russian translation
 
 Rules:
-- The story must be about the theme: "${config.theme}".
+- The content must be about the theme: "${config.theme}".
 - ${wordTypesInstruction}
 - ${grammarInstruction}
-- The story should be natural and coherent, not a list of isolated sentences.
-- Use vocabulary and grammar appropriate for ${config.level} level.
-- Generate exactly ${config.sentenceCount} sentences.
-- The German text must use proper punctuation and capitalization.
+- Generate exactly ${config.sentenceCount} sentences${isDialog ? ' / dialog lines' : ''}.
+${isDialog ? '- Keep every dialog line on its own line, prefixed with the speaker name and a colon.\n- Each utterance must contain between ' + minUtterance + ' and ' + maxUtterance + ' German sentences.\n- Do NOT wrap the dialog inside Markdown code fences or quotes.' : ''}
 
-Generate exactly ${config.sentenceCount} sentences.`;
+Generate exactly ${config.sentenceCount} sentences${isDialog ? ' / dialog lines' : ''}.`;
 
     const response = await fetch(environment.openRouterApiUrl, {
       method: 'POST',

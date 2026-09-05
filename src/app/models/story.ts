@@ -1,5 +1,7 @@
 import { DifficultyLevel } from './word';
 
+export type StoryFormat = 'prose' | 'dialog';
+
 export interface Story {
   id: string;
   title: string;
@@ -12,6 +14,8 @@ export interface Story {
   wordCount: number;
   createdAt: string;
   audioUrl?: string;
+  /** 'dialog' = the German text is a scripted conversation (one line per speaker). */
+  format?: StoryFormat;
 }
 
 export interface StoryConfig {
@@ -20,4 +24,5 @@ export interface StoryConfig {
   wordTypes: string[];
   grammarTopics: string[];
   sentenceCount: number;
+  format?: StoryFormat;
 }

@@ -8,13 +8,28 @@
       <div class="panel-card">
         <h2 class="panel-title">Configuration</h2>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="full-width theme-field">
           <mat-label>Theme / Topic</mat-label>
           <input
             matInput
             [(ngModel)]="themeInput"
             placeholder="e.g. Travel, Family, Technology..."
           />
+          <button
+            mat-icon-button
+            matSuffix
+            class="theme-random-btn"
+            (click)="generateRandomTheme()"
+            [disabled]="themeGenerating()"
+            [title]="themeGenerating() ? 'Generating a theme...' : 'Suggest a random theme'"
+            aria-label="Suggest a random theme"
+          >
+            @if (themeGenerating()) {
+              <mat-spinner diameter="16" />
+            } @else {
+              <mat-icon>casino</mat-icon>
+            }
+          </button>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
@@ -25,6 +40,28 @@
             }
           </mat-select>
         </mat-form-field>
+
+        <div class="chip-section">
+          <label class="chip-label">Content type</label>
+          <div class="chip-group">
+            <button
+              class="chip"
+              [class.chip-selected]="formatInput() === 'prose'"
+              (click)="setFormat('prose')"
+            >
+              <mat-icon class="chip-icon">menu_book</mat-icon>
+              Story
+            </button>
+            <button
+              class="chip"
+              [class.chip-selected]="formatInput() === 'dialog'"
+              (click)="setFormat('dialog')"
+            >
+              <mat-icon class="chip-icon">forum</mat-icon>
+              Dialog
+            </button>
+          </div>
+        </div>
 
         <div class="chip-section">
           <label class="chip-label">Word types to prioritize</label>
@@ -57,7 +94,13 @@
         </div>
 
         <div class="slider-section">
-          <label class="chip-label">Number of sentences: {{ sentenceCount() }}</label>
+          <label class="chip-label">
+            @if (formatInput() === 'dialog') {
+              Number of dialog lines: {{ sentenceCount() }}
+            } @else {
+              Number of sentences: {{ sentenceCount() }}
+            }
+          </label>
           <input
             type="range"
             min="3"
@@ -74,6 +117,45 @@
           </div>
         </div>
 
+        @if (formatInput() === 'dialog') {
+          <div class="slider-section">
+            <label class="chip-label">
+              Min sentences per utterance: {{ settingsService.dialogMinSentences() }}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              step="1"
+              [value]="settingsService.dialogMinSentences()"
+              (input)="setDialogMinSentences($event)"
+              class="sentence-slider"
+            />
+            <div class="slider-labels">
+              <span>1</span>
+              <span>5</span>
+            </div>
+          </div>
+          <div class="slider-section">
+            <label class="chip-label">
+              Max sentences per utterance: {{ settingsService.dialogMaxSentences() }}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              step="1"
+              [value]="settingsService.dialogMaxSentences()"
+              (input)="setDialogMaxSentences($event)"
+              class="sentence-slider"
+            />
+            <div class="slider-labels">
+              <span>1</span>
+              <span>5</span>
+            </div>
+          </div>
+        }
+
         <button
           mat-flat-button
           color="primary"
@@ -87,7 +169,7 @@
           } @else {
             <ng-container>
               <mat-icon>auto_awesome</mat-icon>
-              Generate Story
+              {{ formatInput() === 'dialog' ? 'Generate Dialog' : 'Generate Story' }}
             </ng-container>
           }
         </button>
@@ -131,7 +213,12 @@
               >
                 <span class="story-list-title">{{ story.title }}</span>
                 <span class="story-list-meta">
-                  <span>{{ story.level }} &middot; {{ story.wordCount }} words</span>
+                  <span class="story-list-meta-left">
+                    @if (story.format === 'dialog') {
+                      <span class="story-format-badge">Dialog</span>
+                    }
+                    <span>{{ story.level }} &middot; {{ story.wordCount }} words</span>
+                  </span>
                   @if (formatStoryDate(story.createdAt)) {
                     <span class="story-list-date">{{ formatStoryDate(story.createdAt) }}</span>
                   }
@@ -156,6 +243,12 @@
         <div class="story-header">
           <h2 class="story-title">{{ story.title }}</h2>
           <div class="story-badges">
+            @if (story.format === 'dialog') {
+              <span class="badge badge-format">
+                <mat-icon class="badge-icon">forum</mat-icon>
+                Dialog
+              </span>
+            }
             <span class="badge badge-level">{{ story.level }}</span>
             <span class="badge badge-domain">{{ story.domain }}</span>
             <span class="badge badge-count">{{ story.wordCount }} words</span>
@@ -264,7 +357,35 @@
             <div class="story-text" #storyText
               (contextmenu)="onContextMenu($event)"
             >
-              @if (sentenceNotesMode()) {
+              @if (isDialog()) {
+                <!-- Dialog display: one line per speaker / narration -->
+                @for (line of dialogLines(); track line.start) {
+                  <div class="dialog-line" [class.dialog-narration]="!line.speaker">
+                    @if (line.speaker) {
+                      <span class="dialog-speaker">{{ line.speaker }}</span>
+                    }
+                    <span class="dialog-text-span">
+                      @for (token of wordTokens(); track token.start; let i = $index) {
+                        @if (token.start >= line.textStart && token.end <= line.end) {
+                          <span
+                            class="word-span"
+                            [class.word-highlight]="
+                              currentCharIndex() !== null &&
+                              currentCharIndex()! >= token.start &&
+                              currentCharIndex()! < token.end
+                            "
+                            [class.word-selected]="wordLookupEnabled() && isWordSelected(i)"
+                            [class.word-lookup-hover]="wordLookupEnabled()"
+                            [class.word-exercise-selected]="exerciseSelectionMode() && isExerciseWordSelected(i)"
+                            (click)="onWordClick(token.text, i, $event)"
+                            (contextmenu)="onWordRightClick(token.text, $event)"
+                          >{{ token.text }} </span>
+                        }
+                      }
+                    </span>
+                  </div>
+                }
+              } @else if (sentenceNotesMode()) {
                 <!-- Sentence-level display for notes mode -->
                 @for (sentence of sentenceTokens(); track sentence.start; let si = $index) {
                   <span

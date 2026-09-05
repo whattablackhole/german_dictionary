@@ -13,7 +13,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { Subscription } from 'rxjs';
-import { Story, StoryConfig } from '../../models/story';
+import { Story, StoryConfig, StoryFormat } from '../../models/story';
 import { StoryExercise } from '../../models/story-exercise';
 import { StoryService } from '../../services/story.service';
 import { AiService, AiSuggestion, GeneratedStoryExercise } from '../../services/ai.service';
@@ -35,6 +35,7 @@ import { StoryCloze } from '../../models/story-cloze';
 import { StoryClozeHistoryEntry } from '../../models/story-cloze-history';
 import { StoryClozeService } from '../../services/story-cloze.service';
 import { StoryClozeHistoryService } from '../../services/story-cloze-history.service';
+import { parseDialogLines, DialogLine } from '../../utils/german';
 import { toStoryExercise as toStoryExerciseShared } from '../../services/story-exercise-builder';
 
 interface WordToken {
@@ -112,6 +113,8 @@ export class StoriesComponent implements OnInit, OnDestroy {
   readonly selectedWordTypes = signal<PartOfSpeech[]>([]);
   readonly selectedGrammarTopics = signal<string[]>([]);
   readonly sentenceCount = signal(10);
+  /** Whether to generate a dialog (scripted conversation) instead of prose. */
+  readonly formatInput = signal<StoryFormat>('prose');
 
   // State
   readonly stories = computed(() => {
@@ -136,6 +139,8 @@ export class StoriesComponent implements OnInit, OnDestroy {
   readonly storySortOrder = signal<StorySortOrder>('newest');
   readonly selectedStoryId = signal<string | null>(null);
   readonly isGenerating = signal(false);
+  /** Whether the random-theme button is currently calling the AI. */
+  readonly themeGenerating = signal(false);
   readonly isPlaying = signal(false);
   readonly currentCharIndex = signal<number | null>(null);
   readonly errorMessage = signal('');
@@ -260,6 +265,21 @@ export class StoriesComponent implements OnInit, OnDestroy {
   readonly selectedStory = computed(() => {
     const id = this.selectedStoryId();
     return id ? this.storyService.getStoryById(id) ?? null : null;
+  });
+
+  /** True when the selected story is a dialog AND it actually parses as one. */
+  readonly isDialog = computed(() => {
+    const story = this.selectedStory();
+    if (!story || story.format !== 'dialog') return false;
+    const lines = parseDialogLines(story.german);
+    return lines.some((l) => l.speaker !== null);
+  });
+
+  /** The parsed dialogue lines for the selected dialog story (empty otherwise). */
+  readonly dialogLines = computed<DialogLine[]>(() => {
+    const story = this.selectedStory();
+    if (!story || story.format !== 'dialog') return [];
+    return parseDialogLines(story.german);
   });
 
   readonly wordTokens = computed<WordToken[]>(() => {
@@ -524,6 +544,43 @@ export class StoriesComponent implements OnInit, OnDestroy {
     this.sentenceCount.set(Number(value));
   }
 
+  /** Sets whether to generate a prose story or a dialog. */
+  setFormat(format: StoryFormat): void {
+    this.formatInput.set(format);
+  }
+
+  /** Asks the AI for a random story theme, using the most recent stories'
+   *  titles so it suggests something different. Fills the theme input. */
+  async generateRandomTheme(): Promise<void> {
+    if (this.themeGenerating()) return;
+
+    if (!this.aiService.hasApiKey()) {
+      this.errorMessage.set('No API key set. Add it in Settings.');
+      return;
+    }
+
+    this.themeGenerating.set(true);
+    this.errorMessage.set('');
+    try {
+      // stories() is newest-first; take the 10 most recent titles.
+      const recent = this.storyService.stories().slice(0, 10);
+      const avoid = recent.map((s) => s.title).filter((t) => t.trim().length > 0);
+      const current = this.themeInput().trim();
+      if (current && !avoid.includes(current)) {
+        avoid.unshift(current);
+      }
+
+      const theme = await this.aiService.generateRandomTheme(avoid.slice(0, 10));
+      this.themeInput.set(theme);
+    } catch (err) {
+      this.errorMessage.set(
+        err instanceof Error ? err.message : 'Failed to generate a theme.'
+      );
+    } finally {
+      this.themeGenerating.set(false);
+    }
+  }
+
   async generateStory(): Promise<void> {
     if (!this.themeInput().trim()) return;
 
@@ -538,9 +595,14 @@ export class StoriesComponent implements OnInit, OnDestroy {
         wordTypes: this.selectedWordTypes(),
         grammarTopics: this.selectedGrammarTopics(),
         sentenceCount: this.sentenceCount(),
+        format: this.formatInput(),
       };
 
-      const result = await this.aiService.generateStory(config);
+      const result = await this.aiService.generateStory({
+        ...config,
+        minSentencesPerUtterance: this.settingsService.dialogMinSentences(),
+        maxSentencesPerUtterance: this.settingsService.dialogMaxSentences(),
+      });
 
       const wordCount = result.german.split(/\s+/).filter(Boolean).length;
 
@@ -553,6 +615,7 @@ export class StoriesComponent implements OnInit, OnDestroy {
         domain: config.theme,
         grammarTopics: config.grammarTopics,
         wordCount,
+        format: this.formatInput(),
       });
 
       this.selectedStoryId.set(story.id);
@@ -1553,6 +1616,22 @@ export class StoriesComponent implements OnInit, OnDestroy {
     const value = parseFloat((event.target as HTMLInputElement).value);
     if (!isNaN(value)) {
       this.settingsService.setClozeDensity(value);
+    }
+  }
+
+  /** Updates the minimum sentences-per-utterance from the dialog control. */
+  setDialogMinSentences(event: Event): void {
+    const value = parseFloat((event.target as HTMLInputElement).value);
+    if (!isNaN(value)) {
+      this.settingsService.setDialogMinSentences(value);
+    }
+  }
+
+  /** Updates the maximum sentences-per-utterance from the dialog control. */
+  setDialogMaxSentences(event: Event): void {
+    const value = parseFloat((event.target as HTMLInputElement).value);
+    if (!isNaN(value)) {
+      this.settingsService.setDialogMaxSentences(value);
     }
   }
 

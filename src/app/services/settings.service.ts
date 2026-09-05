@@ -16,6 +16,8 @@ const THROUGHPUT_ROUTING_KEY = 'german-dictionary-throughput-routing';
 const TRANSLATION_API_URL_KEY = 'german-dictionary-translation-api-url';
 const STORY_ONLY_MC_KEY = 'german-dictionary-story-only-mc-exercises';
 const CLOZE_DENSITY_KEY = 'german-dictionary-cloze-density';
+const DIALOG_MIN_SENTENCES_KEY = 'german-dictionary-dialog-min-sentences';
+const DIALOG_MAX_SENTENCES_KEY = 'german-dictionary-dialog-max-sentences';
 
 export type TtsEngine = 'browser' | 'openai';
 export type LookupModifier = 'alt' | 'ctrl' | 'meta' | 'shift';
@@ -151,6 +153,16 @@ export class SettingsService {
   /** Average number of missing words per sentence for story cloze exercises (0.25-2). */
   readonly clozeDensity = signal<number>(this.loadClozeDensity());
 
+  /** Minimum number of German sentences per utterance when generating dialog stories. */
+  readonly dialogMinSentences = signal<number>(
+    this.loadDialogSentenceCount(DIALOG_MIN_SENTENCES_KEY, 1)
+  );
+
+  /** Maximum number of German sentences per utterance when generating dialog stories. */
+  readonly dialogMaxSentences = signal<number>(
+    this.loadDialogSentenceCount(DIALOG_MAX_SENTENCES_KEY, 2)
+  );
+
   /** Custom style prompt text (only used when imageStyle === 'custom') */
   readonly imageStyleCustom = signal<string>(
     localStorage.getItem(IMAGE_STYLE_KEY + '-custom') ?? ''
@@ -191,6 +203,20 @@ export class SettingsService {
     const clamped = Math.min(2, Math.max(0.25, density));
     this.clozeDensity.set(clamped);
     this.safeWrite(CLOZE_DENSITY_KEY, String(clamped));
+  }
+
+  /** Sets the minimum number of sentences per utterance for dialog stories. */
+  setDialogMinSentences(value: number): void {
+    const clamped = Math.min(5, Math.max(1, Math.round(value)));
+    this.dialogMinSentences.set(clamped);
+    this.safeWrite(DIALOG_MIN_SENTENCES_KEY, String(clamped));
+  }
+
+  /** Sets the maximum number of sentences per utterance for dialog stories. */
+  setDialogMaxSentences(value: number): void {
+    const clamped = Math.min(5, Math.max(1, Math.round(value)));
+    this.dialogMaxSentences.set(clamped);
+    this.safeWrite(DIALOG_MAX_SENTENCES_KEY, String(clamped));
   }
 
   setTextModel(model: string): void {
@@ -314,5 +340,12 @@ export class SettingsService {
     const raw = Number(localStorage.getItem(CLOZE_DENSITY_KEY));
     if (!raw || isNaN(raw)) return 1;
     return Math.min(2, Math.max(0.25, raw));
+  }
+
+  /** Reads a persisted dialog sentence-count setting, clamped to 1-5. */
+  private loadDialogSentenceCount(key: string, fallback: number): number {
+    const raw = Number(localStorage.getItem(key));
+    if (!raw || isNaN(raw)) return fallback;
+    return Math.min(5, Math.max(1, Math.round(raw)));
   }
 }

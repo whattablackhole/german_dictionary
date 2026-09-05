@@ -7,6 +7,7 @@ import {
   cleanReferenceText,
   isVerbFormLike,
   normalizeGermanText,
+  parseDialogLines,
   verbWordLeaksOutsideBlanks,
 } from './german';
 
@@ -325,5 +326,59 @@ describe('cleanReferenceText', () => {
   it('handles the empty string', () => {
     expect(cleanReferenceText('')).toBe('');
     expect(cleanReferenceText('   ')).toBe('');
+  });
+});
+
+describe('parseDialogLines', () => {
+  it('parses speaker-prefixed lines and narration lines', () => {
+    const result = parseDialogLines(
+      'Anna: „Hallo Max!"\nSie lächelt.\nMax: „Hallo Anna!“'
+    );
+    expect(result.length).toBe(3);
+    expect(result[0]).toMatchObject({ speaker: 'Anna', text: '„Hallo Max!"' });
+    expect(result[1]).toMatchObject({ speaker: null, text: 'Sie lächelt.' });
+    expect(result[2]).toMatchObject({ speaker: 'Max', text: '„Hallo Anna!“' });
+  });
+
+  it('computes correct character offsets for dialogue and narration', () => {
+    const text = 'Anna: Hi.\nMax: Tschüss.';
+    const result = parseDialogLines(text);
+    expect(result).toHaveLength(2);
+
+    // Line 0: "Anna: Hi." occupies 0..9, content "Hi." starts at 6
+    expect(result[0].start).toBe(0);
+    expect(result[0].end).toBe(9);
+    expect(result[0].textStart).toBe(6);
+    expect(text.slice(result[0].textStart, result[0].end)).toBe('Hi.');
+
+    // Line 1: "Max: Tschüss." occupies 10..23, content "Tschüss." starts at 15
+    expect(result[1].start).toBe(10);
+    expect(result[1].end).toBe(23);
+    expect(result[1].textStart).toBe(15);
+    expect(text.slice(result[1].textStart, result[1].end)).toBe('Tschüss.');
+  });
+
+  it('recognizes the full-width colon as a speaker separator', () => {
+    const result = parseDialogLines('Anna：Hallo');
+    expect(result).toHaveLength(1);
+    expect(result[0].speaker).toBe('Anna');
+    expect(result[0].text).toBe('Hallo');
+  });
+
+  it('treats a line without a speaker prefix as narration', () => {
+    const result = parseDialogLines('Es war ein schöner Tag.');
+    expect(result).toHaveLength(1);
+    expect(result[0].speaker).toBeNull();
+    expect(result[0].text).toBe('Es war ein schöner Tag.');
+  });
+
+  it('skips empty lines', () => {
+    const result = parseDialogLines('Anna: Hallo\n\nMax: Tschüss');
+    expect(result).toHaveLength(2);
+    expect(result[1].speaker).toBe('Max');
+  });
+
+  it('handles empty input', () => {
+    expect(parseDialogLines('')).toEqual([]);
   });
 });
