@@ -2850,6 +2850,9 @@ Rules:
    * @param tenses  allowed tenses; empty = all six.
    * @param referenceForms known inflections of the verb (if available) used to
    *   anchor the model to the correct verb and reject homograph abuse.
+   * @param avoidSlots person × tense combinations already practiced in recent
+   *   rounds; the model should avoid repeating them. Only supplied in free
+   *   (unfiltered) drills, never when the student filters persons or tenses.
    */
   async generateVerbSentences(
     verb: string,
@@ -2861,7 +2864,8 @@ Rules:
       presentThirdPerson?: string;
       simplePast?: string;
       pastParticiple?: string;
-    }
+    },
+    avoidSlots?: Array<{ person: string; tense: string }>
   ): Promise<GeneratedVerbSentence[]> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -2876,6 +2880,16 @@ Rules:
       tenses.length > 0
         ? `Use ONLY these tenses: ${tenses.join(', ')}.`
         : 'Use all tenses: präsens, präteritum, perfekt, plusquamperfekt, futur i, futur ii.';
+
+    // When no person or tense filter is active the student wants a broad mix,
+    // so repeated "Generate" clicks must not keep re-practicing the same
+    // person × tense combos — tell the model which ones to skip this round.
+    const avoidInstruction =
+      avoidSlots && avoidSlots.length > 0
+        ? `- The student already practiced these person × tense combinations in recent rounds: ${avoidSlots
+            .map((s) => `${s.person}|${s.tense}`)
+            .join(', ')}. Do NOT reuse any of them for the sentences below — pick fresh combinations from the remaining ones instead. Only repeat an avoided combination if every other combination is already exhausted.\n`
+        : '';
 
     // Anchor the model to the actual verb so it cannot accidentally train a
     // different one or use a homograph (e.g. the article "einen").
@@ -2903,6 +2917,7 @@ Rules:
 
 ${personInstruction}
 ${tenseInstruction}
+${avoidInstruction}
 - Vary the persons and tenses across the sentences and distribute them evenly over the allowed options.
 - CRITICAL: the sentence MUST use "${verb}" as its MAIN verb, conjugated in the requested person and tense. The blanked words MUST be the conjugated form(s) of "${verb}" itself. It is FORBIDDEN to blank or use any other verb as the sentence's verb.
 - CRITICAL: the word "${verb}" may also be a different word class in German (for example "einen" is the accusative article "a"). Use "${verb}" ONLY inside the blanks, as a real verb. It must NOT appear anywhere else in the sentence in any other function (article, pronoun, preposition, noun, adjective, etc.).

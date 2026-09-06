@@ -36,6 +36,12 @@ import {
   VerbTrainerTense,
 } from '../../models/verb-trainer';
 
+/**
+ * Most recent unique person × tense combos sent to the AI as "avoid" context
+ * for unfiltered drills (6 persons × 6 tenses = 36 possible combos).
+ */
+const RECENT_SLOT_CONTEXT_MAX = 12;
+
 /** One generated sentence drill as rendered by this page. */
 interface DrillSentence {
   fullSentence: string;
@@ -210,6 +216,39 @@ export class VerbsComponent {
     return verb ? this.verbTrainer.getHistoryByVerb(verb).slice(0, 8) : [];
   });
 
+  /**
+   * Person × tense combos the student already practiced for the current verb
+   * (newest first, deduped, capped). Only sent to the AI when NEITHER the
+   * person filter NOR the tense filter is active: with a filter the student
+   * explicitly chose what to practice, so the AI must stick to it instead of
+   * skipping combinations. With no filters these combos bias the next batch
+   * away from recently practiced slots — a broad mix is the whole point of
+   * unfiltered drills.
+   */
+  private recentSlotContext(): Array<{
+    person: VerbTrainerPerson;
+    tense: VerbTrainerTense;
+  }> {
+    if (this.selectedPersons().length > 0 || this.selectedTenses().length > 0) {
+      return [];
+    }
+    const verb = this.infinitive();
+    if (!verb) return [];
+    const seen = new Set<string>();
+    const slots: Array<{
+      person: VerbTrainerPerson;
+      tense: VerbTrainerTense;
+    }> = [];
+    for (const attempt of this.verbTrainer.getHistoryByVerb(verb)) {
+      if (slots.length >= RECENT_SLOT_CONTEXT_MAX) break;
+      const key = `${attempt.tense}|${attempt.person}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      slots.push({ person: attempt.person, tense: attempt.tense });
+    }
+    return slots;
+  }
+
   async openTrainer(entry: GermanVerbEntry): Promise<void> {
     this.selectedVerb.set(entry);
     this.resetDrill();
@@ -309,7 +348,8 @@ export class VerbsComponent {
           presentThirdPerson: word.presentThirdPerson,
           simplePast: word.simplePast,
           pastParticiple: word.pastParticiple,
-        }
+        },
+        this.recentSlotContext()
       );
       const drills = generated
         .map((g) => this.toDrillSentence(g))
