@@ -6,6 +6,7 @@ const SHOW_ARTICLE_KEY = 'german-dictionary-show-article-practice';
 const TTS_ENGINE_KEY = 'german-dictionary-tts-engine';
 const TTS_MODEL_KEY = 'german-dictionary-tts-model';
 const TTS_VOICE_KEY = 'german-dictionary-tts-voice';
+const TTS_VOICE_SECOND_KEY = 'german-dictionary-tts-voice-second';
 const LOOKUP_MODIFIER_KEY = 'german-dictionary-lookup-modifier';
 const IMAGE_STYLE_KEY = 'german-dictionary-image-style';
 const IMAGE_MODEL_KEY = 'german-dictionary-image-model';
@@ -61,6 +62,9 @@ export interface TtsModelOption {
 export interface TtsVoiceOption {
   id: string;
   label: string;
+  /** Where known, the voice's gender — used to pair two speakers of the same
+   *  gender automatically (two men / two women dialogues). */
+  gender?: 'male' | 'female';
 }
 
 export const TTS_MODELS: TtsModelOption[] = [
@@ -114,7 +118,10 @@ export const TTS_MODELS: TtsModelOption[] = [
     label: 'Fish Audio S2.1 Pro (Free)',
     description: 'Free TTS for testing and prototyping',
     voices: [
-      { id: '88b18e0d81474a0ca08e2ea6f9df5ff4', label: 'Default voice' },
+      { id: '88b18e0d81474a0ca08e2ea6f9df5ff4', label: 'Woman 1', gender: 'female' },
+      { id: 'e6a25e465fb74f7187c5666e63c7de25', label: 'Man 1', gender: 'male' },
+      { id: '90042f762dbf49baa2e7776d011eee6b', label: 'Man 2', gender: 'male' },
+      { id: '37588e3ad8e44f978074b66469eeb4b2', label: 'Woman 2', gender: 'female' },
     ],
   },
 ];
@@ -140,6 +147,13 @@ export class SettingsService {
   readonly ttsVoice = signal<string>(
     localStorage.getItem(TTS_VOICE_KEY) ?? 'de-DE-Klaus:MAI-Voice-2'
   );
+
+  /**
+   * Second voice used for multi-speaker (dialogue) TTS. Only consumed by
+   * providers that can receive multiple voices per request — currently Fish
+   * Audio S2 dialog stories (both `reference_id` values are sent together).
+   */
+  readonly ttsSecondVoice = signal<string>(this.loadTtsSecondVoice());
 
   readonly lookupModifierKey = signal<LookupModifier>(
     (localStorage.getItem(LOOKUP_MODIFIER_KEY) as LookupModifier) ?? 'alt'
@@ -254,12 +268,18 @@ export class SettingsService {
     const found = TTS_MODELS.find((m) => m.id === model);
     if (found && found.voices.length > 0) {
       this.setTtsVoice(found.voices[0].id);
+      this.setTtsSecondVoice(found.voices[1]?.id ?? found.voices[0].id);
     }
   }
 
   setTtsVoice(voice: string): void {
     this.ttsVoice.set(voice);
     this.safeWrite(TTS_VOICE_KEY, voice);
+  }
+
+  setTtsSecondVoice(voice: string): void {
+    this.ttsSecondVoice.set(voice);
+    this.safeWrite(TTS_VOICE_SECOND_KEY, voice);
   }
 
   setLookupModifierKey(modifier: LookupModifier): void {
@@ -340,6 +360,16 @@ export class SettingsService {
     const raw = Number(localStorage.getItem(CLOZE_DENSITY_KEY));
     if (!raw || isNaN(raw)) return 1;
     return Math.min(2, Math.max(0.25, raw));
+  }
+
+  /** Reads the persisted dialogue second voice, or the current model's second
+   *  voice (falling back to its primary voice) when nothing is stored yet. */
+  private loadTtsSecondVoice(): string {
+    const stored = localStorage.getItem(TTS_VOICE_SECOND_KEY);
+    if (stored) return stored;
+    const model = localStorage.getItem(TTS_MODEL_KEY) ?? 'microsoft/mai-voice-2-flash';
+    const voices = TTS_MODELS.find((m) => m.id === model)?.voices ?? [];
+    return voices[1]?.id ?? voices[0]?.id ?? '';
   }
 
   /** Reads a persisted dialog sentence-count setting, clamped to 1-5. */

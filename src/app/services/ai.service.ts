@@ -8,7 +8,7 @@ import {
 } from '../models/word';
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
-import { StoryFormat } from '../models/story';
+import { StoryFormat, StorySpeaker } from '../models/story';
 import { SettingsService } from './settings.service';
 import {
   buildBlankSegments,
@@ -291,6 +291,32 @@ function normalizeVerbTense(raw: unknown): string | null {
     'future perfect': 'futur ii',
   };
   return aliases[value] ?? null;
+}
+
+/** Normalizes an AI-provided speaker gender; tolerant of common variants. */
+function normalizeSpeakerGender(raw: unknown): 'male' | 'female' | null {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (
+    value === 'male' ||
+    value === 'man' ||
+    value === 'm' ||
+    value === 'masculine' ||
+    value === 'he' ||
+    value === 'männlich'
+  ) {
+    return 'male';
+  }
+  if (
+    value === 'female' ||
+    value === 'woman' ||
+    value === 'f' ||
+    value === 'feminine' ||
+    value === 'she' ||
+    value === 'weiblich'
+  ) {
+    return 'female';
+  }
+  return null;
 }
 
 export interface TextModelOption {
@@ -1894,7 +1920,16 @@ Rules:
     minSentencesPerUtterance?: number;
     /** Maximum number of German sentences that make up a single dialog utterance. */
     maxSentencesPerUtterance?: number;
-  }): Promise<{ title: string; german: string; translationEn: string; translationRu: string }> {
+  }): Promise<{
+    title: string;
+    german: string;
+    /** No longer generated with the story — see `translateToNative`. Always ''. */
+    translationEn: string;
+    /** No longer generated with the story — see `translateToNative`. Always ''. */
+    translationRu: string;
+    /** Dialog characters with genders (empty for prose). Used to pick TTS voices. */
+    speakers: StorySpeaker[];
+  }> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('No API key set. Add your OpenRouter API key first.');
@@ -1936,8 +1971,8 @@ Anna: „Auch gut. Wollen wir morgen zusammen Kaffee trinken? Das wäre toll."
 Respond with JSON only (no markdown) as an object with these fields:
 - "title": a short, engaging title for the story or dialog
 - "german": the complete German text (${config.sentenceCount} sentences${isDialog ? ' / dialog lines' : ''})
-- "translationEn": the complete English translation
-- "translationRu": the complete Russian translation
+${isDialog ? `- "speakers": an array with one object per character, e.g. {"name": "Anna", "gender": "female"}, {"name": "Max", "gender": "male"}. "name" must match the exact speaker name used as the script line prefix; "gender" must be exactly "male" or "female". List every character that speaks, even when they have the same gender.\n` : ''}
+Do NOT include any translations ("translationEn", "translationRu" or similar) — the German text is the only text this request produces.
 
 Rules:
 - The content must be about the theme: "${config.theme}".
@@ -1976,22 +2011,42 @@ Generate exactly ${config.sentenceCount} sentences${isDialog ? ' / dialog lines'
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     const jsonText = jsonMatch ? jsonMatch[1] : text;
 
-    let parsed: { title?: string; german?: string; translationEn?: string; translationRu?: string };
+    let parsed: {
+      title?: string;
+      german?: string;
+      speakers?: Array<{ name?: unknown; gender?: unknown }>;
+    };
     try {
       parsed = JSON.parse(jsonText);
     } catch {
       throw new Error('AI returned an invalid response.');
     }
 
-    if (!parsed.german || !parsed.translationEn || !parsed.translationRu) {
+    if (!parsed.german) {
       throw new Error('AI could not generate a complete story. Try again.');
+    }
+
+    // Collect validated dialog characters (name + gender). Prose stories have
+    // no speakers; malformed/duplicate entries are skipped.
+    const speakers: StorySpeaker[] = [];
+    if (isDialog && Array.isArray(parsed.speakers)) {
+      const seen = new Set<string>();
+      for (const raw of parsed.speakers) {
+        const name = typeof raw?.name === 'string' ? raw.name.trim() : '';
+        const gender = normalizeSpeakerGender(raw?.gender);
+        if (!name || !gender || seen.has(name.toLowerCase())) continue;
+        seen.add(name.toLowerCase());
+        speakers.push({ name, gender });
+        if (speakers.length >= 4) break;
+      }
     }
 
     return {
       title: parsed.title ?? 'Untitled Story',
       german: parsed.german,
-      translationEn: parsed.translationEn,
-      translationRu: parsed.translationRu,
+      translationEn: '',
+      translationRu: '',
+      speakers,
     };
   }
 
@@ -3041,10 +3096,19 @@ Rules:
    * All models (Microsoft MAI, Google Gemini, Fish Audio) use the dedicated
    * /audio/speech endpoint and return raw MP3 bytes (converted to a base64
    * data URL).
+   *
+   * @param options.voiceSecond when present with a Fish Audio model, the text
+   *   is treated as multi-speaker dialogue: both voice IDs are sent together
+   *   (`reference_id` array) and `<|speaker:N|>` tokens in the text pick the
+   *   voice per line.
    */
   async generateSpeech(
     text: string,
-    options: { model: string; voice: string }
+    options: {
+      model: string;
+      voice: string;
+      voiceSecond?: string;
+    }
   ): Promise<string> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -3052,7 +3116,13 @@ Rules:
     }
 
     if (options.model.startsWith('microsoft/') || options.model.startsWith('fish-audio/')) {
-      return this.generateSpeechAudioEndpoint(text, options.model, options.voice, 'mp3');
+      return this.generateSpeechAudioEndpoint(
+        text,
+        options.model,
+        options.voice,
+        'mp3',
+        options.voiceSecond
+      );
     }
     if (options.model.startsWith('google/')) {
       return this.generateSpeechAudioEndpoint(text, options.model, options.voice, 'pcm');
@@ -3065,9 +3135,48 @@ Rules:
     text: string,
     model: string,
     voice: string,
-    responseFormat: 'mp3' | 'pcm' = 'mp3'
+    responseFormat: 'mp3' | 'pcm' = 'mp3',
+    voiceSecond?: string
   ): Promise<string> {
     const apiKey = this.getApiKey();
+
+    const body: Record<string, unknown> = {
+      model,
+      input: text,
+      voice,
+      response_format: responseFormat,
+    };
+
+    // Fish Audio S2/S2.1 natively supports multi-speaker dialogue. Its
+    // `reference_id` accepts an ARRAY of voice model IDs, one per speaker,
+    // matched to the <|speaker:N|> captions in the input text (format
+    // confirmed by Fish Audio's OpenAPI: `<|speaker:0|>Hello!<|speaker:1|>Hi
+    // there!` with `reference_id: ["speaker-a-id", "speaker-b-id"]`).
+    //
+    // How it reaches Fish through OpenRouter:
+    //  - TOP-LEVEL `reference_id` is NOT in OpenRouter's SpeechRequest schema,
+    //    so OpenRouter strips it — Fish then receives no voices and uses the
+    //    same default for every speaker.
+    //  - OpenRouter DOES document and forward `provider.options.<slug>` and
+    //    Fish Audio's compat layer explicitly reads `provider.options
+    //    ['fish-audio']` for native TTS fields. That is the channel that works.
+    //
+    // The top-level `voice` field is therefore OMITTED for these requests:
+    // Fish's compat layer maps `voice` onto the same `reference_id` slot, and
+    // a single string would overwrite the array. (We still send top-level
+    // `reference_id` too — identical values — as a harmless extra channel in
+    // case the proxy passes unknown fields through.)
+    if (voiceSecond && model.startsWith('fish-audio/')) {
+      delete body['voice'];
+      body['reference_id'] = [voice, voiceSecond];
+      body['provider'] = {
+        options: {
+          'fish-audio': {
+            reference_id: [voice, voiceSecond],
+          },
+        },
+      };
+    }
 
     const response = await fetch('https://openrouter.ai/api/v1/audio/speech', {
       method: 'POST',
@@ -3075,12 +3184,7 @@ Rules:
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        input: text,
-        voice,
-        response_format: responseFormat,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

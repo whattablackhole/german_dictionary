@@ -834,17 +834,60 @@
           <mat-expansion-panel>
             <mat-expansion-panel-header>
               <mat-panel-title>English Translation</mat-panel-title>
+              @if (!story.translationEn) {
+                <button
+                  mat-button
+                  class="translate-btn"
+                  [disabled]="translationLoading() !== null"
+                  (click)="generateTranslation('en'); $event.stopPropagation()"
+                >
+                  @if (translationLoading() === 'en') {
+                    <mat-spinner diameter="16" />
+                    <span>Translating...</span>
+                  } @else {
+                    <mat-icon>translate</mat-icon>
+                    <span>Generate</span>
+                  }
+                </button>
+              }
             </mat-expansion-panel-header>
-            <p>{{ story.translationEn }}</p>
+            @if (story.translationEn) {
+              <p>{{ story.translationEn }}</p>
+            }
           </mat-expansion-panel>
 
           <mat-expansion-panel>
             <mat-expansion-panel-header>
               <mat-panel-title>Russian Translation</mat-panel-title>
+              @if (!story.translationRu) {
+                <button
+                  mat-button
+                  class="translate-btn"
+                  [disabled]="translationLoading() !== null"
+                  (click)="generateTranslation('ru'); $event.stopPropagation()"
+                >
+                  @if (translationLoading() === 'ru') {
+                    <mat-spinner diameter="16" />
+                    <span>Translating...</span>
+                  } @else {
+                    <mat-icon>translate</mat-icon>
+                    <span>Generate</span>
+                  }
+                </button>
+              }
             </mat-expansion-panel-header>
-            <p>{{ story.translationRu }}</p>
+            @if (story.translationRu) {
+              <p>{{ story.translationRu }}</p>
+            }
           </mat-expansion-panel>
         </mat-accordion>
+
+        @if (translationError()) {
+          <div class="exercise-error translation-error">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ translationError() }}</span>
+          </div>
+        }
 
         <!-- Exercise History (below translations) -->
         <section class="exercise-history-section">

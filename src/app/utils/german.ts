@@ -373,6 +373,48 @@ export interface DialogLine {
 }
 
 /**
+ * Fish Audio multi-speaker dialogue token for a 0-based speaker index.
+ * Fish Audio S2/S2.1 models switch to the character whose voice is at this
+ * position in the request's `reference_id` array (one voice id per speaker).
+ */
+export function fishSpeakerToken(index: number): string {
+  return `<|speaker:${index}|>`;
+}
+
+/**
+ * Builds the Fish Audio TTS input for a dialog story by captioning every
+ * utterance with its `<|speaker:N|>` token. Speakers map to voice indices
+ * 0..voiceCount-1 in order of first appearance; further speakers reuse the
+ * last available voice. Narration lines (no speaker) are left unmarked so
+ * they are read by the request's default voice.
+ */
+export function buildDialogueTtsText(
+  lines: DialogLine[],
+  voiceCount = 2
+): string {
+  const capped = Math.max(1, voiceCount);
+  const speakerIndices = new Map<string, number>();
+  let nextIndex = 0;
+  const parts: string[] = [];
+  for (const line of lines) {
+    const text = line.text.trim();
+    if (!text) continue;
+    if (line.speaker) {
+      let index = speakerIndices.get(line.speaker);
+      if (index === undefined) {
+        index = Math.min(nextIndex, capped - 1);
+        speakerIndices.set(line.speaker, index);
+        nextIndex += 1;
+      }
+      parts.push(`${fishSpeakerToken(index)}${text}`);
+    } else {
+      parts.push(text);
+    }
+  }
+  return parts.join(' ');
+}
+
+/**
  * Splits a story script into dialogue lines. Each physical line is examined:
  * a line starting with a short speaker name followed by a colon is treated as
  * a dialogue utterance (speaker + text); everything else becomes narration

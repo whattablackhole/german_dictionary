@@ -151,6 +151,17 @@ export class SettingsComponent implements OnInit {
     return model?.voices ?? [];
   });
 
+  /**
+   * Voices selectable as the second (dialogue) voice: the current model's
+   * voices except the one already picked as the primary voice, so the two
+   * dialogue characters always get distinct timbres.
+   */
+  readonly dialogueVoiceOptions = computed(() =>
+    this.currentModelVoices().filter(
+      (v) => v.id !== this.settingsService.ttsVoice()
+    )
+  );
+
   backupStatus: string | null = null;
   backupError: string | null = null;
 
@@ -299,7 +310,42 @@ export class SettingsComponent implements OnInit {
   }
 
   setTtsVoice(voice: string): void {
+    const previous = this.settingsService.ttsVoice();
+    const previousSecond = this.settingsService.ttsSecondVoice();
     this.settingsService.setTtsVoice(voice);
+
+    // Dialogues often feature two characters of the same gender. When the user
+    // picks a gendered Fish Audio voice, default speaker 2 to the other voice
+    // of that gender (Man 1 ↔ Man 2, Woman 1 ↔ Woman 2) unless a same-gender
+    // second voice is already chosen.
+    const voiceGender = this.currentModelVoices().find(
+      (v) => v.id === voice
+    )?.gender;
+    const sameGenderSecond = this.currentModelVoices().find(
+      (v) => v.id !== voice && v.gender === voiceGender
+    );
+    if (
+      voiceGender &&
+      sameGenderSecond &&
+      this.currentModelVoices().find((v) => v.id === previousSecond)?.gender !==
+        voiceGender
+    ) {
+      this.settingsService.setTtsSecondVoice(sameGenderSecond.id);
+      return;
+    }
+
+    // Keep the two dialogue voices distinct: if the user picks the current
+    // second voice as primary, move the old primary into the second slot.
+    if (
+      voice === previousSecond &&
+      this.dialogueVoiceOptions().some((v) => v.id === previous)
+    ) {
+      this.settingsService.setTtsSecondVoice(previous);
+    }
+  }
+
+  setTtsSecondVoice(voice: string): void {
+    this.settingsService.setTtsSecondVoice(voice);
   }
 
   setLookupModifier(modifier: LookupModifier): void {

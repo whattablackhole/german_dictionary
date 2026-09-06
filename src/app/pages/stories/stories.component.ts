@@ -13,7 +13,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { Subscription } from 'rxjs';
-import { Story, StoryConfig, StoryFormat } from '../../models/story';
+import { Story, StoryConfig, StoryFormat, SpeakerGender, StorySpeaker } from '../../models/story';
 import { StoryExercise } from '../../models/story-exercise';
 import { StoryService } from '../../services/story.service';
 import { AiService, AiSuggestion, GeneratedStoryExercise } from '../../services/ai.service';
@@ -35,7 +35,7 @@ import { StoryCloze } from '../../models/story-cloze';
 import { StoryClozeHistoryEntry } from '../../models/story-cloze-history';
 import { StoryClozeService } from '../../services/story-cloze.service';
 import { StoryClozeHistoryService } from '../../services/story-cloze-history.service';
-import { parseDialogLines, DialogLine } from '../../utils/german';
+import { parseDialogLines, DialogLine, buildDialogueTtsText } from '../../utils/german';
 import { toStoryExercise as toStoryExerciseShared } from '../../services/story-exercise-builder';
 
 interface WordToken {
@@ -151,6 +151,10 @@ export class StoriesComponent implements OnInit, OnDestroy {
   readonly playbackSpeed = signal(1);
   readonly isSeeking = signal(false);
   private isIntentionallyStopping = false;
+
+  // On-demand story translations (generated separately from the German text)
+  readonly translationLoading = signal<'en' | 'ru' | null>(null);
+  readonly translationError = signal('');
 
 
   // Word lookup
@@ -609,13 +613,14 @@ export class StoriesComponent implements OnInit, OnDestroy {
       const story = await this.storyService.addStory({
         title: result.title,
         german: result.german,
-        translationEn: result.translationEn,
-        translationRu: result.translationRu,
+        translationEn: '',
+        translationRu: '',
         level: config.level,
         domain: config.theme,
         grammarTopics: config.grammarTopics,
         wordCount,
         format: this.formatInput(),
+        speakers: result.speakers,
       });
 
       this.selectedStoryId.set(story.id);
@@ -626,6 +631,46 @@ export class StoriesComponent implements OnInit, OnDestroy {
       );
     } finally {
       this.isGenerating.set(false);
+    }
+  }
+
+  /**
+   * Generates a story translation on demand (English or Russian), then
+   * persists it on the selected story. The German text is generated without
+   * translations; the user asks for one explicitly via the UI buttons.
+   */
+  async generateTranslation(lang: 'en' | 'ru'): Promise<void> {
+    const story = this.selectedStory();
+    if (!story || this.translationLoading() !== null) return;
+
+    if (!this.aiService.hasApiKey()) {
+      this.translationError.set(
+        'No API key set. Add your OpenRouter API key in Settings.'
+      );
+      return;
+    }
+
+    this.translationLoading.set(lang);
+    this.translationError.set('');
+    try {
+      const translation = await this.aiService.translateToNative(
+        story.german,
+        lang
+      );
+      const updated = {
+        ...story,
+        translationEn:
+          lang === 'en' ? translation : story.translationEn ?? '',
+        translationRu:
+          lang === 'ru' ? translation : story.translationRu ?? '',
+      };
+      await this.storyService.updateStory(updated);
+    } catch (err) {
+      this.translationError.set(
+        err instanceof Error ? err.message : `Failed to generate the ${lang} translation.`
+      );
+    } finally {
+      this.translationLoading.set(null);
     }
   }
 
@@ -686,18 +731,151 @@ export class StoriesComponent implements OnInit, OnDestroy {
     this.speechService.speak(story.german);
   }
 
+  /**
+   * Chooses the Fish Audio dialogue voices for the selected dialog story.
+   * When the AI reported speaker genders, the two voice IDs are matched to the
+   * characters: same-gender pairs get the second same-gender voice (Man 1 +
+   * Man 2 / Woman 1 + Woman 2), mixed pairs get one male + one female voice.
+   * The user's "Voice 1/2 (speaker)" settings act as preferred defaults and as
+   * the fallback when a story carries no gender information.
+   *
+   * Dialogues with a single character only need ONE voice: a single female
+   * defaults to the first female voice ID, a single male to the first male.
+   *
+   * The returned IDs align with the <|speaker:N|> indexing used by
+   * buildDialogueTtsText (order of first appearance, capped at two).
+   */
+  private pickDialogueVoiceIds(): string[] {
+    const story = this.selectedStory();
+    const model = TTS_MODELS.find((m) => m.id === this.settingsService.ttsModel());
+    const gendered =
+      model?.voices.filter(
+        (v) => v.gender === 'male' || v.gender === 'female'
+      ) ?? [];
+    if (gendered.length === 0) return [];
+
+    const male = gendered.filter((v) => v.gender === 'male').map((v) => v.id);
+    const female = gendered.filter((v) => v.gender === 'female').map((v) => v.id);
+    const genderOfVoice = new Map<string, SpeakerGender>();
+    for (const v of gendered) genderOfVoice.set(v.id, v.gender as SpeakerGender);
+
+    const settings1 = this.settingsService.ttsVoice();
+    const settings2 = this.settingsService.ttsSecondVoice();
+    const fallback = [settings1, settings2].filter((id) => !!id && id !== settings1);
+
+    // Distinct speakers in order of first appearance (same indexing as
+    // buildDialogueTtsText), capped at the two voices we can send to Fish.
+    const speakerOrder: string[] = [];
+    {
+      const seen = new Set<string>();
+      for (const line of this.dialogLines()) {
+        if (!line.speaker || seen.has(line.speaker)) continue;
+        seen.add(line.speaker);
+        speakerOrder.push(line.speaker);
+        if (speakerOrder.length >= 2) break;
+      }
+    }
+    if (speakerOrder.length === 0) return fallback;
+
+    const known = new Map<string, SpeakerGender>();
+    for (const sp of story?.speakers ?? []) known.set(sp.name.toLowerCase(), sp.gender);
+    const genderOf = (name: string): SpeakerGender | undefined =>
+      known.get(name.toLowerCase());
+
+    // Picks an unused voice of the wanted gender, preferring the user's
+    // settings voices when they already have that gender.
+    const pick = (gender: SpeakerGender | undefined, used: Set<string>): string => {
+      const pool = gender === 'male' ? male : gender === 'female' ? female : [];
+      if (gender !== undefined) {
+        const preferred = [settings1, settings2].find(
+          (id) => genderOfVoice.get(id) === gender && !used.has(id)
+        );
+        if (preferred) return preferred;
+        const fromPool = pool.find((id) => !used.has(id));
+        if (fromPool) return fromPool;
+      }
+      return ([...fallback, ...male, ...female, settings1]).find(
+        (id) => !used.has(id)
+      ) ?? settings1;
+    };
+
+    const firstGender = speakerOrder.length > 0 ? genderOf(speakerOrder[0]) : undefined;
+    const secondGender =
+      speakerOrder.length > 1 ? genderOf(speakerOrder[1]) : undefined;
+
+    // A dialogue with a SINGLE character only needs a single voice. When that
+    // character is female, default to the FIRST female voice ID (Woman 1); a
+    // single male defaults to the first male voice. Unknown gender falls back
+    // to the user's "Voice 1" setting. Single-voice dialogues are sent as a
+    // plain single-voice TTS request (no <|speaker:N|> captions / array).
+    if (speakerOrder.length === 1) {
+      if (firstGender === 'female' && female.length > 0) return [female[0]];
+      if (firstGender === 'male' && male.length > 0) return [male[0]];
+      return [settings1];
+    }
+
+    const used = new Set<string>();
+    const v0 = pick(
+      firstGender ?? (secondGender === 'male' ? 'female' : 'male'),
+      used
+    );
+    used.add(v0);
+    const v1 = pick(
+      secondGender ?? (firstGender === 'male' ? 'female' : 'male'),
+      used
+    );
+    return [v0, v1];
+  }
+
   private async playWithOpenAI(story: Story): Promise<void> {
     this.isPlaying.set(true);
 
-    const ttsOptions = {
+    const baseTtsOptions = {
       model: this.settingsService.ttsModel(),
       voice: this.settingsService.ttsVoice(),
     };
 
+    // Fish Audio S2/S2.1 can voice a dialog story with two characters: mark
+    // the text with <|speaker:N|> captions and send BOTH voice IDs in the same
+    // request (reference_id array). Prose/narration keeps the plain text.
+    const isFishDialogue =
+      baseTtsOptions.model.startsWith('fish-audio/') && this.isDialog();
+    const dialogueVoiceIds = isFishDialogue
+      ? this.pickDialogueVoiceIds()
+      : [];
+    const ttsOptions =
+      isFishDialogue && dialogueVoiceIds.length >= 2
+        ? {
+            model: baseTtsOptions.model,
+            voice: dialogueVoiceIds[0],
+            voiceSecond: dialogueVoiceIds[1],
+          }
+        : isFishDialogue && dialogueVoiceIds.length === 1
+          ? {
+              model: baseTtsOptions.model,
+              voice: dialogueVoiceIds[0],
+            }
+          : baseTtsOptions;
+
+    // Single-speaker dialogues become a plain single-voice request — send the
+    // utterance text WITHOUT <|speaker:N|> captions. Multi-speaker dialogues
+    // keep the captioned text so the reference_id array picks per speaker.
+    const ttsText = isFishDialogue
+      ? dialogueVoiceIds.length === 1
+          ? this.dialogLines()
+              .map((l) => l.text.trim())
+              .filter(Boolean)
+              .join(' ')
+          : buildDialogueTtsText(
+              this.dialogLines(),
+              Math.max(1, dialogueVoiceIds.length)
+            )
+      : story.german;
+
     try {
       // Try the IndexedDB cache first, then the legacy in-memory audioUrl,
       // then generate fresh audio via the API.
-      let audioUrl = await this.ttsCacheService.getAudio(story.german, ttsOptions);
+      let audioUrl = await this.ttsCacheService.getAudio(ttsText, ttsOptions);
 
       if (!audioUrl && story.audioUrl) {
         // Legacy path: audioUrl was previously embedded in the story object
@@ -710,12 +888,12 @@ export class StoriesComponent implements OnInit, OnDestroy {
         const defaultVoice = model?.voices[0]?.id;
 
         try {
-          audioUrl = await this.aiService.generateSpeech(story.german, ttsOptions);
+          audioUrl = await this.aiService.generateSpeech(ttsText, ttsOptions);
         } catch (err) {
           if (defaultVoice && defaultVoice !== ttsOptions.voice) {
             // A provider error (e.g. 502) often means the selected voice is
             // unavailable for this model. Fall back to the model's default.
-            audioUrl = await this.aiService.generateSpeech(story.german, {
+            audioUrl = await this.aiService.generateSpeech(ttsText, {
               ...ttsOptions,
               voice: defaultVoice,
             });
@@ -729,7 +907,7 @@ export class StoriesComponent implements OnInit, OnDestroy {
 
         // Cache under the selected voice key so subsequent plays are instant,
         // even when the fallback voice was used.
-        await this.ttsCacheService.setAudio(story.german, audioUrl, ttsOptions);
+        await this.ttsCacheService.setAudio(ttsText, audioUrl, ttsOptions);
       }
 
       const audio = new Audio(audioUrl);
@@ -880,10 +1058,17 @@ export class StoriesComponent implements OnInit, OnDestroy {
     await this.storyService.deleteStory(id);
     if (story) {
       // Evict cached TTS audio so we don't leave orphaned blobs in IndexedDB.
-      await this.ttsCacheService.deleteAudio(story.german, {
-        model: this.settingsService.ttsModel(),
-        voice: this.settingsService.ttsVoice(),
-      });
+      const model = this.settingsService.ttsModel();
+      const voice = this.settingsService.ttsVoice();
+      await this.ttsCacheService.deleteAudio(story.german, { model, voice });
+      // Dialog stories may also have a Fish Audio multi-speaker clip cached
+      // under the speaker-captioned text and the second voice.
+      if (story.format === 'dialog' && model.startsWith('fish-audio/')) {
+        await this.ttsCacheService.deleteAudio(
+          buildDialogueTtsText(parseDialogLines(story.german), 2),
+          { model, voice, voiceSecond: this.settingsService.ttsSecondVoice() }
+        );
+      }
     }
     // Drop any saved exercise sessions tied to this story.
     this.clearSessionHistory(id);

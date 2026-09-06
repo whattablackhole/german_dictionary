@@ -30,7 +30,7 @@ export class TtsCacheService {
    */
   async getAudio(
     text: string,
-    options: { model: string; voice: string }
+    options: { model: string; voice: string; voiceSecond?: string }
   ): Promise<string | null> {
     const db = await this.openDb();
     if (!db) return null;
@@ -54,7 +54,7 @@ export class TtsCacheService {
   async setAudio(
     text: string,
     dataUrl: string,
-    options: { model: string; voice: string }
+    options: { model: string; voice: string; voiceSecond?: string }
   ): Promise<void> {
     const db = await this.openDb();
     if (!db) return;
@@ -80,7 +80,7 @@ export class TtsCacheService {
    */
   async deleteAudio(
     text: string,
-    options: { model: string; voice: string }
+    options: { model: string; voice: string; voiceSecond?: string }
   ): Promise<void> {
     const db = await this.openDb();
     if (!db) return;
@@ -159,10 +159,20 @@ export class TtsCacheService {
    */
   private hashKey(
     text: string,
-    options: { model: string; voice: string }
+    options: { model: string; voice: string; voiceSecond?: string }
   ): string {
-    // Include model + voice so switching them never replays stale audio.
-    const input = `${options.model}|${options.voice}|${text}`;
+    // Include model + voice(s) so switching them never replays stale audio
+    // (voiceSecond only differs for multi-speaker dialogue requests).
+    //
+    // Multi-speaker keys carry an explicit version marker (`ms3:`):
+    // the `ms2:` dialect sent top-level `reference_id`, which OpenRouter
+    // strips (their SpeechRequest schema has no such field), so Fish received
+    // no voices and used the same default for every speaker. Bumping the
+    // marker invalidates that cached (wrong) audio so it regenerates.
+    const voiceSecondKey = options.voiceSecond
+      ? `ms3:${options.voiceSecond}`
+      : '';
+    const input = `${options.model}|${options.voice}|${voiceSecondKey}|${text}`;
     let hash = 0x811c9dc5;
     for (let i = 0; i < input.length; i++) {
       hash ^= input.charCodeAt(i);

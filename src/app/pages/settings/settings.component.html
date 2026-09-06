@@ -131,7 +131,7 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="tts-select">
-        <mat-label>Voice</mat-label>
+        <mat-label>Voice 1 (speaker)</mat-label>
         <mat-select
           [value]="settingsService.ttsVoice()"
           (valueChange)="setTtsVoice($event)"
@@ -140,7 +140,26 @@
             <mat-option [value]="voice.id">{{ voice.label }}</mat-option>
           }
         </mat-select>
+        <mat-hint>Narrator and first dialogue speaker.</mat-hint>
       </mat-form-field>
+
+      @if (settingsService.ttsModel().startsWith('fish-audio/')) {
+        <mat-form-field appearance="outline" class="tts-select">
+          <mat-label>Voice 2 (speaker)</mat-label>
+          <mat-select
+            [value]="settingsService.ttsSecondVoice()"
+            (valueChange)="setTtsSecondVoice($event)"
+          >
+            @for (voice of dialogueVoiceOptions(); track voice.id) {
+              <mat-option [value]="voice.id">{{ voice.label }}</mat-option>
+            }
+          </mat-select>
+          <mat-hint>
+            Second dialogue speaker. When the AI reports character genders,
+            voices auto-match (e.g. Man 1 + Man 2); your picks are the fallback.
+          </mat-hint>
+        </mat-form-field>
+      }
     }
   </mat-card>
 

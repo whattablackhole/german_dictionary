@@ -14,9 +14,9 @@ An interactive German language learning application built with [Angular CLI](htt
   - **Browser SpeechSynthesis** — free, works offline
   - **Microsoft MAI-Voice-2 Flash** — fast German TTS with the Klaus voice via OpenRouter (requires API key with credits)
   - **Google Gemini 3.1 Flash TTS** — premium TTS with 70+ languages, 200+ inline audio tags for emotion/pacing, supports up to 2 speakers, 30 voices (Zephyr, Puck, Charon, Kore, Fenrir, Leda, Orus, Aoede, Callirrhoe, Autonoe, Enceladus, Iapetus, Umbriel, Algieba, Despina, Erinome, Algenib, Rasalgethi, Laomedeia, Achernar, Alnilam, Schedar, Gacrux, Pulcherrima, Achird, Zubenelgenubi, Vindemiatrix, Sadachbia, Sadaltager, Sulafat) (requires API key with credits)
-  - **Fish Audio S2.1 Pro (Free)** — free TTS for testing and prototyping
+  - **Fish Audio S2.1 Pro (Free)** — free TTS for testing and prototyping; plays dialog stories as multi-speaker audio with gender-aware voice pairing — the AI reports each character's gender (male/female) so two men, two women, or mixed pairs get matching voices (Woman 1/2, Man 1/2), sent together via `<|speaker:N|>` captions in one combined request
   - Audio is cached in IndexedDB to avoid re-generating repeated phrases
-- **Story Generator** — Generate cohesive German stories with AI, listen with word-by-word highlighting, progress slider, speed control, and pause/resume; includes search filters (theme, level, word types, grammar topics, sentence count)
+- **Story Generator** — Generate cohesive German stories with AI, listen with word-by-word highlighting, progress slider, speed control, and pause/resume; includes search filters (theme, level, word types, grammar topics, sentence count). Translations (EN/RU) are generated on demand — tap "Generate" in the translation accordion
 - **Word Lookup Mode** — Click any word in a story to see its translation, part of speech, verb forms, hear pronunciation, and add to dictionary (conjugated verbs auto-convert to infinitive)
 - **Grammar Notes** — AI-generated grammar explanations with examples and related topics
 - **Sentence Builder** — Practice writing German sentences by picking a grammar pattern and building sentences from your word box, with:

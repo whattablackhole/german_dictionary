@@ -4,7 +4,9 @@ import {
   GERMAN_TENSE_LABELS,
   buildBlankSegments,
   buildClozeSegments,
+  buildDialogueTtsText,
   cleanReferenceText,
+  fishSpeakerToken,
   isVerbFormLike,
   normalizeGermanText,
   parseDialogLines,
@@ -380,5 +382,60 @@ describe('parseDialogLines', () => {
 
   it('handles empty input', () => {
     expect(parseDialogLines('')).toEqual([]);
+  });
+});
+
+describe('buildDialogueTtsText', () => {
+  it('marks each speaker utterance with its Fish Audio speaker token', () => {
+    const result = buildDialogueTtsText(
+      parseDialogLines('Anna: Hallo Max!\nMax: Hallo Anna!')
+    );
+    expect(result).toBe('<|speaker:0|>Hallo Max! <|speaker:1|>Hallo Anna!');
+  });
+
+  it('reuses the same token for the same speaker', () => {
+    const result = buildDialogueTtsText(
+      parseDialogLines('Anna: Hallo.\nMax: Hi.\nAnna: Wie geht es dir?')
+    );
+    expect(result).toBe(
+      '<|speaker:0|>Hallo. <|speaker:1|>Hi. <|speaker:0|>Wie geht es dir?'
+    );
+  });
+
+  it('leaves narration lines unmarked so they use the default voice', () => {
+    const result = buildDialogueTtsText(
+      parseDialogLines('Es regnet.\nAnna: Schade.\nMax: Ja, leider.')
+    );
+    expect(result).toBe(
+      'Es regnet. <|speaker:0|>Schade. <|speaker:1|>Ja, leider.'
+    );
+  });
+
+  it('clamps extra speakers to the last available voice', () => {
+    const result = buildDialogueTtsText(
+      parseDialogLines('A: Eins.\nB: Zwei.\nC: Drei.\nA: Vier.')
+    );
+    expect(result).toBe(
+      '<|speaker:0|>Eins. <|speaker:1|>Zwei. <|speaker:1|>Drei. <|speaker:0|>Vier.'
+    );
+  });
+
+  it('respects a single-voice setting', () => {
+    const result = buildDialogueTtsText(
+      parseDialogLines('Anna: Hallo.\nMax: Hi.'),
+      1
+    );
+    expect(result).toBe('<|speaker:0|>Hallo. <|speaker:0|>Hi.');
+  });
+
+  it('handles empty input', () => {
+    expect(buildDialogueTtsText([])).toBe('');
+  });
+});
+
+describe('fishSpeakerToken', () => {
+  it('formats a 0-based speaker index', () => {
+    expect(fishSpeakerToken(0)).toBe('<|speaker:0|>');
+    expect(fishSpeakerToken(1)).toBe('<|speaker:1|>');
   });
 });

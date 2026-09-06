@@ -587,6 +587,18 @@
   margin-top: 8px;
 }
 
+.translate-btn {
+  margin-left: auto;
+
+  mat-spinner {
+    margin-right: 6px;
+  }
+}
+
+.translation-error {
+  margin-top: 8px;
+}
+
 /* Audio Controls (Microsoft TTS) */
 .audio-controls {
   background: var(--mat-sys-surface);

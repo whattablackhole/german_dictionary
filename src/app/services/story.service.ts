@@ -113,6 +113,14 @@ export class StoryService {
     await this.save();
   }
 
+  /** Replaces a story (e.g. to persist translations generated on demand). */
+  async updateStory(updated: Story): Promise<void> {
+    this.stories.update((stories) =>
+      stories.map((s) => (s.id === updated.id ? updated : s))
+    );
+    await this.save();
+  }
+
   // ── IndexedDB helpers ──
 
   private openDb(): Promise<IDBDatabase | null> {
