@@ -101,4 +101,41 @@ describe('ActivityTrackingService', () => {
     const service = new ActivityTrackingService();
     expect(service.last7Days().length).toBe(7);
   });
+
+  it('strips the GitHub Pages deploy base from routes', () => {
+    const service = new ActivityTrackingService();
+    expect(
+      service.routeFromPath('/german_dictionary/settings', '/german_dictionary/')
+    ).toBe('settings');
+    expect(
+      service.routeFromPath('/german_dictionary/stories/abc', '/german_dictionary/')
+    ).toBe('stories');
+    expect(
+      service.routeFromPath('/german_dictionary/', '/german_dictionary/')
+    ).toBe('home');
+    expect(service.routeFromPath('/german_dictionary', '/german_dictionary/')).toBe('home');
+    expect(service.routeFromPath('/settings', '/')).toBe('settings');
+    expect(service.routeFromPath('/', '/')).toBe('home');
+  });
+
+  it('drops legacy page keys that recorded the deploy base', () => {
+    localStorage.setItem(
+      'german-dictionary-activity-tracking',
+      JSON.stringify({
+        days: { '2026-09-07': 10 },
+        pages: { '2026-09-07': { german_dictionary: 10, settings: 5 } },
+      })
+    );
+    Object.defineProperty(document, 'baseURI', {
+      configurable: true,
+      value: 'https://user.github.io/german_dictionary/',
+    });
+    try {
+      const service = new ActivityTrackingService();
+      expect(service.data().days['2026-09-07']).toBe(10);
+      expect(service.data().pages['2026-09-07']).toEqual({ settings: 5 });
+    } finally {
+      delete (document as unknown as { baseURI?: string }).baseURI;
+    }
+  });
 });

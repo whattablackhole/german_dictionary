@@ -165,11 +165,66 @@ export class ActivityTrackingService {
   /** First URL segment as the page key ('/verbs' -> 'verbs', '/' -> 'home'). */
   private currentRoute(): string {
     try {
-      const path = window.location.pathname.replace(/^\//, '').split(/[/?#]/)[0];
-      return path || 'home';
+      return this.routeFromPath(window.location.pathname, this.basePathname());
     } catch {
       return 'home';
     }
+  }
+
+  /**
+   * Extracts the route key from a pathname, honouring the deploy base
+   * (e.g. '/german_dictionary/settings' on GitHub Pages -> 'settings').
+   * Public for tests.
+   */
+  routeFromPath(pathname: string, basePathname: string): string {
+    let path = pathname;
+    if (basePathname.length > 1 && path.startsWith(basePathname)) {
+      // Strip the deploy base, keeping the leading '/'.
+      path = path.slice(basePathname.length - 1);
+    } else if (basePathname.length > 1 && path === basePathname.replace(/\/$/, '')) {
+      // Exactly the base without its trailing slash -> app root.
+      path = '/';
+    }
+    const route = path.replace(/^\//, '').split(/[/?#]/)[0];
+    return route || 'home';
+  }
+
+  /** Pathname of the deploy base ('/german_dictionary/' on GitHub Pages). */
+  private basePathname(): string {
+    if (typeof document === 'undefined') return '/';
+    try {
+      return new URL(document.baseURI).pathname;
+    } catch {
+      return '/';
+    }
+  }
+
+  /** First segment of the deploy base path ('german_dictionary' on GH Pages). */
+  private baseSegment(): string | null {
+    try {
+      if (typeof document === 'undefined') return null;
+      const segment = this.basePathname().replace(/^\//, '').replace(/\/$/, '');
+      return segment || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Drops page keys that accidentally recorded the deploy base segment
+   * (e.g. german_dictionary on GitHub Pages before base stripping existed).
+   * Daily totals are kept - only the per-page breakdown is cleaned.
+   */
+  private normalize(data: ActivityTrackingData): ActivityTrackingData {
+    const baseSegment = this.baseSegment();
+    if (!baseSegment) return data;
+    const pages: Record<string, Record<string, number>> = {};
+    for (const [date, dayPages] of Object.entries(data.pages)) {
+      const cleaned = { ...dayPages };
+      delete cleaned[baseSegment];
+      pages[date] = cleaned;
+    }
+    return { days: data.days, pages };
   }
 
   private dateKey(now: number): string {
@@ -185,7 +240,7 @@ export class ActivityTrackingService {
       if (raw) {
         const parsed = JSON.parse(raw) as ActivityTrackingData;
         if (parsed && typeof parsed === 'object' && parsed.days) {
-          return { days: parsed.days, pages: parsed.pages ?? {} };
+          return this.normalize({ days: parsed.days, pages: parsed.pages ?? {} });
         }
       }
     } catch {
