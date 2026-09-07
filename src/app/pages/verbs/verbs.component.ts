@@ -34,6 +34,7 @@ import {
 import {
   VerbTrainerPerson,
   VerbTrainerTense,
+  VerbTrainerStatsRow,
 } from '../../models/verb-trainer';
 
 /**
@@ -210,6 +211,23 @@ export class VerbsComponent {
       ? this.verbTrainer.getStatsByVerb(verb)
       : { total: 0, correct: 0, accuracy: 0 };
   });
+
+  /** Overall training stats shown on the catalog (main) page. */
+  readonly overallStats = computed(() => this.verbTrainer.getOverallStats());
+
+  /** Per-verb stats lookup for the catalog rows, keyed by lowercase infinitive. */
+  readonly verbStatsMap = computed(() => {
+    const map = new Map<string, VerbTrainerStatsRow>();
+    for (const row of this.verbTrainer.getStatsPerVerb()) {
+      map.set(row.verb.toLowerCase(), row);
+    }
+    return map;
+  });
+
+  /** Training stats for one catalog verb, if it has been trained. */
+  statsFor(infinitive: string): VerbTrainerStatsRow | undefined {
+    return this.verbStatsMap().get(infinitive.trim().toLowerCase());
+  }
 
   readonly recentAttempts = computed(() => {
     const verb = this.infinitive();

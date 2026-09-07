@@ -27,3 +27,26 @@ export interface VerbTrainerAttempt {
   /** ISO timestamp of the attempt. */
   ts: string;
 }
+
+/** Aggregated stats for one verb across all recorded attempts. */
+export interface VerbTrainerStatsRow {
+  verb: string;
+  /** Total recorded attempts for the verb. */
+  total: number;
+  /** How many of the attempts were correct. */
+  correct: number;
+  /** Success rate in percent (0-100). */
+  accuracy: number;
+}
+
+/** Stats across every recorded attempt (all verbs). */
+export interface VerbTrainerOverallStats {
+  /** Distinct verbs with at least one recorded attempt. */
+  verbsTrained: number;
+  /** Total recorded attempts. */
+  totalAttempts: number;
+  /** How many of the attempts were correct. */
+  totalCorrect: number;
+  /** Overall success rate in percent (0-100). */
+  accuracy: number;
+}

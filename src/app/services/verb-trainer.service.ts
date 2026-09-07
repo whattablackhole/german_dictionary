@@ -1,5 +1,9 @@
 import { Injectable, signal } from '@angular/core';
-import { VerbTrainerAttempt } from '../models/verb-trainer';
+import {
+  VerbTrainerAttempt,
+  VerbTrainerOverallStats,
+  VerbTrainerStatsRow,
+} from '../models/verb-trainer';
 
 const STORAGE_KEY = 'german-dictionary-verb-trainer';
 
@@ -30,6 +34,44 @@ export class VerbTrainerService {
       correct,
       accuracy: entries.length === 0 ? 0 : Math.round((correct / entries.length) * 100),
     };
+  }
+
+  /** Stats across every recorded attempt (all verbs). */
+  getOverallStats(): VerbTrainerOverallStats {
+    const history = this.history();
+    const verbs = new Set(history.map((a) => a.verb.trim().toLowerCase()));
+    const correct = history.filter((a) => a.correct).length;
+    return {
+      verbsTrained: verbs.size,
+      totalAttempts: history.length,
+      totalCorrect: correct,
+      accuracy: history.length === 0 ? 0 : Math.round((correct / history.length) * 100),
+    };
+  }
+
+  /**
+   * Aggregated stats for every trained verb (any recorded attempt), sorted by
+   * most attempts first, weakest accuracy next, then alphabetically. Verbs are
+   * grouped case-insensitively; the first recorded spelling is kept for display.
+   */
+  getStatsPerVerb(): VerbTrainerStatsRow[] {
+    const byVerb = new Map<string, VerbTrainerStatsRow>();
+    for (const a of this.history()) {
+      const key = a.verb.trim().toLowerCase();
+      let row = byVerb.get(key);
+      if (!row) {
+        row = { verb: a.verb.trim(), total: 0, correct: 0, accuracy: 0 };
+        byVerb.set(key, row);
+      }
+      row.total += 1;
+      if (a.correct) row.correct += 1;
+    }
+    for (const row of byVerb.values()) {
+      row.accuracy = Math.round((row.correct / row.total) * 100);
+    }
+    return [...byVerb.values()].sort(
+      (a, b) => b.total - a.total || a.accuracy - b.accuracy || a.verb.localeCompare(b.verb)
+    );
   }
 
   /** Appends an attempt, keeping at most maxEntries entries in history. */

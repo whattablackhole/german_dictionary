@@ -77,6 +77,53 @@
   }
 }
 
+// ── Training stats inside verb rows ──
+.rate-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: -1; // between the row background and its content
+  pointer-events: none;
+
+  // Colours mirror the drill feedback colours.
+  &.rate-good {
+    background: rgba(88, 204, 2, 0.16);
+  }
+
+  &.rate-mid {
+    background: rgba(234, 179, 8, 0.18);
+  }
+
+  &.rate-bad {
+    background: rgba(239, 68, 68, 0.14);
+  }
+}
+
+.verb-trained {
+  flex-shrink: 0;
+  margin-left: auto;
+  margin-right: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+
+  strong {
+    font-weight: 700;
+  }
+
+  &.rate-good strong {
+    color: #58cc02;
+  }
+
+  &.rate-mid strong {
+    color: #eab308;
+  }
+
+  &.rate-bad strong {
+    color: #ef4444;
+  }
+}
+
 // ── Verb list ──
 .verb-list {
   display: flex;
@@ -85,6 +132,9 @@
 }
 
 .verb-row {
+  position: relative;
+  z-index: 0; // stacking context so the rate fill sits between bg and content
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: space-between;

@@ -85,11 +85,27 @@
       <span>{{ stats().prefixed }} prefixed</span>
       <span>{{ stats().separable }} trennbar</span>
       <span class="stat-accent">{{ stats().inDictionary }} in dictionary</span>
+      @if (overallStats().totalAttempts > 0) {
+        <span class="stat-accent">
+          {{ overallStats().verbsTrained }} trained &middot;
+          {{ overallStats().totalAttempts }} attempts &middot;
+          {{ overallStats().accuracy }}% correct
+        </span>
+      }
     </div>
 
     <div class="verb-list" role="list">
       @for (entry of pagedEntries(); track entry.infinitive) {
         <div class="verb-row" role="listitem">
+          @if (statsFor(entry.infinitive); as s) {
+            <span
+              class="rate-fill"
+              [class.rate-good]="s.accuracy >= 80"
+              [class.rate-mid]="s.accuracy >= 50 && s.accuracy < 80"
+              [class.rate-bad]="s.accuracy < 50"
+              [style.width.%]="s.accuracy"
+            ></span>
+          }
           <div class="verb-main">
             <span class="verb-word">{{ entry.infinitive }}</span>
             @if (entry.prefix) {
@@ -111,6 +127,16 @@
             }
             <span class="verb-rank">#{{ entry.frequencyRank }}</span>
           </div>
+          @if (statsFor(entry.infinitive); as s) {
+            <span
+              class="verb-trained"
+              [class.rate-good]="s.accuracy >= 80"
+              [class.rate-mid]="s.accuracy >= 50 && s.accuracy < 80"
+              [class.rate-bad]="s.accuracy < 50"
+            >
+              <strong>{{ s.accuracy }}%</strong> &middot; {{ s.correct }}/{{ s.total }}
+            </span>
+          }
           <div class="verb-actions">
             @if (statusOf(entry) === 'in-dictionary') {
               <span class="in-dict-label">
