@@ -56,7 +56,9 @@ export class ExerciseListComponent implements OnInit {
 
   /** Emitted when the user answers all questions and reaches the results screen. */
   readonly complete = output<StoryExerciseResult[]>();
-  /** Emitted when the user quits mid-session (payload are the results so far). */
+  /** Emitted when the user quits mid-session (payload are the results so far).
+   *  On the finished-results screen the payload is empty: the run was already
+   *  persisted through `complete`, so parents must not save it a second time. */
   readonly quit = output<StoryExerciseResult[]>();
 
   /** When true, shows mastery self-assessment buttons on each answered question. */
@@ -347,6 +349,9 @@ export class ExerciseListComponent implements OnInit {
   }
 
   nextQuestion(): void {
+    // "See Results" already finished the session — never emit `complete` twice
+    // (e.g. a double click landing before the results screen re-renders).
+    if (this.sessionFinished()) return;
     this.submitError.set('');
     this.userInput.set('');
     if (this.currentIndex() + 1 >= this.session().length) {
@@ -390,7 +395,10 @@ export class ExerciseListComponent implements OnInit {
   }
 
   quitSession(): void {
-    this.quit.emit(this.buildResults());
+    // On the results screen the run was already persisted via `complete`.
+    // Re-emitting the results would make parents save the session twice
+    // (duplicated history entries), so quit with an empty payload there.
+    this.quit.emit(this.sessionFinished() ? [] : this.buildResults());
   }
 
   private buildResults(): StoryExerciseResult[] {
