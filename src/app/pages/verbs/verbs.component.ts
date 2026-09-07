@@ -235,13 +235,14 @@ export class VerbsComponent {
   });
 
   /**
-   * Person × tense combos the student already practiced for the current verb
-   * (newest first, deduped, capped). Only sent to the AI when NEITHER the
-   * person filter NOR the tense filter is active: with a filter the student
-   * explicitly chose what to practice, so the AI must stick to it instead of
-   * skipping combinations. With no filters these combos bias the next batch
-   * away from recently practiced slots — a broad mix is the whole point of
-   * unfiltered drills.
+   * Person × tense combos the student already practiced successfully for the
+   * current verb (newest first, deduped, capped). Only sent to the AI when
+   * NEITHER the person filter NOR the tense filter is active: with a filter
+   * the student explicitly chose what to practice, so the AI must stick to it
+   * instead of skipping combinations. With no filters these combos bias the
+   * next batch away from recently mastered slots — a broad mix is the whole
+   * point of unfiltered drills. Failed attempts are excluded: slots the
+   * student got wrong are not "done" and should come back for more practice.
    */
   private recentSlotContext(): Array<{
     person: VerbTrainerPerson;
@@ -258,6 +259,9 @@ export class VerbsComponent {
       tense: VerbTrainerTense;
     }> = [];
     for (const attempt of this.verbTrainer.getHistoryByVerb(verb)) {
+      // Failed attempts are skipped: the slot is not "done" and the AI should
+      // keep drilling it, so it never lands on the avoid list.
+      if (!attempt.correct) continue;
       if (slots.length >= RECENT_SLOT_CONTEXT_MAX) break;
       const key = `${attempt.tense}|${attempt.person}`;
       if (seen.has(key)) continue;
