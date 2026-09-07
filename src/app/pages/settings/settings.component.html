@@ -461,6 +461,69 @@
   </mat-card>
 
   <mat-card class="settings-card">
+    <h2 class="settings-title">Time Spent</h2>
+    <p class="settings-description">
+      Active time in the app. Time without any input (30s idle) and background tabs are not counted.
+    </p>
+
+    <div class="activity-stats">
+      <div class="activity-summary">
+        <div class="activity-today">
+          <span class="activity-today-value">{{ formatDuration(activityTracking.todaySeconds()) }}</span>
+          <span class="activity-today-label">today</span>
+        </div>
+        <div class="activity-totals">
+          <span class="activity-total-line">
+            <strong>{{ formatDuration(activityTracking.totalSeconds()) }}</strong> total
+          </span>
+          <span class="activity-total-line">
+            <strong>{{ activityTracking.activeDays() }}</strong>
+            {{ activityTracking.activeDays() === 1 ? 'active day' : 'active days' }}
+          </span>
+          <span class="activity-total-line">
+            ~<strong>{{ formatDuration(activityTracking.dailyAverage()) }}</strong> per active day
+          </span>
+        </div>
+      </div>
+
+      <div
+        class="activity-chart"
+        role="img"
+        aria-label="Active time over the last seven days"
+      >
+        @for (day of activityTracking.last7Days(); track day.date) {
+          <div
+            class="activity-bar-col"
+            [matTooltip]="day.date + ': ' + formatDuration(day.seconds)"
+          >
+            <span class="activity-bar-value">
+              {{ day.seconds > 0 ? formatDuration(day.seconds) : '' }}
+            </span>
+            <div class="activity-bar-track">
+              <div
+                class="activity-bar-fill"
+                [style.height.%]="barHeight(day.seconds, last7Max())"
+              ></div>
+            </div>
+            <span class="activity-bar-label">{{ day.label }}</span>
+          </div>
+        }
+      </div>
+
+      @if (activityTracking.topPages().length > 0) {
+        <div class="activity-pages">
+          <span class="activity-pages-label">Most used pages:</span>
+          @for (page of activityTracking.topPages(); track page.route) {
+            <span class="activity-page-chip">
+              {{ routeLabel(page.route) }} <strong>{{ pagePercent(page.seconds) }}%</strong>
+            </span>
+          }
+        </div>
+      }
+    </div>
+  </mat-card>
+
+  <mat-card class="settings-card">
     <h2 class="settings-title">Data Backup</h2>
     <p class="settings-description">
       Export all your data (words, sentences, stories, grammar notes, practice progress, settings, API key) to a JSON file,

@@ -5,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatInputModule } from '@angular/material/input';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -19,15 +20,19 @@ import { ImageGenerationService } from '../../services/image-generation.service'
 import { SentenceCacheService } from '../../services/sentence-cache.service';
 import { SentenceGenerationService } from '../../services/sentence-generation.service';
 import { PluralFormation, TranslationLanguage, Word } from '../../models/word';
+import { ActivityTrackingService } from '../../services/activity-tracking.service';
 
 @Component({
   selector: 'app-settings',
-  imports: [MatRadioModule, MatSlideToggleModule, MatCardModule, MatSelectModule, MatFormFieldModule, MatButtonModule, MatProgressBarModule, MatInputModule, MatAutocompleteModule, MatIconModule, FormsModule],
+  imports: [MatRadioModule, MatSlideToggleModule, MatCardModule, MatSelectModule, MatFormFieldModule, MatButtonModule, MatProgressBarModule, MatInputModule, MatAutocompleteModule, MatIconModule, FormsModule, MatTooltipModule],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
 })
 export class SettingsComponent implements OnInit {
   private readonly aiService = inject(AiService);
+
+  /** App-usage time tracker (also powers the Time Spent card below). */
+  readonly activityTracking = inject(ActivityTrackingService);
 
   readonly presetTextModels = PRESET_TEXT_MODELS;
   readonly presetImageStyles = PRESET_IMAGE_STYLES;
@@ -350,6 +355,62 @@ export class SettingsComponent implements OnInit {
 
   setLookupModifier(modifier: LookupModifier): void {
     this.settingsService.setLookupModifierKey(modifier);
+  }
+
+  // Time Spent card helpers
+
+  /** Formats seconds as a compact duration (e.g. 1h 24m, 37m, 45s). */
+  formatDuration(seconds: number): string {
+    if (seconds < 60) return seconds + 's';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.round((seconds % 3600) / 60);
+    if (h === 0) return m + 'm';
+    if (m === 0) return h + 'h';
+    return h + 'h ' + m + 'm';
+  }
+
+  /** Bar height percent for the 7-day chart (small sliver when > 0). */
+  barHeight(seconds: number, max: number): number {
+    if (max <= 0 || seconds <= 0) return 0;
+    return Math.max(6, Math.round((seconds / max) * 100));
+  }
+
+  /** Max seconds across the last 7 days (bar scale). */
+  readonly last7Max = computed(() =>
+    Math.max(0, ...this.activityTracking.last7Days().map((d) => d.seconds))
+  );
+
+  /** Human label for a tracked route segment. */
+  routeLabel(route: string): string {
+    const labels: Record<string, string> = {
+      home: 'Home',
+      review: 'Review',
+      'review-session': 'SRS Review',
+      game: 'Gender Game',
+      exercise: 'Exercise',
+      'practice-word': 'Word Practice',
+      'sentence-builder': 'Sentences',
+      diary: 'Diary',
+      captions: 'Captions',
+      'grammar-notes': 'Grammar',
+      prepositions: 'Prepositions',
+      declension: 'Declension',
+      stories: 'Stories',
+      'stories-exercises': 'Story Exercises',
+      'story-questions': 'Story Questions',
+      'story-cloze': 'Fill in the Blanks',
+      manage: 'Manage',
+      import: 'Import',
+      verbs: 'Verb Trainer',
+      settings: 'Settings',
+    };
+    return labels[route] ?? route;
+  }
+
+  /** Share of a page in percent of the total tracked time. */
+  pagePercent(seconds: number): number {
+    const total = this.activityTracking.totalSeconds();
+    return total === 0 ? 0 : Math.round((seconds / total) * 100);
   }
 
   async onExport(): Promise<void> {
