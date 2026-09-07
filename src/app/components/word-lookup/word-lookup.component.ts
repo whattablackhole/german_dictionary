@@ -81,14 +81,17 @@ export class WordLookupComponent {
     if (fresh) this.selectedWord.set(fresh);
   }
 
-  /** Live matching words as the user types (exact or partial across all forms). */
+  /** Live matching words as the user types (exact or partial across all forms),
+   *  most relevant first so short queries do not bury the real word under
+   *  longer words that merely contain it as a substring. */
   readonly liveMatches = computed<Word[]>(() => {
     const query = normalize(this.searchInput());
     if (!query || this.selectedWord()) return [];
     const words = this.wordService.getWords();
-    return words
-      .filter((w) => this.wordMatchesQuery(w, query))
-      .slice(0, 8);
+    return this.sortMatches(
+      words.filter((w) => this.wordMatchesQuery(w, query)),
+      query
+    ).slice(0, 8);
   });
 
   /** True when AI mode is active (word not in vocabulary). */
@@ -163,10 +166,11 @@ export class WordLookupComponent {
       return;
     }
 
-    // Partial matches?
-    const matches = this.wordService
-      .getWords()
-      .filter((w) => this.wordMatchesQuery(w, query));
+    // Partial matches? (relevance-sorted so exact/prefix hits come first)
+    const matches = this.sortMatches(
+      this.wordService.getWords().filter((w) => this.wordMatchesQuery(w, query)),
+      query
+    );
     if (matches.length > 0) {
       // If there's only one match, show it directly
       if (matches.length === 1) {
@@ -211,6 +215,27 @@ export class WordLookupComponent {
     }
     // Partial match
     return fields.some((f) => normalize(f).includes(query));
+  }
+
+  /**
+   * Sorts matches by relevance: exact base form first, then base-form prefix,
+   * then any exact inflected form, then form prefixes, then plain substrings.
+   * Keeps short queries (e.g. "rad", "tal") from burying the real word under
+   * longer words that merely contain the query as a substring.
+   */
+  private sortMatches(words: Word[], query: string): Word[] {
+    const q = normalize(query);
+    const rank = (w: Word): number => {
+      const german = normalize(w.german);
+      if (german === q) return 0;
+      if (german.startsWith(q)) return 1;
+      if (this.getAllForms(w).some((f) => normalize(f) === q)) return 2;
+      if (this.getAllForms(w).some((f) => normalize(f).startsWith(q))) return 3;
+      return 4;
+    };
+    return [...words].sort(
+      (a, b) => rank(a) - rank(b) || a.german.localeCompare(b.german)
+    );
   }
 
   private wordHasExactForm(word: Word, query: string): boolean {
