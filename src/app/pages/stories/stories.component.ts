@@ -1196,8 +1196,16 @@ export class StoriesComponent implements OnInit, OnDestroy {
     const isNoun = suggestion.partOfSpeech === 'noun';
     const isVerb = suggestion.partOfSpeech === 'verb';
 
-    // Use infinitive for verbs if available, otherwise use the clicked word
-    const dictionaryWord = isVerb && suggestion.infinitive ? suggestion.infinitive : word;
+    // Use infinitive for verbs, base form otherwise if it differs. This keeps
+    // plural inputs like "Handschuhe"/"Wälder" from being stored as-is — the
+    // singular base form ("Handschuh"/"Wald") is stored, with pluralForm kept
+    // as separate metadata from the AI suggestion.
+    const dictionaryWord =
+      isVerb && suggestion.infinitive
+        ? suggestion.infinitive
+        : suggestion.baseForm && suggestion.baseForm !== word
+          ? suggestion.baseForm
+          : word;
 
     this.wordService.addWord({
       german: dictionaryWord,

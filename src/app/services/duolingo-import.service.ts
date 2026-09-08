@@ -118,8 +118,17 @@ export class DuolingoImportService {
             continue;
           }
 
+          // Normalize to the dictionary/base form so plural noun forms are not
+          // stored as-is (e.g. "Handschuhe" → "Handschuh") and verbs are stored
+          // as their infinitive ("geht" → "gehen"). The AI handles the rest
+          // (singular baseForm, gender, pluralForm) via the classification prompt.
+          const storeAs =
+            suggestion.partOfSpeech === 'verb' && suggestion.infinitive
+              ? suggestion.infinitive
+              : suggestion.baseForm?.trim() || entry.german;
+
           const wordData: Parameters<typeof this.wordService.addWord>[0] = {
-            german: entry.german,
+            german: storeAs,
             translationEn: suggestion.translationEn,
             // Use the Duolingo Russian translation (user's input) as priority
             translationRu: entry.translationRu,

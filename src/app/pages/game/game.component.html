@@ -2,7 +2,8 @@
   <h1 class="page-title">Gender Game</h1>
   <p class="page-subtitle">Choose the correct article for each word</p>
 
-  @if (!gameStarted()) {
+  <!-- ── Hub: filters + start + previous sessions ── -->
+  @if (state() === 'hub') {
     <div class="start-screen">
       <div class="filter-bar">
         <mat-form-field appearance="outline" class="date-field">
@@ -35,34 +36,103 @@
       </div>
 
       <p class="start-info">
-        {{ availableWords() }} words ready to play
+        {{ availableNouns() }} nouns ready · Next up: Session
+        {{ currentSessionNumber() }}
       </p>
-      <button class="start-button" (click)="startGame()">Start Game</button>
+      <button
+        class="start-button"
+        (click)="startSession()"
+        [disabled]="availableNouns() === 0"
+      >
+        Start Session ({{ sessionSize }} words)
+      </button>
+
+      @if (completedSessions().length > 0) {
+        <div class="session-list">
+          <div class="session-list-title">Previous Sessions</div>
+          @for (s of completedSessions(); track s.id) {
+            <div class="session-item">
+              <div class="session-info">
+                <span class="session-badge">Session {{ s.number }}</span>
+                <span class="session-meta">{{ sessionMeta(s) }}</span>
+              </div>
+              <button
+                class="replay-btn"
+                mat-stroked-button
+                (click)="replaySession(s)"
+              >
+                Replay
+              </button>
+            </div>
+          }
+        </div>
+      }
     </div>
-  } @else if (gameFinished()) {
-    <div class="results-screen">
-      <h2 class="results-title">Game Over!</h2>
-      <div class="score-display">
-        <span class="score-number">{{ score() }}</span>
-        <span class="score-total">/ {{ totalWords() }}</span>
+  } @else if (state() === 'summary') {
+    <!-- ── Summary: final + best round ── -->
+    @if (lastSession(); as s) {
+      <div class="results-screen">
+        <h2 class="results-title">
+          @if (s.replayOf) {
+            Session {{ s.replayOf }} — Replay
+          } @else {
+            Session {{ s.number }} Complete
+          }
+        </h2>
+
+        @if (sessionFinalRound(s); as fin) {
+          <div class="score-display">
+            <span class="score-number">{{ fin.correct }}</span>
+            <span class="score-total">/ {{ fin.answered }}</span>
+          </div>
+          <p class="score-label">
+            @if (fin.answered > 0 && fin.correct === fin.answered) {
+              Perfect round! 🎉
+            } @else {
+              correct answers
+            }
+          </p>
+        }
+
+        @if (s.bestRound > 0) {
+          <p class="score-label">
+            Best round: {{ s.bestRound }} / {{ s.words.length }}
+          </p>
+        }
+
+        <div class="summary-actions">
+          @if (!s.replayOf) {
+            <button class="start-button" (click)="startSession()">
+              Next Session
+            </button>
+          }
+          <button class="start-button" (click)="replaySession(s)">
+            Replay
+          </button>
+          <button class="start-button secondary" (click)="toHub()">
+            Back to Sessions
+          </button>
+        </div>
       </div>
-      <p class="score-label">
-        {{ score() === totalWords() ? 'Perfect! 🎉' : 'correct answers' }}
-      </p>
-      <button class="start-button" (click)="restart()">Play Again</button>
-    </div>
+    }
   } @else {
+    <!-- ── Game screen ── -->
     <div class="game-screen">
       <div class="progress">
-        <span>Word {{ currentNumber() }} of {{ totalWords() }}</span>
+        <span>
+          Session {{ activeSessionNumber() }} · Word {{ currentNumber() }} of
+          {{ totalWords() }} · Round {{ round() }}
+        </span>
         <span>Score: {{ score() }}</span>
       </div>
 
       <div class="word-card">
         <span class="word-german">{{ currentWord()?.german }}</span>
-        <span class="word-translation">
-          {{ currentWord() ? getTranslation(currentWord()!) : '' }}
-        </span>
+        @if (selectedGender() !== null) {
+          <span class="word-translation">
+            {{ currentWord() ? getTranslation(currentWord()!) : '' }}
+          </span>
+        }
         <button
           class="speak-button"
           aria-label="Pronounce word"
@@ -102,11 +172,17 @@
               <strong>{{ currentWord()?.gender }}</strong>
             </span>
           }
-          <button class="next-button" (click)="nextWord()">
-            {{ currentNumber() >= totalWords() ? 'See Results' : 'Next Word' }}
-          </button>
+          <button class="next-button" (click)="nextWord()">Next Word</button>
         </div>
       }
+
+      <button
+        class="end-session-btn"
+        aria-label="End session"
+        (click)="endSession()"
+      >
+        End Session
+      </button>
     </div>
   }
 </div>

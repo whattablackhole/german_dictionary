@@ -509,7 +509,7 @@ Each object must have exactly these fields:
 - "partOfSpeech": exactly one of "noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection", "numeral" or "phrase"
 - "gender": exactly one of "der", "die" or "das", OR null if the word is NOT a noun
 - "level": exactly one of "A1", "A2", "B1", "B2" or "C1"
-- "baseForm": the dictionary/base form of the word. For declined/inflected forms (e.g. "seine" → "sein", "gute" → "gut", "hat" → "haben", "schmeckt" → "schmecken"), provide the base form. If the input is already the base form, set this to the same value as the input word.
+- "baseForm": the dictionary/base form of the word. For declined/inflected forms (e.g. "seine" → "sein", "gute" → "gut", "hat" → "haben", "schmeckt" → "schmecken"), provide the base form. For plural noun forms (e.g. "Wälder" → "Wald", "Handschuhe" → "Handschuh", "Häuser" → "Haus"), provide the SINGULAR dictionary form. If the input is already the base form, set this to the same value as the input word.
 - "verbType": (only if partOfSpeech is "verb") exactly one of "strong", "weak" or "mixed". For other parts of speech, set to null.
 - "infinitive": (only if partOfSpeech is "verb") the infinitive form. For other parts of speech, set to null.
 - "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense. For other parts of speech, set to null.
@@ -528,12 +528,14 @@ Rules:
 - Common everyday words are typically A1-A2, less common words are B1-B2, specialized/formal words are C1.
 - If the input is not a recognizable German word, still provide your best guess for all fields.
 - IMPORTANT: If the input is a conjugated verb form (e.g. "schmeckt", "geht", "ist"), set "infinitive" to the infinitive form (e.g. "schmecken", "gehen", "sein").
+- IMPORTANT: If the input is a plural noun form (e.g. "Wälder", "Handschuhe", "Häuser", "Bäume"), classify it as a noun with "baseForm" set to the SINGULAR dictionary form (e.g. "Wald", "Handschuh", "Haus", "Baum") and "gender" set to the article of that singular form. For plural-only nouns with no singular form (e.g. "Leute", "Eltern", "Geschwister"), keep "baseForm" equal to the input and set "gender" to "die".
+- IMPORTANT: "translationEn" and "translationRu" must translate the "baseForm" (dictionary form), NOT the inflected input: for "Wälder" → baseForm "Wald" → translationEn "forest", translationRu "лес" (never "forests"/"леса").
 - IMPORTANT: The output array MUST have exactly the same number of items as the input array, in the same order.
 
 Input words: ${wordsJson}
 
 Example response format:
-{"words":[{"german":"Botschaft","translationEn":"message","translationRu":"посольство","partOfSpeech":"noun","gender":"die","level":"A2","baseForm":"Botschaft","verbType":null,"infinitive":null,"presentThirdPerson":null,"simplePast":null,"pastParticiple":null,"pluralForm":"Botschaften","pluralFormation":"-en"}]}`;
+{"words":[{"german":"Botschaft","translationEn":"message","translationRu":"посольство","partOfSpeech":"noun","gender":"die","level":"A2","baseForm":"Botschaft","verbType":null,"infinitive":null,"presentThirdPerson":null,"simplePast":null,"pastParticiple":null,"pluralForm":"Botschaften","pluralFormation":"-en"},{"german":"Wälder","translationEn":"forest","translationRu":"лес","partOfSpeech":"noun","gender":"der","level":"B1","baseForm":"Wald","verbType":null,"infinitive":null,"presentThirdPerson":null,"simplePast":null,"pastParticiple":null,"pluralForm":"Wälder","pluralFormation":"umlaut + -er"}]}`;
 
     const response = await fetch(environment.openRouterApiUrl, {
       method: 'POST',
@@ -680,7 +682,7 @@ Please re-analyze the word "${german}" with this hint in mind. Respond with JSON
 - "partOfSpeech": the part of speech, exactly one of "noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection", "numeral" or "phrase"
 - "gender": the grammatical gender, exactly one of "der", "die" or "das", OR null if the word is NOT a noun
 - "level": the CEFR difficulty level, exactly one of "A1", "A2", "B1", "B2" or "C1"
-- "baseForm": the dictionary/base form of the word
+- "baseForm": the dictionary/base form of the word. For a plural noun form (e.g. "Wälder" → "Wald", "Handschuhe" → "Handschuh", "Häuser" → "Haus"), provide the SINGULAR dictionary form. For plural-only nouns with no singular (e.g. "Leute", "Eltern"), keep baseForm equal to the input and set gender to "die".
 - "verbType": (only if partOfSpeech is "verb") exactly one of "strong", "weak" or "mixed". For other parts of speech, set to null.
 - "infinitive": (only if partOfSpeech is "verb") the infinitive form. For other parts of speech, set to null.
 - "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense. For other parts of speech, set to null.
@@ -688,6 +690,8 @@ Please re-analyze the word "${german}" with this hint in mind. Respond with JSON
 - "pastParticiple": (only if partOfSpeech is "verb") the past participle (Partizip II) form. For other parts of speech, set to null.
 - "pluralForm": (only if partOfSpeech is "noun") the plural form. For other parts of speech, set to null.
 - "pluralFormation": (only if partOfSpeech is "noun") the plural formation pattern. For other parts of speech, set to null.
+
+If the input is a plural noun form (e.g. "Wälder" → "Wald", "Handschuhe" → "Handschuh"), classify it as a noun with "baseForm" set to the singular dictionary form, "gender" to the article of the singular form, "pluralForm" to the plural, and translations matching the baseForm ("Wälder" → "лес", never "леса"). For plural-only nouns ("Leute", "Eltern"), keep baseForm equal to the input and set gender to "die".
 
 IMPORTANT: Consider the user's hint carefully. If the hint says "it's a verb" or similar, prioritize classifying it as a verb with appropriate verb fields.
 
@@ -817,7 +821,7 @@ Word: "${german}"`;
 - "partOfSpeech": the part of speech, exactly one of "noun", "verb", "adjective", "adverb", "pronoun", "preposition", "conjunction", "interjection", "numeral" or "phrase"
 - "gender": the grammatical gender, exactly one of "der", "die" or "das", OR null if the word is NOT a noun
 - "level": the CEFR difficulty level of the word, exactly one of "A1", "A2", "B1", "B2" or "C1"
-- "baseForm": the dictionary/base form of the word. For declined/inflected forms (e.g. "seine" → "sein", "gute" → "gut", "hat" → "haben", "schmeckt" → "schmecken"), provide the base form. If the input is already the base form, set this to the same value as the input word.
+- "baseForm": the dictionary/base form of the word. For declined/inflected forms (e.g. "seine" → "sein", "gute" → "gut", "hat" → "haben", "schmeckt" → "schmecken"), provide the base form. For plural noun forms (e.g. "Wälder" → "Wald", "Handschuhe" → "Handschuh", "Häuser" → "Haus"), provide the SINGULAR dictionary form. If the input is already the base form, set this to the same value as the input word.
 - "verbType": (only if partOfSpeech is "verb") the verb conjugation type, exactly one of "strong", "weak" or "mixed". For other parts of speech, omit this field or set to null.
 - "infinitive": (only if partOfSpeech is "verb") the infinitive form of the verb, e.g. "schmecken" for "schmeckt", "sein" for "ist", "gehen" for "geht". For other parts of speech, omit.
 - "presentThirdPerson": (only if partOfSpeech is "verb") the 3rd person singular present tense form, e.g. "fliegt" for "fliegen", "ist" for "sein". For other parts of speech, omit.
@@ -836,6 +840,8 @@ Rules:
 - Common everyday words are typically A1-A2, less common words are B1-B2, specialized/formal words are C1.
 - If the input is not a recognizable German word, still provide your best guess for all fields.
 - IMPORTANT: If the input is a conjugated verb form (e.g. "schmeckt", "geht", "ist"), set "infinitive" to the infinitive form (e.g. "schmecken", "gehen", "sein").
+- IMPORTANT: If the input is a plural noun form (e.g. "Wälder", "Handschuhe", "Häuser", "Bäume"), set "baseForm" to the SINGULAR dictionary form (e.g. "Wald", "Handschuh", "Haus", "Baum"), "gender" to the article of that singular form, and "pluralForm" to the plural. For plural-only nouns ("Leute", "Eltern", "Geschwister"), keep "baseForm" equal to the input and set "gender" to "die".
+- IMPORTANT: "translationEn" and "translationRu" must translate the "baseForm" (dictionary form), NOT the inflected input: for "Wälder" → baseForm "Wald" → translationEn "forest", translationRu "лес" (never "forests"/"леса").
 
 Word: "${german}"`;
 
