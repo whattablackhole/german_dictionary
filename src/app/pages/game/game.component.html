@@ -175,33 +175,29 @@
               <button
                 class="dev-ai-btn"
                 mat-stroked-button
-                matTooltip="Let the AI infer corrected singular/plural forms"
-                [disabled]="devAiLoading() || devLoading()"
-                (click)="fixFormsWithAi()"
+                matTooltip="Let the AI fix the singular/plural forms and save them"
+                [disabled]="devLoading()"
+                (click)="aiFixAndReimport()"
               >
-                @if (devAiLoading()) {
+                @if (devLoading()) {
                   <mat-spinner diameter="16" />
                 } @else {
-                  AI
+                  AI Fix
                 }
               </button>
               <button
                 class="dev-save-btn"
                 mat-stroked-button
                 color="primary"
-                [disabled]="devLoading() || devAiLoading()"
-                (click)="reimportWord()"
+                [disabled]="devLoading()"
+                (click)="saveManualForms()"
               >
-                @if (devLoading()) {
-                  <mat-spinner diameter="16" />
-                } @else {
-                  Reimport
-                }
+                Save
               </button>
               <button
                 class="dev-cancel-btn"
                 mat-stroked-button
-                [disabled]="devLoading() || devAiLoading()"
+                [disabled]="devLoading()"
                 (click)="cancelDevPanel()"
               >
                 Cancel

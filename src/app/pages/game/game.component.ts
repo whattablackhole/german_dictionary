@@ -11,7 +11,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { WordService } from '../../services/word.service';
 import { SettingsService } from '../../services/settings.service';
 import { SpeechService } from '../../services/speech.service';
-import { AiService, AiSuggestion } from '../../services/ai.service';
+import { AiService } from '../../services/ai.service';
 import { Gender, PluralFormation, Word } from '../../models/word';
 
 /** Number of German words per session. */
@@ -117,7 +117,6 @@ export class GameComponent {
   readonly devSingularInput = signal('');
   readonly devPluralInput = signal('');
   readonly devLoading = signal(false);
-  readonly devAiLoading = signal(false);
   readonly devError = signal('');
   readonly devSuccess = signal(false);
 
@@ -184,21 +183,19 @@ export class GameComponent {
     this.devPanelOpen.set(true);
     this.devError.set('');
     this.devSuccess.set(false);
-    this.devAiLoading.set(false);
   }
 
   cancelDevPanel(): void {
     this.devPanelOpen.set(false);
     this.devError.set('');
     this.devSuccess.set(false);
-    this.devAiLoading.set(false);
   }
 
-  /** Asks the AI to infer corrected singular/plural forms and fills the fields,
-   *  so the user can review before re-importing. */
-  async fixFormsWithAi(): Promise<void> {
+  /** One-click AI fix: asks the AI to correct the singular/plural forms and
+   *  immediately saves them, along with the gender, translations and level. */
+  async aiFixAndReimport(): Promise<void> {
     const word = this.currentWord();
-    if (!word || this.devAiLoading() || this.devLoading()) return;
+    if (!word || this.devLoading()) return;
 
     const input = this.devSingularInput().trim() || word.german;
     if (!input) {
@@ -210,34 +207,44 @@ export class GameComponent {
       return;
     }
 
-    this.devAiLoading.set(true);
+    this.devLoading.set(true);
     this.devError.set('');
     this.devSuccess.set(false);
 
     try {
       const suggestion = await this.aiService.analyzeWord(input);
-      // Prefer the corrected singular; the AI returns the singular base form
-      // even when the analyzed input is a plural (e.g. "Handschuhe" → "Handschuh").
-      if (suggestion.baseForm?.trim()) {
-        this.devSingularInput.set(suggestion.baseForm.trim());
-      }
-      if (suggestion.pluralForm?.trim()) {
-        this.devPluralInput.set(suggestion.pluralForm.trim());
-      }
+      // The AI returns the singular base form even for plural inputs
+      // (e.g. "Handschuhe" → "Handschuh"), plus the correct plural.
+      const singular = suggestion.baseForm?.trim() || input;
+      const plural = suggestion.pluralForm?.trim() || this.devPluralInput().trim();
+
+      // Reflect the corrected forms back into the form.
+      this.devSingularInput.set(singular);
+      this.devPluralInput.set(plural);
+
+      this.saveWord({
+        german: singular,
+        pluralForm: plural,
+        gender: suggestion.gender,
+        translationEn: suggestion.translationEn,
+        translationRu: suggestion.translationRu,
+        level: suggestion.level,
+        pluralFormation: suggestion.pluralFormation as PluralFormation | undefined,
+      });
     } catch (err) {
       this.devError.set(
         err instanceof Error ? err.message : 'AI analysis failed.'
       );
     } finally {
-      this.devAiLoading.set(false);
+      this.devLoading.set(false);
     }
   }
 
-  /** Re-imports the current word: user keeps the corrected singular/plural forms,
-   *  then the AI re-classifies gender/translations when available. */
-  async reimportWord(): Promise<void> {
+  /** Manual save: applies exactly the forms the user typed, without calling the AI. */
+  saveManualForms(): void {
     const word = this.currentWord();
-    if (!word || this.devLoading() || this.devAiLoading()) return;
+    if (!word || this.devLoading()) return;
+
     const singular = this.devSingularInput().trim();
     const plural = this.devPluralInput().trim();
     if (!singular) {
@@ -245,47 +252,43 @@ export class GameComponent {
       return;
     }
 
-    this.devLoading.set(true);
     this.devError.set('');
     this.devSuccess.set(false);
+    this.saveWord({ german: singular, pluralForm: plural || undefined });
+  }
 
-    let suggested: AiSuggestion | null = null;
-    let aiFailed = false;
-    if (this.aiService.hasApiKey()) {
-      try {
-        suggested = await this.aiService.analyzeWord(singular);
-      } catch {
-        aiFailed = true;
-      }
-    }
+  /** Shared save: merges AI values (or keeps existing when undefined) into the
+   *  current word, persists it and refreshes the card so it can be re-answered. */
+  private saveWord(values: {
+    german: string;
+    pluralForm?: string;
+    gender?: Gender | null;
+    translationEn?: string;
+    translationRu?: string;
+    level?: Word['level'];
+    pluralFormation?: PluralFormation;
+  }): void {
+    const word = this.currentWord();
+    if (!word) return;
 
     const existing = this.wordService.getWords().find((w) => w.id === word.id);
     const source = existing ?? word;
 
-    const updated: Partial<Omit<Word, 'id' | 'createdAt'>> = {
-      german: singular,
-      pluralForm: plural || undefined,
+    this.wordService.updateWord(word.id, {
+      german: values.german,
+      pluralForm: values.pluralForm || undefined,
       partOfSpeech: 'noun',
-      gender: suggested?.gender ?? source.gender,
-      translationEn: suggested?.translationEn ?? source.translationEn,
-      translationRu: suggested?.translationRu ?? source.translationRu,
-      level: suggested?.level ?? source.level,
+      gender: values.gender ?? source.gender,
+      translationEn: values.translationEn || source.translationEn,
+      translationRu: values.translationRu || source.translationRu,
+      level: values.level ?? source.level,
       pluralFormation:
-        (suggested?.pluralFormation as Word['pluralFormation']) ??
-        this.guessPluralFormation(singular, plural) ??
+        values.pluralFormation ??
+        this.guessPluralFormation(values.german, values.pluralForm ?? '') ??
         source.pluralFormation,
-    };
-
-    this.wordService.updateWord(word.id, updated);
+    });
     this.refreshCurrentWord();
-
-    this.devLoading.set(false);
     this.devSuccess.set(true);
-    if (aiFailed) {
-      this.devError.set('AI re-classification failed — saved without it.');
-    } else if (!this.aiService.hasApiKey()) {
-      this.devError.set('No API key — saved without AI re-classification.');
-    }
   }
 
   private refreshCurrentWord(): void {
