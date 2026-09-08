@@ -269,6 +269,21 @@ describe('isVerbFormLike', () => {
     expect(isVerbFormLike('hatte', 'haben')).toBe(true);
   });
 
+  it('recognizes the geminated participle of vowel-initial verbs without refs (gegessen)', () => {
+    expect(isVerbFormLike('gegessen', 'essen')).toBe(true);
+    expect(
+      isVerbFormLike('gegessen', 'essen', { presentThirdPerson: 'isst' })
+    ).toBe(true);
+    // Unrelated verbs keep being rejected:
+    expect(isVerbFormLike('gegessen', 'gehen')).toBe(false);
+    expect(isVerbFormLike('gegessen', 'genießen')).toBe(false);
+  });
+
+  it('still requires the simplePast reference for suppletive past stems (aß)', () => {
+    expect(isVerbFormLike('aß', 'essen')).toBe(false);
+    expect(isVerbFormLike('aßt', 'essen', { simplePast: 'aß' })).toBe(true);
+  });
+
   it('rejects a sein-auxiliary blank on its own (the participle carries the drill)', () => {
     expect(isVerbFormLike('ist', 'werden', werdenRefs)).toBe(false);
     expect(isVerbFormLike('sind', 'werden', werdenRefs)).toBe(false);

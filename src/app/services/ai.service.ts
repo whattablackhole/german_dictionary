@@ -3112,7 +3112,22 @@ Rules:
     // Inflected forms rarely contain the infinitive string (e.g.
     // "werde"/"wirst"/"wurde"/"geworden" for "werden"), so instead of requiring
     // the literal infinitive we compare against the reference inflections.
-    if (!blanks.some((w) => isVerbFormLike(w, verb, referenceForms))) return null;
+    // When the dictionary record lacks reference forms the heuristics cannot
+    // recognize irregular shapes ("aß", "gegessen", "ging") — dropping those
+    // drills would silently gut whole tenses, so the anchor is only enforced
+    // when the references are complete. The substring + leak checks below
+    // still guard against unrelated sentences.
+    const refsComplete = Boolean(
+      referenceForms?.presentThirdPerson &&
+        referenceForms?.simplePast &&
+        referenceForms?.pastParticiple
+    );
+    if (
+      refsComplete &&
+      !blanks.some((w) => isVerbFormLike(w, verb, referenceForms))
+    ) {
+      return null;
+    }
 
     // Reject homograph abuse: the infinitive must only appear inside the
     // blanks, never as a different word elsewhere in the sentence.

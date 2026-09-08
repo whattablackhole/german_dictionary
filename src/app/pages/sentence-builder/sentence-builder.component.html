@@ -99,6 +99,80 @@
               </div>
             </details>
           }
+
+          @if (pattern.daCompounds; as compounds) {
+            <details class="verb-table-details">
+              <summary>All da-Compounds ({{ compounds.length }}) — полный список</summary>
+              <div class="verb-table-wrapper">
+                <table class="verb-table compound-table">
+                  <thead>
+                    <tr>
+                      <th>Präposition</th>
+                      <th>da-Compound</th>
+                      <th>Bildung</th>
+                      <th>Translation</th>
+                      <th>Freq.</th>
+                      <th>Example</th>
+                      <th>Typische Verben</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (c of compounds; track c.preposition) {
+                      <tr [class.compound-absent-row]="c.exists === false">
+                        <td class="compound-prep">{{ c.preposition }}</td>
+                        <td class="compound-word">
+                          @if (c.exists !== false) {
+                            <button
+                              mat-icon-button
+                              class="audio-btn"
+                              (click)="playVerbAudio(c.compound)"
+                              matTooltip="Play pronunciation"
+                              aria-label="Play {{ c.compound }}"
+                            >
+                              <mat-icon>volume_up</mat-icon>
+                            </button>
+                            <span>{{ c.compound }}</span>
+                          } @else {
+                            <span class="compound-absent">— нет формы —</span>
+                          }
+                        </td>
+                        <td class="compound-formation">{{ c.formation }}</td>
+                        <td class="compound-translation">
+                          <span class="verb-en">{{ c.translationEn }}</span>
+                          <span class="verb-ru">{{ c.translationRu }}</span>
+                        </td>
+                        <td class="compound-freq">
+                          @if (c.frequency > 0) {
+                            <span class="freq-stars">{{ '★'.repeat(c.frequency) }}</span>
+                          } @else {
+                            <span>—</span>
+                          }
+                        </td>
+                        <td class="compound-example">
+                          <span class="example-de">{{ c.example }}</span>
+                          <span class="example-ru">{{ c.exampleRu }}</span>
+                        </td>
+                        <td class="compound-verbs">
+                          @for (v of c.verbs; track v) {
+                            <span class="verb-chip">{{ v }}</span>
+                          } @empty {
+                            <span class="compound-absent">—</span>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <ul class="compound-notes">
+                @for (c of compounds; track c.preposition) {
+                  @if (c.note) {
+                    <li><strong>{{ c.exists === false ? c.preposition : c.compound }}:</strong> {{ c.note }}</li>
+                  }
+                }
+              </ul>
+            </details>
+          }
         </details>
       </div>
 

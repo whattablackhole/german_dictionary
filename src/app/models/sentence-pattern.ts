@@ -1,4 +1,5 @@
 import { SeparableVerbData, SEPARABLE_VERBS } from '../data/separable-verbs';
+import { DaCompoundData, DA_COMPOUNDS } from '../data/da-compounds';
 
 export interface SentencePattern {
   id: string;
@@ -11,6 +12,8 @@ export interface SentencePattern {
   keywords: string[]; // frequently used words for this pattern (weil, dass, etc.)
   /** Optional list of separable verbs to display in the tips section */
   separableVerbs?: SeparableVerbData[];
+  /** Optional full list of da-compounds (pronominal adverbs) to display in the tips section */
+  daCompounds?: DaCompoundData[];
 }
 
 export interface PatternSubmission {
@@ -279,15 +282,23 @@ export const SENTENCE_PATTERNS: SentencePattern[] = [
     id: 'da-compounds',
     name: 'da-Compounds (damit, dafür, darauf)',
     level: 18,
-    description: 'Pronominal adverbs that replace "preposition + noun" for things or whole ideas.',
-    wordOrderDiagram: 'Verb + da-Compound (damit/darauf/daran) + ...',
-    tips: 'When a verb takes a preposition (warten auf, sich interessieren für, denken an), for THINGS you replace "preposition + das" with a da-compound: auf das → darauf, für das → dafür, daran, damit. For people you keep it separate: "Ich warte auf dich." "Ich warte darauf."',
+    description: 'Pronominal adverbs: da(r) + preposition. They replace "preposition + thing/idea" after verbs with fixed prepositions.',
+    wordOrderDiagram: 'Subject + Verb + da-Compound (daran/darauf/damit) + ...',
+    tips: 'FORMATION: da + preposition. If the preposition starts with a VOWEL (an, auf, aus, in, über, um), an -r- is inserted: da → dar- → daran, darauf, daraus, darin, darüber, darum. All others simply take da-: dabei, dadurch, dafür, dagegen, dahinter, damit, danach, daneben, darunter, davon, davor, dazu, dazwischen. The MEANING of the compound always keeps the meaning of its preposition. USE: with verbs that take a fixed preposition (warten auf, denken an, sich interessieren für) you replace "preposition + thing/idea" with the da-compound; for PEOPLE you keep preposition + pronoun: "Ich warte auf dich." vs "Ich warte darauf." QUESTIONS use wo-compounds: "Woran denkst du? — Daran." EMPHATIC variant with hi-: hiermit, hiervon, hierdurch. EXCEPTIONS: durch → dadurch DOES exist ("dadurch" = thereby / thanks to that, очень частотно!); ohne and seit have NO da-form — say "ohne das/es" and "seitdem" instead.',
     examples: [
       'Ich warte darauf.',
-      'Sie interessiert sich dafür.',
       'Er denkt oft daran.',
+      'Sie interessiert sich dafür.',
+      'Was willst du damit sagen?',
+      'Ich habe nichts dagegen.',
+      'Wir sprechen gerade darüber.',
+      'Dadurch habe ich viel Zeit gespart.',
+      'Ich habe Angst davor.',
+      'Was sagst du dazu?',
+      'Woran denkst du? — Ich denke daran.',
     ],
-    keywords: ['darauf', 'damit', 'dafür', 'darüber', 'daran', 'darum', 'warten', 'interessieren', 'denken', 'sprechen'],
+    keywords: ['darauf', 'damit', 'dafür', 'darüber', 'daran', 'darum', 'dadurch', 'davon', 'dazu', 'dabei', 'daraus', 'danach', 'davor', 'darunter', 'dazwischen', 'dahinter', 'daneben', 'darin', 'warten', 'interessieren', 'denken', 'sprechen'],
+    daCompounds: DA_COMPOUNDS,
   },
   {
     id: 'konjunktiv-ii',

@@ -365,7 +365,17 @@ export function isVerbFormLike(
     .toLowerCase()
     .split(/\s+/);
 
-  return known.some((form) => verbFormsMatch(form, b));
+  if (known.some((form) => verbFormsMatch(form, b))) return true;
+
+  // Vowel-initial verbs geminate the participle g: essen → gegessen. The
+  // doubled "g" cannot be derived by prefix/ending stripping, so accept
+  // "geg" + infinitive directly — otherwise such participles are only
+  // recognized when the dictionary record supplies the participle itself.
+  if (b.startsWith('geg') && /^[aeiouäöü]/.test(v)) {
+    return verbFormsMatch(v, b.slice(3));
+  }
+
+  return false;
 }
 
 /**
