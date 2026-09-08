@@ -127,11 +127,72 @@
       </div>
 
       <div class="word-card">
+        @if (devMode()) {
+          <button
+            class="dev-edit-btn"
+            aria-label="Re-import this word"
+            matTooltip="Re-import word"
+            matTooltipPosition="above"
+            (click)="devPanelOpen() ? cancelDevPanel() : openDevPanel()"
+          >
+            <mat-icon>{{ devPanelOpen() ? 'close' : 'construction' }}</mat-icon>
+          </button>
+        }
         <span class="word-german">{{ currentWord()?.german }}</span>
         @if (selectedGender() !== null) {
           <span class="word-translation">
             {{ currentWord() ? getTranslation(currentWord()!) : '' }}
           </span>
+        }
+        @if (devMode() && devPanelOpen()) {
+          <div class="dev-panel">
+            <div class="dev-panel-title">Re-import word</div>
+            <div class="dev-inputs">
+              <mat-form-field appearance="outline" class="dev-field">
+                <mat-label>Singular (base)</mat-label>
+                <input matInput [(ngModel)]="devSingularInput" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="dev-field">
+                <mat-label>Plural</mat-label>
+                <input matInput [(ngModel)]="devPluralInput" />
+              </mat-form-field>
+            </div>
+            @if (devError()) {
+              <div class="dev-error">
+                <mat-icon color="warn">info</mat-icon>
+                <span>{{ devError() }}</span>
+              </div>
+            }
+            <div class="dev-actions">
+              <button
+                class="dev-save-btn"
+                mat-stroked-button
+                color="primary"
+                [disabled]="devLoading()"
+                (click)="reimportWord()"
+              >
+                @if (devLoading()) {
+                  <mat-spinner diameter="16" />
+                } @else {
+                  Reimport
+                }
+              </button>
+              <button
+                class="dev-cancel-btn"
+                mat-stroked-button
+                [disabled]="devLoading()"
+                (click)="cancelDevPanel()"
+              >
+                Cancel
+              </button>
+              @if (devSuccess()) {
+                <span class="dev-saved">
+                  <mat-icon>check_circle</mat-icon>
+                  Saved
+                </span>
+              }
+            </div>
+          </div>
         }
         <button
           class="speak-button"

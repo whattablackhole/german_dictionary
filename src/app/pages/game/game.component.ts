@@ -1,14 +1,18 @@
 import { Component, computed, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { WordService } from '../../services/word.service';
 import { SettingsService } from '../../services/settings.service';
 import { SpeechService } from '../../services/speech.service';
-import { Gender, Word } from '../../models/word';
+import { AiService, AiSuggestion } from '../../services/ai.service';
+import { Gender, PluralFormation, Word } from '../../models/word';
 
 /** Number of German words per session. */
 const SESSION_SIZE = 50;
@@ -61,12 +65,15 @@ interface PersistedGameState {
 @Component({
   selector: 'app-game',
   imports: [
+    FormsModule,
     MatIconModule,
     MatFormFieldModule,
     MatInputModule,
     MatDatepickerModule,
     MatNativeDateModule,
     MatButtonModule,
+    MatTooltipModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './game.component.html',
   styleUrl: './game.component.scss',
@@ -104,6 +111,15 @@ export class GameComponent {
   private readonly nextStart = signal(0);
   private readonly sessions = signal<GameSession[]>([]);
 
+  // ── Dev-mode word re-import ──
+  readonly devMode = computed(() => this.settingsService.devMode());
+  readonly devPanelOpen = signal(false);
+  readonly devSingularInput = signal('');
+  readonly devPluralInput = signal('');
+  readonly devLoading = signal(false);
+  readonly devError = signal('');
+  readonly devSuccess = signal(false);
+
   readonly currentWord = computed<Word | null>(() => {
     const q = this.queue();
     const i = this.currentIndex();
@@ -134,7 +150,8 @@ export class GameComponent {
   constructor(
     private readonly wordService: WordService,
     private readonly settingsService: SettingsService,
-    private readonly speechService: SpeechService
+    private readonly speechService: SpeechService,
+    private readonly aiService: AiService
   ) {
     this.loadState();
   }
@@ -153,6 +170,131 @@ export class GameComponent {
     if (word) {
       this.speechService.speak(`${word.gender} ${word.german}`);
     }
+  }
+
+  // ── Dev-mode word re-import ──
+
+  /** Opens the singular/plural correction panel, pre-filled with the current word. */
+  openDevPanel(): void {
+    const word = this.currentWord();
+    if (!word) return;
+    this.devSingularInput.set(word.german);
+    this.devPluralInput.set(word.pluralForm ?? '');
+    this.devPanelOpen.set(true);
+    this.devError.set('');
+    this.devSuccess.set(false);
+  }
+
+  cancelDevPanel(): void {
+    this.devPanelOpen.set(false);
+    this.devError.set('');
+    this.devSuccess.set(false);
+  }
+
+  /** Re-imports the current word: user keeps the corrected singular/plural forms,
+   *  then the AI re-classifies gender/translations when available. */
+  async reimportWord(): Promise<void> {
+    const word = this.currentWord();
+    if (!word || this.devLoading()) return;
+    const singular = this.devSingularInput().trim();
+    const plural = this.devPluralInput().trim();
+    if (!singular) {
+      this.devError.set('Singular form is required.');
+      return;
+    }
+
+    this.devLoading.set(true);
+    this.devError.set('');
+    this.devSuccess.set(false);
+
+    let suggested: AiSuggestion | null = null;
+    let aiFailed = false;
+    if (this.aiService.hasApiKey()) {
+      try {
+        suggested = await this.aiService.analyzeWord(singular);
+      } catch {
+        aiFailed = true;
+      }
+    }
+
+    const existing = this.wordService.getWords().find((w) => w.id === word.id);
+    const source = existing ?? word;
+
+    const updated: Partial<Omit<Word, 'id' | 'createdAt'>> = {
+      german: singular,
+      pluralForm: plural || undefined,
+      partOfSpeech: 'noun',
+      gender: suggested?.gender ?? source.gender,
+      translationEn: suggested?.translationEn ?? source.translationEn,
+      translationRu: suggested?.translationRu ?? source.translationRu,
+      level: suggested?.level ?? source.level,
+      pluralFormation:
+        (suggested?.pluralFormation as Word['pluralFormation']) ??
+        this.guessPluralFormation(singular, plural) ??
+        source.pluralFormation,
+    };
+
+    this.wordService.updateWord(word.id, updated);
+    this.refreshCurrentWord();
+
+    this.devLoading.set(false);
+    this.devSuccess.set(true);
+    if (aiFailed) {
+      this.devError.set('AI re-classification failed — saved without it.');
+    } else if (!this.aiService.hasApiKey()) {
+      this.devError.set('No API key — saved without AI re-classification.');
+    }
+  }
+
+  private refreshCurrentWord(): void {
+    const word = this.currentWord();
+    if (!word) return;
+
+    const fresh = this.wordService.getWords().find((w) => w.id === word.id);
+    if (!fresh) return;
+
+    const i = this.currentIndex();
+    this.queue.update((q) => {
+      if (i < q.length && q[i].id === fresh.id) {
+        q[i] = fresh;
+      }
+      return [...q];
+    });
+
+    // Drop any already-recorded result for the corrected word so the user
+    // re-answers the fixed card immediately.
+    const id = word.id;
+    this.currentResults.update((results) =>
+      results.filter((r) => r.word.id !== id)
+    );
+    this.selectedGender.set(null);
+    this.saveState();
+  }
+
+  /** Small heuristic fallback for the plural formation pattern when the AI
+   *  does not supply one. Intended for dev use only. */
+  private guessPluralFormation(
+    singular: string,
+    plural: string
+  ): PluralFormation | undefined {
+    if (!singular || !plural) return undefined;
+    const umlaut = /[äöü]/.test(plural.toLowerCase());
+    const base = (w: string) =>
+      w
+        .toLowerCase()
+        .replace('ä', 'a')
+        .replace('ö', 'o')
+        .replace('ü', 'u');
+    const s = base(singular);
+    const p = base(plural);
+
+    if (p === s) return umlaut ? 'umlaut' : '-';
+    if (p === s + 'e') return umlaut ? 'umlaut + -e' : '-e';
+    if (p === s + 'er') return umlaut ? 'umlaut + -er' : '-er';
+    if (p === s + 'en') return umlaut ? 'umlaut + -en' : '-en';
+    if (p === s + 'n') return '-n';
+    if (p === s + 's') return '-s';
+    return undefined;
   }
 
   // ── Session flow ──

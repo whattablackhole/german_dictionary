@@ -19,6 +19,7 @@ const STORY_ONLY_MC_KEY = 'german-dictionary-story-only-mc-exercises';
 const CLOZE_DENSITY_KEY = 'german-dictionary-cloze-density';
 const DIALOG_MIN_SENTENCES_KEY = 'german-dictionary-dialog-min-sentences';
 const DIALOG_MAX_SENTENCES_KEY = 'german-dictionary-dialog-max-sentences';
+const DEV_MODE_KEY = 'german-dictionary-dev-mode';
 
 export type TtsEngine = 'browser' | 'openai';
 export type LookupModifier = 'alt' | 'ctrl' | 'meta' | 'shift';
@@ -317,6 +318,16 @@ export class SettingsService {
   setStoryOnlyMcExercises(enabled: boolean): void {
     this.storyOnlyMcExercises.set(enabled);
     this.safeWrite(STORY_ONLY_MC_KEY, String(enabled));
+  }
+
+  /** Whether developer/debug features are enabled (e.g. word re-import in the Gender Game). */
+  readonly devMode = signal<boolean>(
+    localStorage.getItem(DEV_MODE_KEY) === 'true'
+  );
+
+  setDevMode(enabled: boolean): void {
+    this.devMode.set(enabled);
+    this.safeWrite(DEV_MODE_KEY, String(enabled));
   }
 
   setImageStyle(style: string): void {

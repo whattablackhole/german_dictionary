@@ -79,6 +79,20 @@
   </mat-card>
 
   <mat-card class="settings-card">
+    <h2 class="settings-title">Developer Mode</h2>
+    <p class="settings-description">
+      Enables developer-only tools, such as re-importing a word with corrected
+      singular/plural forms directly from the Gender Game card.
+    </p>
+    <mat-slide-toggle
+      [checked]="settingsService.devMode()"
+      (toggleChange)="settingsService.setDevMode(!settingsService.devMode())"
+    >
+      Developer Mode
+    </mat-slide-toggle>
+  </mat-card>
+
+  <mat-card class="settings-card">
     <h2 class="settings-title">Word Lookup in Stories</h2>
     <p class="settings-description">
       Choose which modifier key to hold while clicking a word in story lookup mode to look it up.
