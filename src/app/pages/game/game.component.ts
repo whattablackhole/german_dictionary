@@ -117,6 +117,7 @@ export class GameComponent {
   readonly devSingularInput = signal('');
   readonly devPluralInput = signal('');
   readonly devLoading = signal(false);
+  readonly devAiLoading = signal(false);
   readonly devError = signal('');
   readonly devSuccess = signal(false);
 
@@ -183,19 +184,60 @@ export class GameComponent {
     this.devPanelOpen.set(true);
     this.devError.set('');
     this.devSuccess.set(false);
+    this.devAiLoading.set(false);
   }
 
   cancelDevPanel(): void {
     this.devPanelOpen.set(false);
     this.devError.set('');
     this.devSuccess.set(false);
+    this.devAiLoading.set(false);
+  }
+
+  /** Asks the AI to infer corrected singular/plural forms and fills the fields,
+   *  so the user can review before re-importing. */
+  async fixFormsWithAi(): Promise<void> {
+    const word = this.currentWord();
+    if (!word || this.devAiLoading() || this.devLoading()) return;
+
+    const input = this.devSingularInput().trim() || word.german;
+    if (!input) {
+      this.devError.set('Enter a word first.');
+      return;
+    }
+    if (!this.aiService.hasApiKey()) {
+      this.devError.set('No API key set. Add your OpenRouter API key in Settings.');
+      return;
+    }
+
+    this.devAiLoading.set(true);
+    this.devError.set('');
+    this.devSuccess.set(false);
+
+    try {
+      const suggestion = await this.aiService.analyzeWord(input);
+      // Prefer the corrected singular; the AI returns the singular base form
+      // even when the analyzed input is a plural (e.g. "Handschuhe" → "Handschuh").
+      if (suggestion.baseForm?.trim()) {
+        this.devSingularInput.set(suggestion.baseForm.trim());
+      }
+      if (suggestion.pluralForm?.trim()) {
+        this.devPluralInput.set(suggestion.pluralForm.trim());
+      }
+    } catch (err) {
+      this.devError.set(
+        err instanceof Error ? err.message : 'AI analysis failed.'
+      );
+    } finally {
+      this.devAiLoading.set(false);
+    }
   }
 
   /** Re-imports the current word: user keeps the corrected singular/plural forms,
    *  then the AI re-classifies gender/translations when available. */
   async reimportWord(): Promise<void> {
     const word = this.currentWord();
-    if (!word || this.devLoading()) return;
+    if (!word || this.devLoading() || this.devAiLoading()) return;
     const singular = this.devSingularInput().trim();
     const plural = this.devPluralInput().trim();
     if (!singular) {
