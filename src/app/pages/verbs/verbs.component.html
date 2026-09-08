@@ -290,6 +290,32 @@
         }
       </div>
       <div class="controls-group">
+        <span class="controls-label">Passiv</span>
+        <mat-chip-set>
+          <button
+            mat-chip
+            [class.selected]="selectedPassiveTenses().length === 0"
+            (click)="clearPassiveTenseFilters()"
+          >
+            Off
+          </button>
+          @for (t of passiveTenses; track t) {
+            <button
+              mat-chip
+              [class.selected]="selectedPassiveTenses().includes(t)"
+              (click)="togglePassiveTense(t)"
+            >
+              {{ tenseLabel(t) }}
+            </button>
+          }
+        </mat-chip-set>
+        @if (selectedPassiveTenses().length > 0) {
+          <span class="filter-note">
+            passive drills: {{ selectedPassiveTenses().map((t) => tenseLabel(t)).join(', ') }}
+          </span>
+        }
+      </div>
+      <div class="controls-group">
         <span class="controls-label">Sentences</span>
         <mat-chip-set>
           @for (count of [3, 5, 8]; track count) {

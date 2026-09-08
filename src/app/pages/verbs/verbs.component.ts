@@ -26,6 +26,7 @@ import { Word } from '../../models/word';
 import {
   GERMAN_PERSONS,
   GERMAN_TENSES,
+  GERMAN_PASSIVE_TENSES,
   GERMAN_TENSE_LABELS,
   normalizeGermanText,
   buildBlankSegments,
@@ -39,7 +40,7 @@ import {
 
 /**
  * Most recent unique person × tense combos sent to the AI as "avoid" context
- * for unfiltered drills (6 persons × 6 tenses = 36 possible combos).
+ * for unfiltered drills (6 persons × 6 active tenses + 4 passive tenses combos).
  */
 const RECENT_SLOT_CONTEXT_MAX = 12;
 
@@ -196,8 +197,11 @@ export class VerbsComponent {
   readonly lazyLoading = signal(false);
   /** Selected persons; empty selection means "all". */
   readonly selectedPersons = signal<VerbTrainerPerson[]>([]);
-  /** Selected tenses; empty selection means "all". */
+  /** Selected active-voice tenses; empty selection means "all active tenses". */
   readonly selectedTenses = signal<VerbTrainerTense[]>([]);
+  /** Selected passive tenses; empty selection means passive drills are OFF. */
+  readonly selectedPassiveTenses = signal<VerbTrainerTense[]>([]);
+  readonly passiveTenses = GERMAN_PASSIVE_TENSES;
   readonly sentenceCount = signal(5);
   readonly generatingSentences = signal(false);
   readonly drillSentences = signal<DrillSentence[]>([]);
@@ -248,7 +252,11 @@ export class VerbsComponent {
     person: VerbTrainerPerson;
     tense: VerbTrainerTense;
   }> {
-    if (this.selectedPersons().length > 0 || this.selectedTenses().length > 0) {
+    if (
+      this.selectedPersons().length > 0 ||
+      this.selectedTenses().length > 0 ||
+      this.selectedPassiveTenses().length > 0
+    ) {
       return [];
     }
     const verb = this.infinitive();
@@ -328,6 +336,18 @@ export class VerbsComponent {
     this.resetDrill();
   }
 
+  togglePassiveTense(t: VerbTrainerTense): void {
+    this.selectedPassiveTenses.update((list) =>
+      list.includes(t) ? list.filter((x) => x !== t) : [...list, t]
+    );
+    this.resetDrill();
+  }
+
+  clearPassiveTenseFilters(): void {
+    this.selectedPassiveTenses.set([]);
+    this.resetDrill();
+  }
+
   setSentenceCount(count: number): void {
     this.sentenceCount.set(count);
     this.resetDrill();
@@ -357,6 +377,12 @@ export class VerbsComponent {
       if (!word) {
         throw new Error('Add the verb to the dictionary first (AI key needed).');
       }
+      // Passive drills are a separate opt-in filter: they are only sent to the
+      // AI when at least one passive tense chip is selected.
+      const allowedTenses = [
+        ...this.selectedTenses(),
+        ...this.selectedPassiveTenses(),
+      ];
       const generated = await this.aiService.generateVerbSentences(
         verb,
         {
@@ -364,7 +390,7 @@ export class VerbsComponent {
           translationRu: word.translationRu,
         },
         this.selectedPersons(),
-        this.selectedTenses(),
+        allowedTenses,
         this.sentenceCount(),
         {
           presentThirdPerson: word.presentThirdPerson,

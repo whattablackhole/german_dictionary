@@ -23,7 +23,7 @@ export const GERMAN_PERSONS = [
   'sie',
 ] as const;
 
-/** All finite tenses covered by the verb trainer. */
+/** Active-voice finite tenses covered by the verb trainer by default. */
 export const GERMAN_TENSES = [
   'präsens',
   'präteritum',
@@ -34,9 +34,28 @@ export const GERMAN_TENSES = [
 ] as const;
 
 export type GermanPerson = (typeof GERMAN_PERSONS)[number];
-export type GermanTense = (typeof GERMAN_TENSES)[number];
+export type GermanActiveTense = (typeof GERMAN_TENSES)[number];
 
-/** Human-readable labels for the tense chips. */
+/**
+ * Passive-voice tenses (Vorgangspassiv), trained as a separate opt-in group:
+ *  - passiv präsens:         werden + Partizip II        ("Die Schuhe werden verkauft.")
+ *  - passiv präteritum:      wurden + Partizip II        ("Die Schuhe wurden verkauft.")
+ *  - passiv perfekt:         sein + Partizip II + worden ("Die Schuhe sind verkauft worden.")
+ *  - passiv plusquamperfekt: sein(Prät.) + Partizip II + worden ("Die Schuhe waren verkauft worden.")
+ */
+export const GERMAN_PASSIVE_TENSES = [
+  'passiv präsens',
+  'passiv präteritum',
+  'passiv perfekt',
+  'passiv plusquamperfekt',
+] as const;
+
+export type GermanPassiveTense = (typeof GERMAN_PASSIVE_TENSES)[number];
+
+/** Any verb-trainer tense slot: active or passive. */
+export type GermanTense = GermanActiveTense | GermanPassiveTense;
+
+/** Human-readable labels for the tense chips (active and passive). */
 export const GERMAN_TENSE_LABELS: Record<GermanTense, string> = {
   präsens: 'Präsens',
   präteritum: 'Präteritum',
@@ -44,6 +63,10 @@ export const GERMAN_TENSE_LABELS: Record<GermanTense, string> = {
   plusquamperfekt: 'Plusquamperfekt',
   'futur i': 'Futur I',
   'futur ii': 'Futur II',
+  'passiv präsens': 'Präsens Passiv',
+  'passiv präteritum': 'Präteritum Passiv',
+  'passiv perfekt': 'Perfekt Passiv',
+  'passiv plusquamperfekt': 'Plusquamperfekt Passiv',
 };
 
 export interface BlankSegment {

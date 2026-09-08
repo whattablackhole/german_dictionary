@@ -1,6 +1,7 @@
 import {
   GERMAN_PERSONS,
   GERMAN_TENSES,
+  GERMAN_PASSIVE_TENSES,
   GERMAN_TENSE_LABELS,
   buildBlankSegments,
   buildClozeSegments,
@@ -59,6 +60,24 @@ describe('German trainer constants', () => {
       expect(GERMAN_TENSE_LABELS[tense].length).toBeGreaterThan(0);
     }
     expect(GERMAN_TENSE_LABELS['plusquamperfekt']).toBe('Plusquamperfekt');
+  });
+
+  it('covers the four passive tenses as a separate opt-in group', () => {
+    expect(GERMAN_PASSIVE_TENSES).toEqual([
+      'passiv präsens',
+      'passiv präteritum',
+      'passiv perfekt',
+      'passiv plusquamperfekt',
+    ]);
+    // Passives must not leak into the default active-tense mix.
+    for (const passive of GERMAN_PASSIVE_TENSES) {
+      expect(GERMAN_TENSES).not.toContain(passive);
+      expect(GERMAN_TENSE_LABELS[passive].length).toBeGreaterThan(0);
+    }
+    expect(GERMAN_TENSE_LABELS['passiv präsens']).toBe('Präsens Passiv');
+    expect(GERMAN_TENSE_LABELS['passiv plusquamperfekt']).toBe(
+      'Plusquamperfekt Passiv'
+    );
   });
 });
 

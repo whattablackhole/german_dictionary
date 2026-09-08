@@ -289,6 +289,22 @@ function normalizeVerbTense(raw: unknown): string | null {
     'futur ii': 'futur ii',
     'futur 2': 'futur ii',
     'future perfect': 'futur ii',
+    // Passive voice (Vorgangspassiv) — separate opt-in tenses.
+    'passiv präsens': 'passiv präsens',
+    'passiv praesens': 'passiv präsens',
+    'passiv present': 'passiv präsens',
+    'präsens passiv': 'passiv präsens',
+    'praesens passiv': 'passiv präsens',
+    'passiv präteritum': 'passiv präteritum',
+    'passiv praeteritum': 'passiv präteritum',
+    'passiv imperfekt': 'passiv präteritum',
+    'präteritum passiv': 'passiv präteritum',
+    'passiv perfekt': 'passiv perfekt',
+    'passiv perfect': 'passiv perfekt',
+    'perfekt passiv': 'passiv perfekt',
+    'passiv plusquamperfekt': 'passiv plusquamperfekt',
+    'passiv pluperfect': 'passiv plusquamperfekt',
+    'plusquamperfekt passiv': 'passiv plusquamperfekt',
   };
   return aliases[value] ?? null;
 }
@@ -2937,10 +2953,29 @@ Rules:
       persons.length > 0
         ? `Use ONLY these persons: ${persons.join(', ')}.`
         : 'Use all persons: ich, du, er/sie/es, wir, ihr, sie.';
+    // Passive tenses (opt-in via the separate "Passiv" filter) need their own
+    // blanking rules: werden/sein/worden belong to the blanked verb phrase.
+    const passiveAllowed = tenses.some((t) => t.startsWith('passiv'));
     const tenseInstruction =
       tenses.length > 0
         ? `Use ONLY these tenses: ${tenses.join(', ')}.`
         : 'Use all tenses: präsens, präteritum, perfekt, plusquamperfekt, futur i, futur ii.';
+    const passiveVoiceRule = passiveAllowed
+      ? `- For "passiv ..." tenses the sentence MUST be in the passive voice (Vorgangspassiv). Patterns: Präsens "werden + Partizip II" (Die Schuhe werden verkauft.), Präteritum "wurden + Partizip II" (Die Schuhe wurden verkauft.), Perfekt "sein + Partizip II + worden" (Die Schuhe sind verkauft worden.), Plusquamperfekt "sein-Präteritum + Partizip II + worden" (Die Schuhe waren verkauft worden.).\n`
+      : '';
+    const passiveBullets = passiveAllowed
+      ? `  * Passiv Präsens → TWO blanks: the werden-form ("werde/wirst/wird/werden/werdet/werden") and the Partizip II (e.g. "verkauft")
+  * Passiv Präteritum → TWO blanks: the wurden-form ("wurde/wurdest/wurde/wurden/wurdet/wurden") and the Partizip II
+  * Passiv Perfekt → THREE blanks: the Präsens sein-form ("bin/bist/ist/sind/seid/sind"), the Partizip II, and "worden"
+  * Passiv Plusquamperfekt → THREE blanks: the Präteritum sein-form ("war/warst/war/waren/wart/waren"), the Partizip II, and "worden"
+`
+      : '';
+    const mainVerbRule = passiveAllowed
+      ? `- CRITICAL: the sentence MUST use "${verb}" as its MAIN verb, conjugated in the requested person and tense — in "passiv ..." tenses it appears as its Partizip II within the passive verb phrase. The blanked words MUST be the verb phrase of "${verb}": its conjugated form(s) plus, for passive tenses, the passive auxiliary (werden/wurden or the sein-form + "worden"). It is FORBIDDEN to use any other verb as the sentence's main verb.`
+      : `- CRITICAL: the sentence MUST use "${verb}" as its MAIN verb, conjugated in the requested person and tense. The blanked words MUST be the conjugated form(s) of "${verb}" itself. It is FORBIDDEN to blank or use any other verb as the sentence's verb.`;
+    const tenseEnumLine = passiveAllowed
+      ? '"tense": exactly one of "präsens", "präteritum", "perfekt", "plusquamperfekt", "futur i", "futur ii", "passiv präsens", "passiv präteritum", "passiv perfekt", "passiv plusquamperfekt" (lowercase ids)'
+      : '"tense": exactly one of "präsens", "präteritum", "perfekt", "plusquamperfekt", "futur i", "futur ii" (lowercase ids)';
 
     // When no person or tense filter is active the student wants a broad mix,
     // so repeated "Generate" clicks must not keep re-practicing the same
@@ -2980,7 +3015,7 @@ ${personInstruction}
 ${tenseInstruction}
 ${avoidInstruction}
 - Vary the persons and tenses across the sentences and distribute them evenly over the allowed options.
-- CRITICAL: the sentence MUST use "${verb}" as its MAIN verb, conjugated in the requested person and tense. The blanked words MUST be the conjugated form(s) of "${verb}" itself. It is FORBIDDEN to blank or use any other verb as the sentence's verb.
+${passiveVoiceRule}${mainVerbRule}
 - CRITICAL: the word "${verb}" may also be a different word class in German (for example "einen" is the accusative article "a"). Use "${verb}" ONLY inside the blanks, as a real verb. It must NOT appear anywhere else in the sentence in any other function (article, pronoun, preposition, noun, adjective, etc.).
 ${referenceInstruction}
 Respond with JSON only (no markdown) as an object with a single key "sentences" containing an array of objects. Each object must have exactly these fields:
@@ -2991,9 +3026,9 @@ Respond with JSON only (no markdown) as an object with a single key "sentences" 
   * Perfekt / Plusquamperfekt → TWO blanks: the auxiliary (habe/hast/hat/haben/habt/haben or hatte/hattest/...) and the past participle (e.g. "angerufen")
   * Futur I → TWO blanks: "werde/wirst/wird/werden/werdet/werden" and the infinitive (e.g. "anrufen")
   * Futur II → THREE blanks: "werde/wirst/wird/...", the past participle, and "haben"
-  Each entry MUST be a verbatim substring of fullSentence (single word, no spaces), same case as in the sentence.
+${passiveBullets}  Each entry MUST be a verbatim substring of fullSentence (single word, no spaces), same case as in the sentence.
 - "person": exactly one of "ich", "du", "er/sie/es", "wir", "ihr", "sie"
-- "tense": exactly one of "präsens", "präteritum", "perfekt", "plusquamperfekt", "futur i", "futur ii" (lowercase ids)
+- ${tenseEnumLine}
 - "hintEn": a COMPLETE English translation of the full sentence, all words spelled out — the student uses it as a reference, so never leave the blanked verb out and never use "___" or any placeholder
 - "hintRu": a COMPLETE Russian translation of the full sentence, all words spelled out — the student uses it as a reference, so never leave the blanked verb out and never use "___" or any placeholder
 
