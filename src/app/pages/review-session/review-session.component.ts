@@ -5,8 +5,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import { Word, ExampleSentence } from '../../models/word';
+import { buildAnswerFields, normalizeAnswer, AnswerField } from '../../utils/answer-fields';
 import { SrsService, SrsGrade } from '../../services/srs.service';
 import { WordService } from '../../services/word.service';
 import { SettingsService } from '../../services/settings.service';
@@ -18,6 +20,7 @@ import { SentenceCacheService } from '../../services/sentence-cache.service';
 import { SentenceGenerationService } from '../../services/sentence-generation.service';
 
 type CardDirection = 'de-native' | 'native-de';
+type CardDirectionMode = 'de-native' | 'native-de' | 'both';
 
 interface SessionCard {
   word: Word;
@@ -35,7 +38,8 @@ interface SessionCard {
     MatButtonModule,
     MatProgressBarModule,
     MatProgressSpinnerModule,
-    MatSlideToggleModule,
+    MatFormFieldModule,
+    MatSelectModule,
   ],
   templateUrl: './review-session.component.html',
   styleUrl: './review-session.component.scss',
@@ -46,8 +50,14 @@ export class ReviewSessionComponent {
   readonly currentIndex = signal(0);
   readonly sessionFinished = signal(false);
   
-  /** Whether to include both directions (de->native and native->de) */
-  readonly bidirectional = signal(false);
+  /** Which card direction(s) to include in the session. */
+  readonly directionMode = signal<CardDirectionMode>('de-native');
+
+  // Typed-answer state (Native → German production practice)
+  readonly answerFields = signal<AnswerField[]>([]);
+  readonly answersChecked = signal(false);
+  /** Bumped whenever the answer form is (re)built; used to focus the first input. */
+  readonly answerNonce = signal(0);
 
   readonly currentCard = computed(() => {
     const c = this.cards();
@@ -106,6 +116,14 @@ export class ReviewSessionComponent {
       }
       this.generatingImage.set(false);
       this.generatingSentences.set(false);
+    });
+
+    // Focus the first typed-answer input whenever a Native → German card renders.
+    effect(() => {
+      this.answerNonce();
+      const card = this.cards()[this.currentIndex()];
+      if (!card || card.direction !== 'native-de' || card.revealed) return;
+      document.getElementById(`srs-answer-${card.word.id}-0`)?.focus();
     });
   }
 
@@ -169,17 +187,19 @@ export class ReviewSessionComponent {
       words = this.wordService.getWords();
     }
 
-    const useBidirectional = this.bidirectional();
+    const mode = this.directionMode();
+    const useBidirectional = mode === 'both';
 
     if (!useBidirectional) {
-      // Simple shuffle for single direction
+      // Simple shuffle for single direction ('de-native' or 'native-de')
       const shuffled = [...words].sort(() => Math.random() - 0.5);
       this.sessionType.set(type);
       this.cards.set(
-        shuffled.map((w) => ({ word: w, revealed: false, grade: null, direction: 'de-native' as CardDirection }))
+        shuffled.map((w) => ({ word: w, revealed: false, grade: null, direction: mode as CardDirection }))
       );
       this.currentIndex.set(0);
       this.sessionFinished.set(false);
+      this.resetAnswerState();
       return;
     }
 
@@ -214,6 +234,7 @@ export class ReviewSessionComponent {
     this.cards.set(mergedCards);
     this.currentIndex.set(0);
     this.sessionFinished.set(false);
+    this.resetAnswerState();
   }
 
   /**
@@ -273,6 +294,13 @@ export class ReviewSessionComponent {
     return result;
   }
 
+  /** Front-click handler: only German→Native cards reveal on tap (native→German requires typing). */
+  onFrontClick(card: SessionCard): void {
+    if (card.direction === 'de-native' && !card.revealed) {
+      this.revealCard();
+    }
+  }
+
   revealCard(): void {
     const card = this.currentCard();
     if (!card || card.revealed) return;
@@ -282,6 +310,55 @@ export class ReviewSessionComponent {
       )
     );
     this.speakWord(card.word);
+  }
+
+  onAnswerInput(index: number, event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.answerFields.update((fields) =>
+      fields.map((f, i) => (i === index ? { ...f, value } : f))
+    );
+  }
+
+  onAnswerEnter(index: number, event: Event): void {
+    event.preventDefault();
+    const card = this.cards()[this.currentIndex()];
+    if (!card) return;
+    if (index + 1 < this.answerFields().length) {
+      document.getElementById(`srs-answer-${card.word.id}-${index + 1}`)?.focus();
+    } else {
+      this.checkAnswers();
+    }
+  }
+
+  checkAnswers(): void {
+    const card = this.currentCard();
+    if (!card || card.revealed) return;
+    this.answerFields.update((fields) =>
+      fields.map((f) => ({
+        ...f,
+        correct: normalizeAnswer(f.value) === f.expectedKey,
+      }))
+    );
+    this.answersChecked.set(true);
+    this.revealCard();
+  }
+
+  /** Gives up on typing: reveals the German word without scoring. */
+  showAnswer(): void {
+    const card = this.currentCard();
+    if (!card || card.revealed) return;
+    this.revealCard();
+  }
+
+  private resetAnswerState(): void {
+    const card = this.cards()[this.currentIndex()];
+    this.answersChecked.set(false);
+    if (card && card.direction === 'native-de') {
+      this.answerFields.set(buildAnswerFields(card.word));
+    } else {
+      this.answerFields.set([]);
+    }
+    this.answerNonce.update((n) => n + 1);
   }
 
   recordGrade(grade: SrsGrade): void {
@@ -304,6 +381,7 @@ export class ReviewSessionComponent {
       return;
     }
     this.currentIndex.update((i) => i + 1);
+    this.resetAnswerState();
   }
 
   speakWord(word: Word): void {
@@ -315,6 +393,7 @@ export class ReviewSessionComponent {
     this.cards.set([]);
     this.currentIndex.set(0);
     this.sessionFinished.set(false);
+    this.resetAnswerState();
   }
 
   goToReviewPage(): void {

@@ -47,13 +47,24 @@
         </button>
       </div>
 
-      <!-- Bidirectional toggle -->
-      <div class="bidirectional-toggle">
-        <mat-slide-toggle [(ngModel)]="bidirectional" [ngModelOptions]="{standalone: true}">
-          Bidirectional (Native → German + German → Native)
-        </mat-slide-toggle>
+      <!-- Card direction setting -->
+      <div class="direction-setting">
+        <mat-form-field appearance="outline" class="direction-select">
+          <mat-label>Card direction</mat-label>
+          <mat-select [(ngModel)]="directionMode" [ngModelOptions]="{standalone: true}">
+            <mat-option value="de-native">German → Native</mat-option>
+            <mat-option value="native-de">Native → German (type answers)</mat-option>
+            <mat-option value="both">Bidirectional (both directions)</mat-option>
+          </mat-select>
+        </mat-form-field>
         <p class="settings-description">
-          When enabled, each word appears twice: once German→Native and once Native→German.
+          @if (directionMode() === 'native-de') {
+            Cards show the native translation; type the German word with its article/plural or verb forms.
+          } @else if (directionMode() === 'both') {
+            Each word appears twice: German→Native (tap to reveal) and Native→German (type to answer).
+          } @else {
+            Cards show the German word on the front; the back reveals the native translation.
+          }
         </p>
       </div>
     </div>
@@ -74,7 +85,7 @@
         <div class="flashcard" [class.revealed]="card.revealed">
           @if (!card.revealed) {
             <!-- Front of card -->
-            <div class="card-front" (click)="revealCard()">
+            <div class="card-front" (click)="onFrontClick(card)">
               @if (card.direction === 'de-native') {
                 <!-- German → Native: Show German word + image -->
                 @if (currentImage()) {
@@ -105,10 +116,37 @@
                   }
                 </div>
               } @else {
-                <!-- Native → German: Show native translation -->
+                <!-- Native → German: type the German form(s) -->
                 <div class="card-native-front">
                   <div class="card-native-word">{{ getTranslation(card.word) }}</div>
-                  <div class="card-hint">Tap to reveal German word</div>
+                  <div class="typed-answers-form">
+                    @for (field of answerFields(); track field.label; let i = $index) {
+                      <label class="answer-field">
+                        <span class="answer-label">{{ field.label }}</span>
+                        <input
+                          class="answer-input"
+                          [id]="'srs-answer-' + card.word.id + '-' + i"
+                          [value]="field.value"
+                          autocomplete="off"
+                          autocapitalize="off"
+                          spellcheck="false"
+                          [attr.aria-label]="field.label"
+                          (input)="onAnswerInput(i, $event)"
+                          (keydown.enter)="onAnswerEnter(i, $event)"
+                        />
+                      </label>
+                    }
+                    <div class="answer-actions">
+                      <button type="button" class="check-btn" (click)="checkAnswers()">
+                        <mat-icon>check</mat-icon>
+                        Check
+                      </button>
+                      <button type="button" class="dont-know-btn" (click)="showAnswer()">
+                        <mat-icon>visibility</mat-icon>
+                        Don't know — show answer
+                      </button>
+                    </div>
+                  </div>
                 </div>
               }
 
@@ -198,6 +236,34 @@
                 </div>
 
                 <div class="card-native-back">{{ getTranslation(card.word) }}</div>
+
+                @if (answersChecked() && answerFields().length > 0) {
+                  <div class="typed-summary">
+                    @for (field of answerFields(); track field.label) {
+                      <div
+                        class="summary-row"
+                        [class.summary-correct]="field.correct === true"
+                        [class.summary-wrong]="field.correct === false"
+                      >
+                        <span class="summary-icon">
+                          @if (field.correct === true) {
+                            <mat-icon>check_circle</mat-icon>
+                          } @else {
+                            <mat-icon>cancel</mat-icon>
+                          }
+                        </span>
+                        <span class="summary-label">{{ field.label }}:</span>
+                        @if (field.correct === true) {
+                          <span class="summary-value">{{ field.value }}</span>
+                        } @else {
+                          <span class="summary-value wrong">{{ field.value || '—' }}</span>
+                          <span class="summary-arrow">→</span>
+                          <span class="summary-expected">{{ field.expectedRaw }}</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
 
                 <div class="card-details">
                   <span class="card-pos">{{ getPosLabel(card.word) }}</span>

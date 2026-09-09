@@ -2,7 +2,8 @@
   <h1 class="page-title">Review Words</h1>
   <p class="page-subtitle">German nouns grouped by grammatical gender</p>
 
-  <div class="filter-bar">
+  @if (state() === 'browse') {
+    <div class="filter-bar">
     <mat-form-field appearance="outline" class="search-field">
       <mat-label>Search words</mat-label>
       <input
@@ -96,6 +97,56 @@
       {{ filteredWords().length === 1 ? 'word' : 'words' }}
     </p>
   }
+
+  <!-- Practice sessions (50-word loop, gender-game style) -->
+  <div class="practice-bar">
+    <div class="practice-setup">
+      <mat-form-field appearance="outline" class="direction-select">
+        <mat-label>Card direction</mat-label>
+        <mat-select [(ngModel)]="directionMode" [ngModelOptions]="{standalone: true}">
+          <mat-option value="de-native">German → Native</mat-option>
+          <mat-option value="native-de">Native → German (type answers)</mat-option>
+          <mat-option value="both">Bidirectional (both directions)</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <p class="practice-info">
+        {{ filteredWords().length }}
+        {{ filteredWords().length === 1 ? 'word' : 'words' }} in the current filter
+      </p>
+      <button
+        class="practice-start"
+        (click)="startSession()"
+        [disabled]="filteredWords().length === 0"
+      >
+        <mat-icon>play_circle</mat-icon>
+        Start Session ({{ sessionSize }} words)
+      </button>
+    </div>
+
+    @if (hasActiveSession()) {
+      <button class="practice-continue" (click)="resumeSession()">
+        <mat-icon>play_arrow</mat-icon>
+        Continue Session {{ activeSessionNumber() }} · Word {{ currentNumber() }} of {{ totalWords() }} · Round {{ round() }}
+      </button>
+    }
+
+    @if (completedSessions().length > 0) {
+      <div class="session-list">
+        <div class="session-list-title">Previous Practice Sessions</div>
+        @for (s of completedSessions(); track s.id) {
+          <div class="session-item">
+            <div class="session-info">
+              <span class="session-badge">Session {{ s.number }}</span>
+              <span class="session-meta">{{ sessionMeta(s) }}</span>
+            </div>
+            <button class="replay-btn" mat-stroked-button (click)="replaySession(s)">
+              Replay
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </div>
 
   <div class="columns">
     @for (gender of genders; track gender.key) {
@@ -359,6 +410,245 @@
         <img [src]="img.data" alt="Image for {{ img.german }}" />
         <p class="fullsize-caption">{{ img.german }}</p>
       </div>
+    </div>
+  }
+  } @else if (state() === 'summary') {
+    <!-- ── Summary: final + best round ── -->
+    @if (lastSession(); as s) {
+      <div class="results-screen">
+        <h2 class="results-title">
+          @if (s.replayOf) {
+            Session {{ s.replayOf }} — Replay
+          } @else {
+            Session {{ s.number }} Complete
+          }
+        </h2>
+
+        @if (sessionFinalRound(s); as fin) {
+          <div class="score-display">
+            <span class="score-number">{{ fin.correct }}</span>
+            <span class="score-total">/ {{ fin.answered }}</span>
+          </div>
+          <p class="score-label">
+            @if (fin.answered > 0 && fin.correct === fin.answered) {
+              Perfect round! 🎉
+            } @else {
+              correct answers
+            }
+          </p>
+        }
+
+        @if (s.bestRound > 0) {
+          <p class="score-label">
+            Best round: {{ s.bestRound }} / {{ s.words.length }}
+          </p>
+        }
+
+        <div class="summary-actions">
+          @if (!s.replayOf) {
+            <button class="start-button" (click)="startSession()">
+              Next Session
+            </button>
+          }
+          <button class="start-button" (click)="replaySession(s)">
+            Replay
+          </button>
+          <button class="start-button secondary" (click)="toBrowse()">
+            Back to Words
+          </button>
+        </div>
+      </div>
+    }
+  } @else if (state() === 'playing') {
+    <!-- ── Playing: continuous 50-word loop ── -->
+    <div class="session-screen">
+      <div class="session-progress">
+        <span>
+          Session {{ activeSessionNumber() }} · Word {{ currentNumber() }} of {{ totalWords() }} · Round {{ round() }}
+        </span>
+        <span>Score: {{ score() }}</span>
+      </div>
+      <div class="session-progress-bar">
+        <mat-progress-bar mode="determinate" [value]="sessionProgress()"></mat-progress-bar>
+      </div>
+
+      @let card = currentCard();
+      @if (card) {
+        <div class="flashcard">
+          @if (!revealed()) {
+            <!-- Front of card -->
+            <div class="card-front" (click)="onFrontClick()">
+              @if (card.direction === 'de-native') {
+                <!-- German → Native -->
+                <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
+                  @if (card.word.gender && card.word.partOfSpeech === 'noun') {
+                    <span class="card-article">{{ card.word.gender }}</span>
+                  }
+                  <span class="card-word">{{ card.word.german }}</span>
+                </div>
+                <div class="card-hint">Tap to reveal translation</div>
+              } @else {
+                <!-- Native → German: type the German form(s) -->
+                <div class="card-native-front">
+                  <div class="card-native-word">{{ getTranslation(card.word) }}</div>
+                  <div class="typed-answers-form">
+                    @for (field of answerFields(); track field.label; let i = $index) {
+                      <label class="answer-field">
+                        <span class="answer-label">{{ field.label }}</span>
+                        <input
+                          class="answer-input"
+                          [id]="'review-answer-' + card.word.id + '-' + i"
+                          [value]="field.value"
+                          autocomplete="off"
+                          autocapitalize="off"
+                          spellcheck="false"
+                          [attr.aria-label]="field.label"
+                          (input)="onAnswerInput(i, $event)"
+                          (keydown.enter)="onAnswerEnter(i, $event)"
+                        />
+                      </label>
+                    }
+                    <div class="answer-actions">
+                      <button type="button" class="check-btn" (click)="checkAnswers()">
+                        <mat-icon>check</mat-icon>
+                        Check
+                      </button>
+                      <button type="button" class="dont-know-btn" (click)="showAnswer()">
+                        <mat-icon>visibility</mat-icon>
+                        Don't know — show answer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <!-- Back of card -->
+            <div class="card-back">
+              @if (card.direction === 'de-native') {
+                <div class="card-translation">{{ getTranslation(card.word) }}</div>
+              } @else {
+                <div class="card-german" [style.color]="getGenderColor(card.word.gender)">
+                  @if (card.word.gender && card.word.partOfSpeech === 'noun') {
+                    <span class="card-article">{{ card.word.gender }}</span>
+                  }
+                  <span class="card-word">{{ card.word.german }}</span>
+                  <button class="speak-btn" (click)="speakWord(card.word)" title="Pronounce">
+                    <mat-icon>volume_up</mat-icon>
+                  </button>
+                </div>
+
+                <div class="card-native-back">{{ getTranslation(card.word) }}</div>
+
+                @if (answersChecked() && answerFields().length > 0) {
+                  <div class="typed-summary">
+                    @for (field of answerFields(); track field.label) {
+                      <div
+                        class="summary-row"
+                        [class.summary-correct]="field.correct === true"
+                        [class.summary-wrong]="field.correct === false"
+                      >
+                        <span class="summary-icon">
+                          @if (field.correct === true) {
+                            <mat-icon>check_circle</mat-icon>
+                          } @else {
+                            <mat-icon>cancel</mat-icon>
+                          }
+                        </span>
+                        <span class="summary-label">{{ field.label }}:</span>
+                        @if (field.correct === true) {
+                          <span class="summary-value">{{ field.value }}</span>
+                        } @else {
+                          <span class="summary-value wrong">{{ field.value || '—' }}</span>
+                          <span class="summary-arrow">→</span>
+                          <span class="summary-expected">{{ field.expectedRaw }}</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              }
+
+              <div class="card-details">
+                <span class="card-pos">{{ getPosLabel(card.word) }}</span>
+                <span class="card-level">{{ card.word.level }}</span>
+                @if (card.word.verbType) {
+                  <span class="card-verb-type">{{ getVerbTypeLabel(card.word.verbType) }}</span>
+                }
+              </div>
+
+              @if (card.word.partOfSpeech === 'noun' && (card.word.pluralForm || card.word.pluralFormation)) {
+                <div class="card-noun-details">
+                  <span class="detail-label">Plural:</span>
+                  <span class="detail-value">{{ card.word.pluralForm ?? '—' }}</span>
+                  @if (card.word.pluralFormation) {
+                    <span class="detail-formation">{{ card.word.pluralFormation }}</span>
+                  }
+                </div>
+              }
+
+              @if (card.word.partOfSpeech === 'verb') {
+                <div class="card-verb-details">
+                  @if (card.word.simplePast) {
+                    <span class="detail-label">Präteritum:</span>
+                    <span class="detail-value">{{ card.word.simplePast }}</span>
+                  }
+                  @if (card.word.pastParticiple) {
+                    <span class="detail-label">Partizip II:</span>
+                    <span class="detail-value highlight">{{ card.word.pastParticiple }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          @if (revealed() && !recorded() && card.direction === 'de-native') {
+            <div class="grade-section">
+              <p class="grade-label">How well did you know it?</p>
+              <div class="grade-buttons">
+                <button class="grade-btn grade-forgot" (click)="recordGrade(0)">
+                  <mat-icon>close</mat-icon>
+                  Forgot
+                </button>
+                <button class="grade-btn grade-hard" (click)="recordGrade(2)">
+                  <mat-icon>sentiment_dissatisfied</mat-icon>
+                  Hard
+                </button>
+                <button class="grade-btn grade-good" (click)="recordGrade(4)">
+                  <mat-icon>sentiment_satisfied</mat-icon>
+                  Good
+                </button>
+                <button class="grade-btn grade-easy" (click)="recordGrade(5)">
+                  <mat-icon>sentiment_very_satisfied</mat-icon>
+                  Easy
+                </button>
+              </div>
+            </div>
+          }
+
+          @if (recorded()) {
+            <div class="after-card">
+              <div class="grade-feedback" [class.passed]="currentCorrect()" [class.forgot]="!currentCorrect()">
+                @if (currentCorrect()) {
+                  <mat-icon>check</mat-icon>
+                  <span>Correct ✓</span>
+                } @else {
+                  <mat-icon>close</mat-icon>
+                  <span>Incorrect — the answer is shown above</span>
+                }
+              </div>
+              <button class="practice-next" mat-raised-button color="primary" (click)="nextWord()">
+                Next Word
+                <mat-icon>arrow_forward</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+      }
+
+      <button class="end-session-btn" (click)="endSession()">
+        End Session
+      </button>
     </div>
   }
 </div>
