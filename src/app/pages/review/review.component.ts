@@ -7,21 +7,23 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { CommonModule } from '@angular/common';
 import { WordService } from '../../services/word.service';
+import { AiService } from '../../services/ai.service';
 import { SettingsService } from '../../services/settings.service';
 import { SpeechService } from '../../services/speech.service';
 import { PartOfSpeechService } from '../../services/part-of-speech.service';
 import { ImageCacheService } from '../../services/image-cache.service';
 import { ImageGenerationService } from '../../services/image-generation.service';
-import { DifficultyLevel, Gender, PartOfSpeech, VerbType, Word } from '../../models/word';
+import { DifficultyLevel, Gender, PartOfSpeech, PluralFormation, VerbType, Word } from '../../models/word';
 import { SrsGrade } from '../../services/srs.service';
 import { AnswerField, buildAnswerFields, normalizeAnswer } from '../../utils/answer-fields';
 
-/** Number of words practiced per session (same as the Gender Game). */
-const SESSION_SIZE = 50;
+/** Number of words practiced per session (20-word loop). */
+const SESSION_SIZE = 20;
 /** localStorage key for the whole review-practice state. */
 const STORAGE_KEY = 'german-dictionary-review-sessions';
 
@@ -92,6 +94,7 @@ interface PersistedReviewState {
     MatButtonModule,
     MatProgressSpinnerModule,
     MatProgressBarModule,
+    MatTooltipModule,
     CommonModule,
   ],
   templateUrl: './review.component.html',
@@ -220,7 +223,7 @@ export class ReviewComponent {
 
   readonly expandedWordId = signal<string | null>(null);
 
-  // ── Practice sessions (gender-game style, 50-word loop) ──
+  // ── Practice sessions (gender-game style, 20-word loop) ──
   readonly sessionSize = SESSION_SIZE;
   readonly state = signal<ReviewState>('browse');
 
@@ -292,7 +295,8 @@ export class ReviewComponent {
     private readonly speechService: SpeechService,
     private readonly posService: PartOfSpeechService,
     private readonly imageCache: ImageCacheService,
-    private readonly imageGen: ImageGenerationService
+    private readonly imageGen: ImageGenerationService,
+    private readonly aiService: AiService
   ) {
     // Keep page in valid range when filters change
     effect(() => {
@@ -424,7 +428,7 @@ export class ReviewComponent {
 
   // ── Practice sessions: flow ──
 
-  /** Starts the next 50-word session from the current filter pool. */
+  /** Starts the next 20-word session from the current filter pool. */
   startSession(): void {
     this.preparePool();
     const ids = this.takeSlice();
@@ -597,13 +601,193 @@ export class ReviewComponent {
     this.saveState();
   }
 
+  // ── Dev-mode word re-import (same tool as the Gender Game) ──
+
+  readonly devMode = computed(() => this.settingsService.devMode());
+  readonly devPanelOpen = signal(false);
+  readonly devSingularInput = signal('');
+  readonly devPluralInput = signal('');
+  readonly devLoading = signal(false);
+  readonly devError = signal('');
+  readonly devSuccess = signal(false);
+
+  /** Opens the singular/plural correction panel, pre-filled with the current word. */
+  openDevPanel(): void {
+    const word = this.currentCard()?.word;
+    if (!word) return;
+    this.devSingularInput.set(word.german);
+    this.devPluralInput.set(word.pluralForm ?? '');
+    this.devPanelOpen.set(true);
+    this.devError.set('');
+    this.devSuccess.set(false);
+  }
+
+  cancelDevPanel(): void {
+    this.devPanelOpen.set(false);
+    this.devError.set('');
+    this.devSuccess.set(false);
+  }
+
+
+
+  /** One-click AI fix: asks the AI to correct the singular/plural forms and
+   *  immediately saves them, along with the gender, translations and level. */
+  async aiFixAndReimport(): Promise<void> {
+    const word = this.currentCard()?.word;
+    if (!word || this.devLoading()) return;
+
+    const input = this.devSingularInput().trim() || word.german;
+    if (!input) {
+      this.devError.set('Enter a word first.');
+      return;
+    }
+    if (!this.aiService.hasApiKey()) {
+      this.devError.set('No API key set. Add your OpenRouter API key in Settings.');
+      return;
+    }
+
+    this.devLoading.set(true);
+    this.devError.set('');
+    this.devSuccess.set(false);
+
+    try {
+      const suggestion = await this.aiService.analyzeWord(input);
+      // The AI returns the singular base form even for plural inputs
+      // (e.g. "Handschuhe" → "Handschuh"), plus the correct plural.
+      const singular = suggestion.baseForm?.trim() || input;
+      const plural = suggestion.pluralForm?.trim() || this.devPluralInput().trim();
+
+      // Reflect the corrected forms back into the form.
+      this.devSingularInput.set(singular);
+      this.devPluralInput.set(plural);
+
+      this.saveWord({
+        german: singular,
+        pluralForm: plural,
+        gender: suggestion.gender,
+        translationEn: suggestion.translationEn,
+        translationRu: suggestion.translationRu,
+        level: suggestion.level,
+        pluralFormation: suggestion.pluralFormation as PluralFormation | undefined,
+      });
+    } catch (err) {
+      this.devError.set(
+        err instanceof Error ? err.message : 'AI analysis failed.'
+      );
+    } finally {
+      this.devLoading.set(false);
+    }
+  }
+
+  /** Manual save: applies exactly the forms the user typed, without calling the AI. */
+  saveManualForms(): void {
+    const word = this.currentCard()?.word;
+    if (!word || this.devLoading()) return;
+
+    const singular = this.devSingularInput().trim();
+    const plural = this.devPluralInput().trim();
+    if (!singular) {
+      this.devError.set('Singular form is required.');
+      return;
+    }
+
+    this.devError.set('');
+    this.devSuccess.set(false);
+    this.saveWord({ german: singular, pluralForm: plural || undefined });
+  }
+
   private recordResult(card: PracticeCard, correct: boolean): void {
     this.recorded.set(true);
+
     this.currentResults.update((results) => [
       ...results,
       { word: card.word, direction: card.direction, correct },
     ]);
     this.saveState();
+  }
+
+  /** Shared save: merges AI values (or keeps existing when undefined) into the
+   *  current word, persists it and refreshes the card so it can be re-answered. */
+  private saveWord(values: {
+    german: string;
+    pluralForm?: string;
+    gender?: Gender | null;
+    translationEn?: string;
+    translationRu?: string;
+    level?: Word['level'];
+    pluralFormation?: PluralFormation;
+  }): void {
+    const card = this.currentCard();
+    const word = card?.word;
+    if (!card || !word) return;
+
+    const existing = this.wordService.getWords().find((w) => w.id === word.id);
+    const source = existing ?? word;
+
+    this.wordService.updateWord(word.id, {
+      german: values.german,
+      pluralForm: values.pluralForm || undefined,
+      gender: values.gender ?? source.gender,
+      translationEn: values.translationEn || source.translationEn,
+      translationRu: values.translationRu || source.translationRu,
+      level: values.level ?? source.level,
+      pluralFormation:
+        values.pluralFormation ??
+        this.guessPluralFormation(values.german, values.pluralForm ?? '') ??
+        source.pluralFormation,
+    });
+    this.refreshCurrentWord();
+    this.devSuccess.set(true);
+  }
+
+  private refreshCurrentWord(): void {
+    const card = this.currentCard();
+    if (!card) return;
+
+    const fresh = this.wordService.getWords().find((w) => w.id === card.word.id);
+    if (!fresh) return;
+
+    const i = this.currentIndex();
+    this.queue.update((q) =>
+      q.map((c, idx) =>
+        idx === i && c.word.id === fresh.id ? { ...c, word: fresh } : c
+      )
+    );
+
+    // Drop any already-recorded result for the corrected word so the user
+    // re-answers the fixed card immediately.
+    const id = fresh.id;
+    this.currentResults.update((results) =>
+      results.filter((r) => r.word.id !== id)
+    );
+    this.resetCardState();
+    this.saveState();
+  }
+
+  /** Small heuristic fallback for the plural formation pattern when the AI
+   *  does not supply one. Intended for dev use only. */
+  private guessPluralFormation(
+    singular: string,
+    plural: string
+  ): PluralFormation | undefined {
+    if (!singular || !plural) return undefined;
+    const umlaut = /[äöü]/.test(plural.toLowerCase());
+    const base = (w: string) =>
+      w
+        .toLowerCase()
+        .replace('ä', 'a')
+        .replace('ö', 'o')
+        .replace('ü', 'u');
+    const s = base(singular);
+    const p = base(plural);
+
+    if (p === s) return umlaut ? 'umlaut' : '-';
+    if (p === s + 'e') return umlaut ? 'umlaut + -e' : '-e';
+    if (p === s + 'er') return umlaut ? 'umlaut + -er' : '-er';
+    if (p === s + 'en') return umlaut ? 'umlaut + -en' : '-en';
+    if (p === s + 'n') return '-n';
+    if (p === s + 's') return '-s';
+    return undefined;
   }
 
   private resetCardState(): void {

@@ -728,6 +728,7 @@
   width: 100%;
   max-width: 560px;
   min-width: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   // Long words (German compounds) must wrap inside the card instead of
