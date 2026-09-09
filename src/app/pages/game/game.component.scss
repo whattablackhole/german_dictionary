@@ -108,10 +108,14 @@
   padding: 48px 32px;
   width: 100%;
   max-width: 480px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   box-shadow: var(--mat-sys-level2);
+  // Long German compounds must wrap inside the card, not spill past its
+  // border (inherited by all card text).
+  overflow-wrap: anywhere;
 }
 
 .dev-edit-btn {
@@ -200,13 +204,18 @@
 }
 
 .word-german {
-  font-size: 48px;
+  font-size: clamp(26px, 6vw, 48px);
   font-weight: 700;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .word-translation {
   font-size: 18px;
   color: var(--mat-sys-on-surface-variant);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .speak-button {

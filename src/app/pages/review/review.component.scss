@@ -727,8 +727,12 @@
 .flashcard {
   width: 100%;
   max-width: 560px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  // Long words (German compounds) must wrap inside the card instead of
+  // pushing past its border; inherited by all card text.
+  overflow-wrap: anywhere;
 }
 
 .card-front {
@@ -761,6 +765,9 @@
   flex-wrap: wrap;
   justify-content: center;
   line-height: 1.2;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .card-article {

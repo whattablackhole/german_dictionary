@@ -144,7 +144,7 @@
         </mat-select>
       </mat-form-field>
 
-      <mat-form-field appearance="outline" class="tts-select">
+      <mat-form-field appearance="outline" class="tts-select" subscriptSizing="dynamic">
         <mat-label>Voice 1 (speaker)</mat-label>
         <mat-select
           [value]="settingsService.ttsVoice()"
@@ -158,7 +158,7 @@
       </mat-form-field>
 
       @if (settingsService.ttsModel().startsWith('fish-audio/')) {
-        <mat-form-field appearance="outline" class="tts-select">
+        <mat-form-field appearance="outline" class="tts-select" subscriptSizing="dynamic">
           <mat-label>Voice 2 (speaker)</mat-label>
           <mat-select
             [value]="settingsService.ttsSecondVoice()"
