@@ -360,6 +360,14 @@ h3 {
       color: var(--fc-green-text);
     }
 
+    // Артикль показываем чуть приглушённее: он подсказка к слову, а не
+    // отдельное слово, и не должен перетягивать внимание на себя.
+    .article {
+      color: var(--mat-sys-on-surface-variant);
+      font-weight: 500;
+      margin-right: 6px;
+    }
+
     .translation {
       color: var(--mat-sys-on-surface-variant);
       margin-top: 6px;

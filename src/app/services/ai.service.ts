@@ -1,15 +1,10 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
-import {
-  Gender,
-  DifficultyLevel,
-  PartOfSpeech,
-  TranslationLanguage,
-} from '../models/word';
+import { Gender, DifficultyLevel, PartOfSpeech, TranslationLanguage } from '../models/word';
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
 import { StoryFormat, StorySpeaker } from '../models/story';
-import { JudgeVerdict } from '../models/flashcards';
+import { Article, JudgeVerdict } from '../models/flashcards';
 import {
   DECISIONS_URL,
   JUDGE_MODEL,
@@ -138,7 +133,16 @@ interface RawDeclensionExercise {
 export interface GeneratedStoryExercise {
   /** The German target word this exercise trains */
   word: string;
-  type: 'mc' | 'mc-sentence' | 'mc-plural' | 'mc-verb-past' | 'mc-verb-perfect' | 'mc-comparative' | 'mc-superlative' | 'cloze' | 'sentence';
+  type:
+    | 'mc'
+    | 'mc-sentence'
+    | 'mc-plural'
+    | 'mc-verb-past'
+    | 'mc-verb-perfect'
+    | 'mc-comparative'
+    | 'mc-superlative'
+    | 'cloze'
+    | 'sentence';
 
   // mc — multiple choice translation
   mcPrompt?: string;
@@ -321,7 +325,9 @@ function normalizeVerbTense(raw: unknown): string | null {
 
 /** Normalizes an AI-provided speaker gender; tolerant of common variants. */
 function normalizeSpeakerGender(raw: unknown): 'male' | 'female' | null {
-  const value = String(raw ?? '').trim().toLowerCase();
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase();
   if (
     value === 'male' ||
     value === 'man' ||
@@ -402,9 +408,7 @@ export class AiService {
    * instead of the default price-based load balancing.
    */
   private throughputProviderField(): { provider?: { sort: 'throughput' } } {
-    return this.settingsService.throughputRouting()
-      ? { provider: { sort: 'throughput' } }
-      : {};
+    return this.settingsService.throughputRouting() ? { provider: { sort: 'throughput' } } : {};
   }
 
   /**
@@ -472,7 +476,9 @@ export class AiService {
         label: model.name ?? id,
         description: model.description
           ? model.description.replace(/<[^>]*>/g, '').substring(0, 120)
-          : (model.pricing?.prompt ? `$${model.pricing.prompt}/tok prompt` : ''),
+          : model.pricing?.prompt
+            ? `$${model.pricing.prompt}/tok prompt`
+            : '',
         contextLength:
           typeof model.context_length === 'number' && model.context_length > 0
             ? model.context_length
@@ -520,7 +526,7 @@ export class AiService {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
-        'No API key set. Add your OpenRouter API key in the AI Assistant field above.'
+        'No API key set. Add your OpenRouter API key in the AI Assistant field above.',
       );
     }
 
@@ -572,7 +578,7 @@ Example response format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -580,13 +586,11 @@ Example response format:
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error(
-          'API key rejected. Check your OpenRouter key at openrouter.ai/keys.'
-        );
+        throw new Error('API key rejected. Check your OpenRouter key at openrouter.ai/keys.');
       }
       if (response.status === 402) {
         throw new Error(
-          'OpenRouter account has insufficient credits. Add credits at openrouter.ai.'
+          'OpenRouter account has insufficient credits. Add credits at openrouter.ai.',
         );
       }
       if (response.status === 429) {
@@ -634,18 +638,38 @@ Example response format:
     const rawWords = parsed.words;
     if (!Array.isArray(rawWords) || rawWords.length !== germanWords.length) {
       throw new Error(
-        `AI returned ${rawWords?.length ?? 0} results, expected ${germanWords.length}.`
+        `AI returned ${rawWords?.length ?? 0} results, expected ${germanWords.length}.`,
       );
     }
 
     const validParts: PartOfSpeech[] = [
-      'noun', 'verb', 'adjective', 'adverb', 'pronoun',
-      'preposition', 'conjunction', 'interjection', 'numeral', 'phrase',
+      'noun',
+      'verb',
+      'adjective',
+      'adverb',
+      'pronoun',
+      'preposition',
+      'conjunction',
+      'interjection',
+      'numeral',
+      'phrase',
     ];
     const validGender = ['der', 'die', 'das'];
     const validLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
     const validVerbTypes = ['strong', 'weak', 'mixed'];
-    const validPluralFormations = ['-e', '-en', '-er', '-s', '-n', '-', 'umlaut', 'umlaut + -e', 'umlaut + -er', 'umlaut + -en', 'foreign'];
+    const validPluralFormations = [
+      '-e',
+      '-en',
+      '-er',
+      '-s',
+      '-n',
+      '-',
+      'umlaut',
+      'umlaut + -e',
+      'umlaut + -er',
+      'umlaut + -en',
+      'foreign',
+    ];
 
     return rawWords.map((item) => {
       const rawPart = (item.partOfSpeech ?? '').trim().toLowerCase() as PartOfSpeech;
@@ -655,18 +679,22 @@ Example response format:
 
       const genderRaw = item.gender ? String(item.gender).trim() : '';
       const gender: Gender | null =
-        isNoun && validGender.includes(genderRaw)
-          ? (genderRaw as Gender)
-          : null;
+        isNoun && validGender.includes(genderRaw) ? (genderRaw as Gender) : null;
 
       const level = (item.level ?? '').trim().toUpperCase() as DifficultyLevel;
       const finalLevel = validLevels.includes(level) ? level : 'A1';
 
       const verbTypeRaw = (item.verbType ?? '').trim().toLowerCase();
-      const verbType = isVerb && validVerbTypes.includes(verbTypeRaw) ? verbTypeRaw as 'strong' | 'weak' | 'mixed' : undefined;
+      const verbType =
+        isVerb && validVerbTypes.includes(verbTypeRaw)
+          ? (verbTypeRaw as 'strong' | 'weak' | 'mixed')
+          : undefined;
 
       const pluralFormationRaw = (item.pluralFormation ?? '').trim();
-      const pluralFormation = isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
+      const pluralFormation =
+        isNoun && validPluralFormations.includes(pluralFormationRaw)
+          ? pluralFormationRaw
+          : undefined;
 
       return {
         baseForm: (item.baseForm ?? '').trim() || undefined,
@@ -676,11 +704,13 @@ Example response format:
         gender,
         level: finalLevel,
         verbType,
-        infinitive: isVerb ? ((item.infinitive ?? '').trim() || undefined) : undefined,
-        presentThirdPerson: isVerb ? ((item.presentThirdPerson ?? '').trim() || undefined) : undefined,
-        simplePast: isVerb ? ((item.simplePast ?? '').trim() || undefined) : undefined,
-        pastParticiple: isVerb ? ((item.pastParticiple ?? '').trim() || undefined) : undefined,
-        pluralForm: isNoun ? ((item.pluralForm ?? '').trim() || undefined) : undefined,
+        infinitive: isVerb ? (item.infinitive ?? '').trim() || undefined : undefined,
+        presentThirdPerson: isVerb
+          ? (item.presentThirdPerson ?? '').trim() || undefined
+          : undefined,
+        simplePast: isVerb ? (item.simplePast ?? '').trim() || undefined : undefined,
+        pastParticiple: isVerb ? (item.pastParticiple ?? '').trim() || undefined : undefined,
+        pluralForm: isNoun ? (item.pluralForm ?? '').trim() || undefined : undefined,
         pluralFormation,
       };
     });
@@ -694,7 +724,7 @@ Example response format:
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
-        'No API key set. Add your OpenRouter API key in the AI Assistant field above.'
+        'No API key set. Add your OpenRouter API key in the AI Assistant field above.',
       );
     }
 
@@ -732,7 +762,7 @@ Word: "${german}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -743,7 +773,9 @@ Word: "${german}"`;
         throw new Error('API key rejected. Check your OpenRouter key at openrouter.ai/keys.');
       }
       if (response.status === 402) {
-        throw new Error('OpenRouter account has insufficient credits. Add credits at openrouter.ai.');
+        throw new Error(
+          'OpenRouter account has insufficient credits. Add credits at openrouter.ai.',
+        );
       }
       if (response.status === 429) {
         throw new Error('Rate limit reached. Try again in a moment.');
@@ -792,17 +824,23 @@ Word: "${german}"`;
     }
 
     const validParts: PartOfSpeech[] = [
-      'noun', 'verb', 'adjective', 'adverb', 'pronoun',
-      'preposition', 'conjunction', 'interjection', 'numeral', 'phrase',
+      'noun',
+      'verb',
+      'adjective',
+      'adverb',
+      'pronoun',
+      'preposition',
+      'conjunction',
+      'interjection',
+      'numeral',
+      'phrase',
     ];
     const partOfSpeech = validParts.includes(rawPart) ? rawPart : 'noun';
 
     const validGender = ['der', 'die', 'das'];
     const isNoun = partOfSpeech === 'noun';
     const gender: Gender | null =
-      isNoun && validGender.includes(genderRaw)
-        ? (genderRaw as Gender)
-        : null;
+      isNoun && validGender.includes(genderRaw) ? (genderRaw as Gender) : null;
 
     const validLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
     const finalLevel = validLevels.includes(level) ? level : 'A1';
@@ -810,11 +848,27 @@ Word: "${german}"`;
     const isVerb = partOfSpeech === 'verb';
     const validVerbTypes = ['strong', 'weak', 'mixed'];
     const verbTypeRaw = parsed.verbType?.trim().toLowerCase() ?? '';
-    const verbType = isVerb && validVerbTypes.includes(verbTypeRaw) ? verbTypeRaw as 'strong' | 'weak' | 'mixed' : undefined;
+    const verbType =
+      isVerb && validVerbTypes.includes(verbTypeRaw)
+        ? (verbTypeRaw as 'strong' | 'weak' | 'mixed')
+        : undefined;
 
-    const validPluralFormations = ['-e', '-en', '-er', '-s', '-n', '-', 'umlaut', 'umlaut + -e', 'umlaut + -er', 'umlaut + -en', 'foreign'];
+    const validPluralFormations = [
+      '-e',
+      '-en',
+      '-er',
+      '-s',
+      '-n',
+      '-',
+      'umlaut',
+      'umlaut + -e',
+      'umlaut + -er',
+      'umlaut + -en',
+      'foreign',
+    ];
     const pluralFormationRaw = parsed.pluralFormation?.trim() ?? '';
-    const pluralFormation = isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
+    const pluralFormation =
+      isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
 
     return {
       baseForm: parsed.baseForm?.trim() || undefined,
@@ -824,11 +878,11 @@ Word: "${german}"`;
       gender,
       level: finalLevel,
       verbType,
-      infinitive: isVerb ? (parsed.infinitive?.trim() || undefined) : undefined,
-      presentThirdPerson: isVerb ? (parsed.presentThirdPerson?.trim() || undefined) : undefined,
-      simplePast: isVerb ? (parsed.simplePast?.trim() || undefined) : undefined,
-      pastParticiple: isVerb ? (parsed.pastParticiple?.trim() || undefined) : undefined,
-      pluralForm: isNoun ? (parsed.pluralForm?.trim() || undefined) : undefined,
+      infinitive: isVerb ? parsed.infinitive?.trim() || undefined : undefined,
+      presentThirdPerson: isVerb ? parsed.presentThirdPerson?.trim() || undefined : undefined,
+      simplePast: isVerb ? parsed.simplePast?.trim() || undefined : undefined,
+      pastParticiple: isVerb ? parsed.pastParticiple?.trim() || undefined : undefined,
+      pluralForm: isNoun ? parsed.pluralForm?.trim() || undefined : undefined,
       pluralFormation,
     };
   }
@@ -837,7 +891,7 @@ Word: "${german}"`;
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
-        'No API key set. Add your OpenRouter API key in the AI Assistant field above.'
+        'No API key set. Add your OpenRouter API key in the AI Assistant field above.',
       );
     }
 
@@ -880,7 +934,7 @@ Word: "${german}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -888,13 +942,11 @@ Word: "${german}"`;
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error(
-          'API key rejected. Check your OpenRouter key at openrouter.ai/keys.'
-        );
+        throw new Error('API key rejected. Check your OpenRouter key at openrouter.ai/keys.');
       }
       if (response.status === 402) {
         throw new Error(
-          'OpenRouter account has insufficient credits. Add credits at openrouter.ai.'
+          'OpenRouter account has insufficient credits. Add credits at openrouter.ai.',
         );
       }
       if (response.status === 429) {
@@ -944,17 +996,23 @@ Word: "${german}"`;
     }
 
     const validParts: PartOfSpeech[] = [
-      'noun', 'verb', 'adjective', 'adverb', 'pronoun',
-      'preposition', 'conjunction', 'interjection', 'numeral', 'phrase',
+      'noun',
+      'verb',
+      'adjective',
+      'adverb',
+      'pronoun',
+      'preposition',
+      'conjunction',
+      'interjection',
+      'numeral',
+      'phrase',
     ];
     const partOfSpeech = validParts.includes(rawPart) ? rawPart : 'noun';
 
     const validGender = ['der', 'die', 'das'];
     const isNoun = partOfSpeech === 'noun';
     const gender: Gender | null =
-      isNoun && validGender.includes(genderRaw)
-        ? (genderRaw as Gender)
-        : null;
+      isNoun && validGender.includes(genderRaw) ? (genderRaw as Gender) : null;
 
     const validLevels: DifficultyLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1'];
     const finalLevel = validLevels.includes(level) ? level : 'A1';
@@ -963,12 +1021,28 @@ Word: "${german}"`;
     const isVerb = partOfSpeech === 'verb';
     const validVerbTypes = ['strong', 'weak', 'mixed'];
     const verbTypeRaw = parsed.verbType?.trim().toLowerCase() ?? '';
-    const verbType = isVerb && validVerbTypes.includes(verbTypeRaw) ? verbTypeRaw as 'strong' | 'weak' | 'mixed' : undefined;
+    const verbType =
+      isVerb && validVerbTypes.includes(verbTypeRaw)
+        ? (verbTypeRaw as 'strong' | 'weak' | 'mixed')
+        : undefined;
 
     // Extract noun-specific fields
-    const validPluralFormations = ['-e', '-en', '-er', '-s', '-n', '-', 'umlaut', 'umlaut + -e', 'umlaut + -er', 'umlaut + -en', 'foreign'];
+    const validPluralFormations = [
+      '-e',
+      '-en',
+      '-er',
+      '-s',
+      '-n',
+      '-',
+      'umlaut',
+      'umlaut + -e',
+      'umlaut + -er',
+      'umlaut + -en',
+      'foreign',
+    ];
     const pluralFormationRaw = parsed.pluralFormation?.trim() ?? '';
-    const pluralFormation = isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
+    const pluralFormation =
+      isNoun && validPluralFormations.includes(pluralFormationRaw) ? pluralFormationRaw : undefined;
 
     return {
       baseForm: parsed.baseForm?.trim() || undefined,
@@ -978,11 +1052,11 @@ Word: "${german}"`;
       gender,
       level: finalLevel,
       verbType,
-      infinitive: isVerb ? (parsed.infinitive?.trim() || undefined) : undefined,
-      presentThirdPerson: isVerb ? (parsed.presentThirdPerson?.trim() || undefined) : undefined,
-      simplePast: isVerb ? (parsed.simplePast?.trim() || undefined) : undefined,
-      pastParticiple: isVerb ? (parsed.pastParticiple?.trim() || undefined) : undefined,
-      pluralForm: isNoun ? (parsed.pluralForm?.trim() || undefined) : undefined,
+      infinitive: isVerb ? parsed.infinitive?.trim() || undefined : undefined,
+      presentThirdPerson: isVerb ? parsed.presentThirdPerson?.trim() || undefined : undefined,
+      simplePast: isVerb ? parsed.simplePast?.trim() || undefined : undefined,
+      pastParticiple: isVerb ? parsed.pastParticiple?.trim() || undefined : undefined,
+      pluralForm: isNoun ? parsed.pluralForm?.trim() || undefined : undefined,
       pluralFormation,
     };
   }
@@ -993,7 +1067,16 @@ Word: "${german}"`;
     count: number,
     domain?: string,
     grammarTopics?: string[],
-    wordDetails?: { german: string; partOfSpeech: string; gender?: string | null; pluralForm?: string; verbType?: string; presentThirdPerson?: string; simplePast?: string; pastParticiple?: string }
+    wordDetails?: {
+      german: string;
+      partOfSpeech: string;
+      gender?: string | null;
+      pluralForm?: string;
+      verbType?: string;
+      presentThirdPerson?: string;
+      simplePast?: string;
+      pastParticiple?: string;
+    },
   ): Promise<GeneratedSentence[]> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -1025,7 +1108,9 @@ Word: "${german}"`;
           wd.simplePast ? `simple past (Präteritum): "${wd.simplePast}"` : '',
           wd.pastParticiple ? `past participle (Partizip II): "${wd.pastParticiple}"` : '',
           wd.verbType ? `type: ${wd.verbType}` : '',
-        ].filter(Boolean).join(', ');
+        ]
+          .filter(Boolean)
+          .join(', ');
         partOfSpeechInstructions = `The target word is the verb "${wd.german}"${verbInfo ? ` (${verbInfo})` : ''}.
 - Use different subjects: "ich", "du", "er/sie/es", "wir", "sie" in different sentences.
 - Include at least one example in Präsens, one in Präteritum, and one with Partizip II (Perfekt) when these forms are provided.
@@ -1079,7 +1164,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -1107,7 +1192,7 @@ Example format:
 
     const sentences = Array.isArray(parsed)
       ? parsed
-      : (parsed as { sentences: GeneratedSentence[] }).sentences ?? [];
+      : ((parsed as { sentences: GeneratedSentence[] }).sentences ?? []);
 
     if (!Array.isArray(sentences) || sentences.length === 0) {
       throw new Error('AI could not generate sentences. Try again.');
@@ -1126,7 +1211,7 @@ Example format:
     domain?: string,
     grammarTopics?: string[],
     avoidSentences?: string[],
-    levelRange?: DifficultyLevel[]
+    levelRange?: DifficultyLevel[],
   ): Promise<GeneratedWordExercise[]> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -1141,13 +1226,15 @@ Example format:
       grammarTopics && grammarTopics.length > 0
         ? `Each sentence must demonstrate at least one of these grammar topics: ${grammarTopics.join(', ')}.`
         : '';
-    const avoidInstruction = avoidSentences && avoidSentences.length > 0
-      ? `\n- Do NOT generate any of these exact sentences: ${avoidSentences.join('; ')}. Create different sentences using the same words.`
-      : '';
+    const avoidInstruction =
+      avoidSentences && avoidSentences.length > 0
+        ? `\n- Do NOT generate any of these exact sentences: ${avoidSentences.join('; ')}. Create different sentences using the same words.`
+        : '';
 
-    const levelInstruction = levelRange && levelRange.length > 1
-      ? `Generate sentences at a variety of CEFR levels between ${levelRange[0]} and ${levelRange[levelRange.length - 1]}, mixing easier and harder sentences.`
-      : `Generate sentences at CEFR level ${level}.`;
+    const levelInstruction =
+      levelRange && levelRange.length > 1
+        ? `Generate sentences at a variety of CEFR levels between ${levelRange[0]} and ${levelRange[levelRange.length - 1]}, mixing easier and harder sentences.`
+        : `Generate sentences at CEFR level ${level}.`;
 
     const prompt = `You are a German language teacher. Generate ${count} German cloze (fill-in-the-blank) exercises. ${levelInstruction}
 Respond with JSON only (no markdown) as an object with a single key "exercises" containing an array of objects. Each object must have exactly these fields:
@@ -1189,7 +1276,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -1217,7 +1304,7 @@ Example format:
 
     const exercises = Array.isArray(parsed)
       ? parsed
-      : (parsed as { exercises: GeneratedWordExercise[] }).exercises ?? [];
+      : ((parsed as { exercises: GeneratedWordExercise[] }).exercises ?? []);
 
     if (!Array.isArray(exercises) || exercises.length === 0) {
       throw new Error('AI could not generate exercises. Try again.');
@@ -1234,7 +1321,7 @@ Example format:
     sentence: string,
     patternId: string,
     patternDescription: string,
-    patternTips: string
+    patternTips: string,
   ): Promise<SentenceFeedback> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -1270,7 +1357,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1307,13 +1394,19 @@ Rules:
 
     const normalizeList = (value: string[] | string | undefined): string[] => {
       if (Array.isArray(value)) {
-        return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter((item) => item.length > 0);
+        return value
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0);
       }
       if (typeof value === 'string' && value.trim()) {
         // AI sometimes returns a single string instead of an array — split into sentences/period-separated tips
         const trimmed = value.trim();
         // If it looks like a single sentence, return as one tip. If it has multiple sentences, split on periods.
-        const sentences = trimmed.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length > 0);
+        const sentences = trimmed
+          .split(/(?<=[.!?])\s+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
         return sentences.length > 0 ? sentences : [trimmed];
       }
       return [];
@@ -1337,16 +1430,17 @@ Rules:
   async analyzeDiaryEntry(
     text: string,
     vocabList: { german: string; translationEn: string; translationRu: string }[],
-    conversationHistory?: { role: 'user' | 'assistant'; text: string }[]
+    conversationHistory?: { role: 'user' | 'assistant'; text: string }[],
   ): Promise<DiaryFeedback> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
 
-    const historyBlock = conversationHistory && conversationHistory.length > 0
-      ? `\n\nThis is a continuation of a conversation. Here is the history so far:\n${conversationHistory.map((m) => `[${m.role === 'user' ? 'Student' : 'Teacher'}]: ${m.text}`).join('\n')}\n\nThe student's new message above is a response to the teacher's last question. Analyze it in the context of this ongoing conversation.`
-      : '';
+    const historyBlock =
+      conversationHistory && conversationHistory.length > 0
+        ? `\n\nThis is a continuation of a conversation. Here is the history so far:\n${conversationHistory.map((m) => `[${m.role === 'user' ? 'Student' : 'Teacher'}]: ${m.text}`).join('\n')}\n\nThe student's new message above is a response to the teacher's last question. Analyze it in the context of this ongoing conversation.`
+        : '';
 
     const prompt = `You are a German language teacher. A student has written a free-form diary entry in German as a language learning exercise.
 
@@ -1379,7 +1473,7 @@ Rules:
 - For "unknownWords": flag any words that are uncommon or likely beyond A2/B1 level. Use your judgement as a German teacher. Allow conjugated forms of common verbs. Empty array if all words are common.
 - Follow-up questions should be simple enough for the student to answer at their level, and should relate to the content of the entry (e.g. ask for more details about what they wrote about).
 - The cefrEstimate should be based on sentence complexity, vocabulary range, and error frequency.`;
- 
+
     const response = await fetch(environment.openRouterApiUrl, {
       method: 'POST',
       headers: {
@@ -1389,7 +1483,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.3,
       }),
@@ -1469,7 +1563,7 @@ Student's query: "${userQuery}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.3,
       }),
@@ -1510,10 +1604,7 @@ Student's query: "${userQuery}"`;
     };
   }
 
-  async verifyTranslation(
-    userInput: string,
-    correctGerman: string
-  ): Promise<TranslationResult> {
+  async verifyTranslation(userInput: string, correctGerman: string): Promise<TranslationResult> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('No API key set. Add your OpenRouter API key first.');
@@ -1550,7 +1641,7 @@ Student's translation: "${userInput}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1608,8 +1699,7 @@ Student's translation: "${userInput}"`;
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
 
-    const langName =
-      config.translationLanguage === 'en' ? 'English' : 'Russian';
+    const langName = config.translationLanguage === 'en' ? 'English' : 'Russian';
 
     const prompt = `You are a German language teacher. Generate ${config.count} comprehension questions about the following German story.
 The questions are for ACTIVE RECALL training: the learner reads the question and must answer it in German from memory.
@@ -1638,7 +1728,7 @@ Respond with JSON only (no markdown) using exactly this shape:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -1666,7 +1756,7 @@ Respond with JSON only (no markdown) using exactly this shape:
 
     const questions = Array.isArray(parsed)
       ? parsed
-      : (parsed as { questions: GeneratedStoryQuestion[] }).questions ?? [];
+      : ((parsed as { questions: GeneratedStoryQuestion[] }).questions ?? []);
 
     if (!Array.isArray(questions) || questions.length === 0) {
       throw new Error('AI could not generate questions. Try again.');
@@ -1722,7 +1812,7 @@ Respond with JSON only (no markdown) using exactly this shape:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.5,
       }),
@@ -1741,18 +1831,14 @@ Respond with JSON only (no markdown) using exactly this shape:
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     const jsonText = jsonMatch ? jsonMatch[1] : text;
 
-    let parsed:
-      | GeneratedStoryClozeSentence[]
-      | { sentences?: GeneratedStoryClozeSentence[] };
+    let parsed: GeneratedStoryClozeSentence[] | { sentences?: GeneratedStoryClozeSentence[] };
     try {
       parsed = JSON.parse(jsonText);
     } catch {
       throw new Error('AI returned an invalid response.');
     }
 
-    const rawSentences = Array.isArray(parsed)
-      ? parsed
-      : parsed.sentences ?? [];
+    const rawSentences = Array.isArray(parsed) ? parsed : (parsed.sentences ?? []);
     if (!Array.isArray(rawSentences) || rawSentences.length === 0) {
       throw new Error('AI could not generate the cloze exercise. Try again.');
     }
@@ -1787,7 +1873,7 @@ Respond with JSON only (no markdown) using exactly this shape:
     const minRequired = Math.max(5, Math.min(10, Math.round(config.count / 2)));
     if (removedCount < minRequired) {
       throw new Error(
-        'The AI could not generate enough missing words for the cloze. Please try again.'
+        'The AI could not generate enough missing words for the cloze. Please try again.',
       );
     }
 
@@ -1801,7 +1887,7 @@ Respond with JSON only (no markdown) using exactly this shape:
   async checkStoryAnswer(
     userInput: string,
     question: string,
-    correctAnswer: string
+    correctAnswer: string,
   ): Promise<StoryAnswerFeedback> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -1834,7 +1920,7 @@ Student's answer: "${userInput}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -1908,7 +1994,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 1.2,
       }),
@@ -1967,12 +2053,14 @@ Rules:
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
 
-    const wordTypesInstruction = config.wordTypes.length > 0
-      ? `Prioritize using these word types: ${config.wordTypes.join(', ')}.`
-      : '';
-    const grammarInstruction = config.grammarTopics.length > 0
-      ? `The story must demonstrate these grammar topics: ${config.grammarTopics.join(', ')}.`
-      : '';
+    const wordTypesInstruction =
+      config.wordTypes.length > 0
+        ? `Prioritize using these word types: ${config.wordTypes.join(', ')}.`
+        : '';
+    const grammarInstruction =
+      config.grammarTopics.length > 0
+        ? `The story must demonstrate these grammar topics: ${config.grammarTopics.join(', ')}.`
+        : '';
     const isDialog = config.format === 'dialog';
 
     // Guard the min/max bounds so min is never greater than max,
@@ -2024,7 +2112,7 @@ Generate exactly ${config.sentenceCount} sentences${isDialog ? ' / dialog lines'
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.7,
       }),
@@ -2086,10 +2174,7 @@ Generate exactly ${config.sentenceCount} sentences${isDialog ? ' / dialog lines'
    * Translates a German text into the user's native language (Russian or English)
    * via the AI model. Used as a fallback when the local translation service is unavailable.
    */
-  async translateToNative(
-    text: string,
-    target: 'ru' | 'en'
-  ): Promise<string> {
+  async translateToNative(text: string, target: 'ru' | 'en'): Promise<string> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('No API key set. Add your OpenRouter API key first.');
@@ -2110,7 +2195,7 @@ German sentence: "${text}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -2196,7 +2281,7 @@ German sentence: "${text}"`;
           wordsJson,
           recogCount,
           langName,
-          config.storyLevel
+          config.storyLevel,
         );
         let recogExercises: GeneratedStoryExercise[] = [];
         let formExercises: GeneratedStoryExercise[] = [];
@@ -2217,7 +2302,7 @@ German sentence: "${text}"`;
           storyBlock,
           formsJson,
           langName,
-          config.storyLevel
+          config.storyLevel,
         );
         try {
           formExercises = await this.requestStoryExercises(apiKey, formsPrompt);
@@ -2225,7 +2310,7 @@ German sentence: "${text}"`;
           // Graceful fallback: forms are a bonus — keep going with recognition exercises only.
           console.warn(
             'Story exercise forms request failed; continuing with recognition exercises only.',
-            err
+            err,
           );
           formExercises = [];
         }
@@ -2238,7 +2323,7 @@ German sentence: "${text}"`;
           wordsJson,
           count,
           langName,
-          config.storyLevel
+          config.storyLevel,
         );
         const exercises = await this.requestStoryExercises(apiKey, prompt);
         allExercises.push(...exercises);
@@ -2264,7 +2349,9 @@ German sentence: "${text}"`;
         return false;
       }
       if (e.type === 'mc') {
-        return !!e.mcPrompt && !!e.mcCorrect && Array.isArray(e.mcOptions) && e.mcOptions.length >= 2;
+        return (
+          !!e.mcPrompt && !!e.mcCorrect && Array.isArray(e.mcOptions) && e.mcOptions.length >= 2
+        );
       }
       if (e.type === 'mc-sentence') {
         return (
@@ -2315,7 +2402,9 @@ German sentence: "${text}"`;
         );
       }
       if (e.type === 'cloze') {
-        return !!e.clozeSentence && Array.isArray(e.clozeBlankWords) && e.clozeBlankWords.length > 0;
+        return (
+          !!e.clozeSentence && Array.isArray(e.clozeBlankWords) && e.clozeBlankWords.length > 0
+        );
       }
       return !!e.sentenceGerman && !!e.sentenceNative;
     });
@@ -2334,14 +2423,12 @@ German sentence: "${text}"`;
     const normalizedGen: GeneratedStoryExercise[] = [];
     for (const w of config.words) {
       const perWord = valid.filter(
-        (e) => e.word?.trim().toLowerCase() === w.german.trim().toLowerCase()
+        (e) => e.word?.trim().toLowerCase() === w.german.trim().toLowerCase(),
       );
       const mcDe = perWord.find((e) => e.type === 'mc' && e.mcDirection === 'de-native');
       const mcNativeDe = perWord.find((e) => e.type === 'mc' && e.mcDirection === 'native-de');
       const mcSentence = perWord.find((e) => e.type === 'mc-sentence');
-      const base = [mcDe, mcNativeDe, mcSentence].filter(
-        (e): e is GeneratedStoryExercise => !!e
-      );
+      const base = [mcDe, mcNativeDe, mcSentence].filter((e): e is GeneratedStoryExercise => !!e);
       if (base.length < 3) {
         throw new Error('AI could not generate complete exercises. Try again.');
       }
@@ -2369,7 +2456,7 @@ German sentence: "${text}"`;
   /** Sends a single story-exercise prompt to the AI and returns the raw parsed exercise objects. */
   private async requestStoryExercises(
     apiKey: string,
-    prompt: string
+    prompt: string,
   ): Promise<GeneratedStoryExercise[]> {
     const response = await fetch(environment.openRouterApiUrl, {
       method: 'POST',
@@ -2380,7 +2467,7 @@ German sentence: "${text}"`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.5,
       }),
@@ -2408,7 +2495,7 @@ German sentence: "${text}"`;
 
     const exercises = Array.isArray(parsed)
       ? parsed
-      : (parsed as { exercises: GeneratedStoryExercise[] }).exercises ?? [];
+      : ((parsed as { exercises: GeneratedStoryExercise[] }).exercises ?? []);
 
     if (!Array.isArray(exercises) || exercises.length === 0) {
       throw new Error('AI could not generate exercises. Try again.');
@@ -2423,7 +2510,7 @@ German sentence: "${text}"`;
     wordsJson: string,
     count: number,
     langName: string,
-    storyLevel: DifficultyLevel
+    storyLevel: DifficultyLevel,
   ): string {
     return `You are a German language teacher. ${storyBlock}
 For EACH word in the list below, generate EXACTLY 3 vocabulary exercises (3 exercises per word):
@@ -2465,7 +2552,7 @@ Example format:
     wordsJson: string,
     count: number,
     langName: string,
-    storyLevel: DifficultyLevel
+    storyLevel: DifficultyLevel,
   ): string {
     return `You are a German language teacher. ${storyBlock}
 For EACH word in the list below, generate EXACTLY 3 multiple-choice (card) exercises (3 exercises per word). The three must be DIFFERENT exercise types (no repeated combinations):
@@ -2507,7 +2594,7 @@ Example (mc-sentence):
     storyBlock: string,
     wordsJson: string,
     langName: string,
-    storyLevel: DifficultyLevel
+    storyLevel: DifficultyLevel,
   ): string {
     return `You are a German language teacher. ${storyBlock}
 Below is a list of German words a student selected from a story. For each word, FIRST determine its part of speech yourself (the list sometimes contains inflected/derived forms that are not in the dictionary, e.g. "wäscht" is the 3rd person of "waschen", "besser" is the comparative of "gut", "Äpfel" is the plural of "Apfel"). Then generate ONLY the appropriate inflection (form) exercises:
@@ -2562,7 +2649,7 @@ Example (superlative):
     ruleName: string,
     rulePrepositions: string[],
     knownWords: string[],
-    level: DifficultyLevel
+    level: DifficultyLevel,
   ): Promise<GeneratedPrepositionExercise> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -2570,9 +2657,7 @@ Example (superlative):
     }
 
     const wordsList =
-      knownWords.length > 0
-        ? knownWords.slice(0, 40).join(', ')
-        : 'common German words';
+      knownWords.length > 0 ? knownWords.slice(0, 40).join(', ') : 'common German words';
     const prepositionsList = rulePrepositions.join(', ');
 
     const prompt = `You are a German language teacher. Generate ONE German sentence that practices this grammar rule:
@@ -2607,7 +2692,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.5,
       }),
@@ -2675,23 +2760,26 @@ Rules:
       throw new Error('No API key set. Add your OpenRouter API key first.');
     }
 
-    const caseFilter = config.selectedCases && config.selectedCases.length > 0
-      ? `Only use these German cases: ${config.selectedCases.join(', ')}.`
-      : 'Use all four cases (nominative, accusative, dative, genitive).';
+    const caseFilter =
+      config.selectedCases && config.selectedCases.length > 0
+        ? `Only use these German cases: ${config.selectedCases.join(', ')}.`
+        : 'Use all four cases (nominative, accusative, dative, genitive).';
 
-    const typeInstruction = config.questionType === 'mixed'
-      ? 'Mix all types: articles, adjective endings, noun forms, and full phrases.'
-      : config.questionType === 'article'
-        ? 'Focus on article declension (der/die/das, ein/eine, kein/keine, mein/meine, dieser/diese/dieses).'
-        : config.questionType === 'adjective'
-          ? 'Focus on adjective endings (strong, weak, mixed declension).'
-          : config.questionType === 'noun'
-            ? 'Focus on noun forms (genitive -s/-es, dative plural -n, n-Deklination).'
-            : 'Focus on full phrases (article + adjective + noun together).';
+    const typeInstruction =
+      config.questionType === 'mixed'
+        ? 'Mix all types: articles, adjective endings, noun forms, and full phrases.'
+        : config.questionType === 'article'
+          ? 'Focus on article declension (der/die/das, ein/eine, kein/keine, mein/meine, dieser/diese/dieses).'
+          : config.questionType === 'adjective'
+            ? 'Focus on adjective endings (strong, weak, mixed declension).'
+            : config.questionType === 'noun'
+              ? 'Focus on noun forms (genitive -s/-es, dative plural -n, n-Deklination).'
+              : 'Focus on full phrases (article + adjective + noun together).';
 
-    const themeInstruction = config.theme && config.theme.trim()
-      ? `All sentences must be about the theme: "${config.theme.trim()}".`
-      : 'Vary the themes across sentences.';
+    const themeInstruction =
+      config.theme && config.theme.trim()
+        ? `All sentences must be about the theme: "${config.theme.trim()}".`
+        : 'Vary the themes across sentences.';
 
     const prompt = `You are a German language teacher. Generate ${config.count} German declension exercises (multiple choice).
 
@@ -2739,7 +2827,7 @@ Example format:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.5,
       }),
@@ -2767,7 +2855,7 @@ Example format:
 
     const exercises = Array.isArray(parsed)
       ? parsed
-      : (parsed as { exercises: RawDeclensionExercise[] }).exercises ?? [];
+      : ((parsed as { exercises: RawDeclensionExercise[] }).exercises ?? []);
 
     if (!Array.isArray(exercises) || exercises.length === 0) {
       throw new Error('AI could not generate exercises. Try again.');
@@ -2780,8 +2868,9 @@ Example format:
     const first = (...values: (string | undefined)[]): string =>
       values.find((v) => v !== undefined && String(v).trim().length > 0)?.trim() ?? '';
 
-    const normalized = exercises.slice(0, config.count).map(
-      (e): GeneratedDeclensionExercise | null => {
+    const normalized = exercises
+      .slice(0, config.count)
+      .map((e): GeneratedDeclensionExercise | null => {
         const sentence = first(e.sentenceWithBlank, e.sentenceWithBank);
         const correctAnswer = first(e.correctAnswer, e.correct);
         const caseRaw = first(e.caseReq, e.case);
@@ -2797,7 +2886,10 @@ Example format:
         const rawOptions = Array.isArray(e.options)
           ? e.options.map((o) => String(o).trim()).filter((o) => o.length > 0)
           : typeof e.options === 'string' && e.options.trim()
-            ? e.options.split(',').map((o) => o.trim()).filter((o) => o.length > 0)
+            ? e.options
+                .split(',')
+                .map((o) => o.trim())
+                .filter((o) => o.length > 0)
             : [];
 
         // Ensure at least 2 options and that the correct answer is present
@@ -2812,11 +2904,11 @@ Example format:
           sentenceWithBlank: sentence,
           correctAnswer,
           caseReq: validCases.includes(caseRaw)
-            ? caseRaw as GeneratedDeclensionExercise['caseReq']
+            ? (caseRaw as GeneratedDeclensionExercise['caseReq'])
             : 'nominative',
           genderLabel: gender,
           focusType: validFocusTypes.includes(focusRaw)
-            ? focusRaw as GeneratedDeclensionExercise['focusType']
+            ? (focusRaw as GeneratedDeclensionExercise['focusType'])
             : 'article',
           baseForm: baseForm || undefined,
           hintEn: e.hintEn ?? '',
@@ -2825,8 +2917,7 @@ Example format:
           note: e.note?.trim() || undefined,
           options,
         };
-      }
-    );
+      });
 
     const valid = normalized.filter((e): e is GeneratedDeclensionExercise => e !== null);
     if (valid.length === 0) {
@@ -2857,6 +2948,13 @@ Example format:
     translationsRaw: string;
     expectedGerman: string;
     spokenText: string;
+    /**
+     * Требуемый артикль существительного. Вместе с requireArticle включает
+     * строгий режим: без него проверка ответа идёт по-старому.
+     */
+    expectedArticle?: Article;
+    /** Тумблер «произносить с артиклем» у игрока. */
+    requireArticle?: boolean;
   }): Promise<JudgeVerdict> {
     const local = judgeLocally(config);
     if (local) return local;
@@ -2906,7 +3004,7 @@ Example format:
       genderLabel: string;
       focusType: string;
       explanation: string;
-    }
+    },
   ): Promise<DeclensionAnswerResult> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -2948,7 +3046,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -2983,7 +3081,7 @@ Rules:
     };
   }
 
-/**
+  /**
    * Generates German cloze sentence drills that hide every word of the verb
    * phrase (finite verb + separable particle + auxiliaries/participles) behind
    * inline inputs. The expected answers are the blankWords themselves, so the
@@ -3010,7 +3108,7 @@ Rules:
       simplePast?: string;
       pastParticiple?: string;
     },
-    avoidSlots?: Array<{ person: string; tense: string }>
+    avoidSlots?: Array<{ person: string; tense: string }>,
   ): Promise<GeneratedVerbSentence[]> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -3052,7 +3150,9 @@ Rules:
       avoidSlots && avoidSlots.length > 0
         ? `- The student already practiced these person × tense combinations in recent rounds: ${avoidSlots
             .map((s) => `${s.person}|${s.tense}`)
-            .join(', ')}. Do NOT reuse any of them for the sentences below — pick fresh combinations from the remaining ones instead. Only repeat an avoided combination if every other combination is already exhausted.\n`
+            .join(
+              ', ',
+            )}. Do NOT reuse any of them for the sentences below — pick fresh combinations from the remaining ones instead. Only repeat an avoided combination if every other combination is already exhausted.\n`
         : '';
 
     // Anchor the model to the actual verb so it cannot accidentally train a
@@ -3070,7 +3170,7 @@ Rules:
     const referenceInstruction =
       referenceParts.length > 0
         ? `- Known inflections of "${verb}": ${referenceParts.join(
-            '; '
+            '; ',
           )}. The blanks must be conjugated forms of "${verb}" consistent with these inflections.\n`
         : '';
 
@@ -3116,7 +3216,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.6,
       }),
@@ -3156,7 +3256,7 @@ Rules:
     }
     return normalized.slice(0, count);
   }
-/** Validates and cleans a generated sentence object; returns null if unusable. */
+  /** Validates and cleans a generated sentence object; returns null if unusable. */
   private normalizeVerbSentence(
     raw: GeneratedVerbSentence,
     verb: string,
@@ -3164,7 +3264,7 @@ Rules:
       presentThirdPerson?: string;
       simplePast?: string;
       pastParticiple?: string;
-    }
+    },
   ): GeneratedVerbSentence | null {
     if (!raw || typeof raw.fullSentence !== 'string') return null;
     const fullSentence = raw.fullSentence.trim();
@@ -3187,13 +3287,10 @@ Rules:
     // still guard against unrelated sentences.
     const refsComplete = Boolean(
       referenceForms?.presentThirdPerson &&
-        referenceForms?.simplePast &&
-        referenceForms?.pastParticiple
+      referenceForms?.simplePast &&
+      referenceForms?.pastParticiple,
     );
-    if (
-      refsComplete &&
-      !blanks.some((w) => isVerbFormLike(w, verb, referenceForms))
-    ) {
+    if (refsComplete && !blanks.some((w) => isVerbFormLike(w, verb, referenceForms))) {
       return null;
     }
 
@@ -3232,7 +3329,7 @@ Rules:
       model: string;
       voice: string;
       voiceSecond?: string;
-    }
+    },
   ): Promise<string> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -3245,7 +3342,7 @@ Rules:
         options.model,
         options.voice,
         'mp3',
-        options.voiceSecond
+        options.voiceSecond,
       );
     }
     if (options.model.startsWith('google/')) {
@@ -3260,7 +3357,7 @@ Rules:
     model: string,
     voice: string,
     responseFormat: 'mp3' | 'pcm' = 'mp3',
-    voiceSecond?: string
+    voiceSecond?: string,
   ): Promise<string> {
     const apiKey = this.getApiKey();
 
@@ -3358,7 +3455,7 @@ Rules:
     // fmt chunk
     this.writeString(view, 12, 'fmt ');
     view.setUint32(16, 16, true); // chunk size
-    view.setUint16(20, 1, true);  // PCM format
+    view.setUint16(20, 1, true); // PCM format
     view.setUint16(22, numChannels, true);
     view.setUint32(24, sampleRate, true);
     view.setUint32(28, byteRate, true);
@@ -3406,16 +3503,14 @@ Rules:
       throw new Error('OpenRouter account has insufficient credits for TTS.');
     }
     if (response.status === 404) {
-      throw new Error(
-        `TTS model or voice not found (${label}). Try another model or voice.`
-      );
+      throw new Error(`TTS model or voice not found (${label}). Try another model or voice.`);
     }
     if (response.status === 429) {
       throw new Error('Rate limit reached. Try again in a moment.');
     }
     if (response.status === 502 || response.status === 503) {
       throw new Error(
-        `TTS provider error (${response.status}). The selected voice may not be available for this model — try another voice.`
+        `TTS provider error (${response.status}). The selected voice may not be available for this model — try another voice.`,
       );
     }
     throw new Error(`${label} request failed (HTTP ${response.status})`);
@@ -3472,7 +3567,7 @@ ${rawText}`;
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
         max_tokens: 8192,
@@ -3492,7 +3587,7 @@ ${rawText}`;
 
     if (finishReason === 'length') {
       throw new Error(
-        'The caption text is too long for the AI to process in one request. Try splitting it into smaller parts.'
+        'The caption text is too long for the AI to process in one request. Try splitting it into smaller parts.',
       );
     }
 
@@ -3561,7 +3656,7 @@ Rules:
       body: JSON.stringify({
         model: this.settingsService.textModel(),
         messages: [{ role: 'user', content: prompt }],
-        ...(this.combinedProviderField()),
+        ...this.combinedProviderField(),
         response_format: { type: 'json_object' },
         temperature: 0.2,
       }),
@@ -3602,15 +3697,11 @@ Rules:
 
   private handleError(response: Response): never {
     if (response.status === 401) {
-      throw new Error(
-        'API key rejected. Check your OpenRouter key at openrouter.ai/keys.'
-      );
+      throw new Error('API key rejected. Check your OpenRouter key at openrouter.ai/keys.');
     }
     if (response.status === 402) {
       this.setCreditError(true);
-      throw new Error(
-        'OpenRouter account has insufficient credits. Add credits at openrouter.ai.'
-      );
+      throw new Error('OpenRouter account has insufficient credits. Add credits at openrouter.ai.');
     }
     if (response.status === 429) {
       throw new Error('Rate limit reached. Try again in a moment.');

@@ -29,7 +29,7 @@ import { WHISPER_MODELS, WhisperService, modelDtype } from '../../services/whisp
 import type { MicError, WhisperModelInfo } from '../../services/whisper.service';
 import { BROWSER_VOICE, PronunciationService } from '../../services/pronunciation.service';
 import type { VoiceSource } from '../../services/pronunciation.service';
-import { DuoWord, FlashcardsSessionResult, JudgeVerdict } from '../../models/flashcards';
+import { Article, DuoWord, FlashcardsSessionResult, JudgeVerdict } from '../../models/flashcards';
 
 type Phase = 'setup' | 'playing' | 'summary';
 
@@ -48,6 +48,8 @@ interface StoredSettings {
   model?: string;
   /** Показывать ли все переводы на карточке (переключатель «ещё переводов»). */
   showAlts?: boolean;
+  /** Требовать ли артикль: «der Kaffee» вместо «Kaffee». */
+  requireArticles?: boolean;
 }
 
 const SETTINGS_KEY = 'flashcards.settings';
@@ -115,6 +117,21 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
    * тем же переключателем, и выключенное состояние тоже запоминается.
    */
   readonly showAlts = signal(this.stored.showAlts ?? false);
+  /**
+   * Требовать артикль: слово нужно произносить вместе с определённым
+   * артиклем («der Kaffee»), и он же показывается и озвучивается на карточке.
+   *
+   * Липкая настройка — как showAlts. У глаголов, прилагательных и имён
+   * собственных артикля нет, поэтому для них тумблер просто ничего не меняет
+   * (см. `articleFor`).
+   */
+  readonly requireArticles = signal(this.stored.requireArticles ?? false);
+  /** Артикль текущей карточки, если слово — существительное. */
+  readonly articleFor = computed<Article | null>(() => {
+    const word = this.currentWord();
+    if (!word?.article) return null;
+    return this.requireArticles() ? word.article : null;
+  });
   readonly mistakes = signal<DuoWord[]>([]);
   readonly summary = signal<FlashcardsSessionResult | null>(null);
 
@@ -266,6 +283,20 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Требование артикля. Липкая настройка: запоминается между сессиями,
+   * как и остальные переключатели этого экрана.
+   */
+  setRequireArticles(enabled: boolean): void {
+    if (this.requireArticles() === enabled) return;
+    this.requireArticles.set(enabled);
+    this.saveSettings();
+    // Если карточка уже открыта, переозвучиваем её: игрок должен сразу
+    // услышать, как звучит «der Kaffee», а не «Kaffee».
+    const word = this.currentWord();
+    if (word && this.reveal()) this.pronounce(word);
+  }
+
   /** Подготовить модель распознавания заранее (кнопка на экране настройки). */
   prepareModel(): void {
     void this.whisper.preload();
@@ -290,6 +321,8 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
     this.stored.size = this.sessionSize();
     this.stored.autoListen = this.autoListen();
     this.stored.model = this.modelId();
+    this.stored.showAlts = this.showAlts();
+    this.stored.requireArticles = this.requireArticles();
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.stored));
     } catch {
@@ -434,12 +467,26 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Слово так, как его нужно произнести: с артиклем, если тумблер включён
+   * и слово — существительное. Один источник истины для карточки, озвучки и
+   * prefetch: если они разойдутся, кэш промахнётся и озвучка «зависнет».
+   */
+  private spokenForm(word: DuoWord): string {
+    const article = this.requireArticles() ? word.article : undefined;
+    return article ? `${article} ${word.german}` : word.german;
+  }
+
+  /**
    * Озвучка немецкого слова. Приоритет: родной звук Duolingo (мгновенно и
    * бесплатно, но есть не у всех слов) → PronunciationService (естественный
    * API-голос с кэшем) → голос браузера (внутри сервиса, при отказе API).
+   *
+   * Родной звук Duolingo — это аудио голого слова, без артикля, поэтому при
+   * включённом тумблере его использовать нельзя: игрок услышал бы «Kaffee»
+   * вместо «der Kaffee» и выучил бы неверное.
    */
   private pronounce(word: DuoWord): void {
-    if (word.ttsUrl) {
+    if (word.ttsUrl && !this.requireArticles()) {
       try {
         const audio = new Audio(word.ttsUrl);
         audio.play().catch(() => this.voice.speak(word.german));
@@ -449,7 +496,7 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
         return;
       }
     }
-    this.voice.speak(word.german);
+    this.voice.speak(this.spokenForm(word));
   }
 
   /** Озвучить текущее слово ещё раз (кнопка на обратной стороне карточки). */
@@ -467,8 +514,11 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
    */
   private prefetchNextPronunciation(): void {
     const next = this.deck()[this.cardIndex() + 1];
-    if (!next || next.ttsUrl) return;
-    this.voice.prefetch(next.german);
+    if (!next) return;
+    // Родной звук Duolingo и так мгновенный; с артиклем его использовать
+    // нельзя, поэтому греем только API-озвучку.
+    if (next.ttsUrl && !this.requireArticles()) return;
+    this.voice.prefetch(this.spokenForm(next));
   }
 
   private scheduleNext(delayMs: number): void {
@@ -687,6 +737,10 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
         translationsRaw: word.translationsRaw,
         expectedGerman: word.german,
         spokenText: spoken,
+        // Строгий режим включается только для существительных: у глаголов
+        // и имён собственных артикля нет, требовать нечего.
+        requireArticle: this.requireArticles(),
+        expectedArticle: word.article,
       });
       if (this.currentWord() !== word) return; // карточку успели сменить
       this.applyVerdict(verdict);

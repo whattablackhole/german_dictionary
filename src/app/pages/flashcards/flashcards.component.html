@@ -40,6 +40,18 @@
         Включать микрофон автоматически на каждой карточке
       </label>
 
+      <label
+        class="auto-listen"
+        title="Существительные придётся произносить вместе с артиклем: «der Kaffee», а не «Kaffee». Глаголы и имена собственные не меняются."
+      >
+        <input
+          type="checkbox"
+          [ngModel]="requireArticles()"
+          (ngModelChange)="setRequireArticles($event)"
+        />
+        Требовать артикль: произносить «der Kaffee», а не «Kaffee»
+      </label>
+
       <div class="model-row">
         <label>
           Модель распознавания:
@@ -144,6 +156,15 @@
           <input type="checkbox" [ngModel]="autoListen()" (ngModelChange)="setAutoListen($event)" />
           🎤 авто
         </label>
+
+        <label class="auto-listen compact" title="Требовать артикль: «der Kaffee» вместо «Kaffee»">
+          <input
+            type="checkbox"
+            [ngModel]="requireArticles()"
+            (ngModelChange)="setRequireArticles($event)"
+          />
+          арт
+        </label>
       }
       <button class="btn small" (click)="skipCard()">Пропустить →</button>
       <button class="btn small" [class.active]="debugEnabled()" (click)="toggleDebug()">
@@ -184,7 +205,12 @@
 
         @if (reveal()) {
           <div class="card-face back">
-            <div class="german">{{ word.german }}</div>
+            <div class="german">
+              @if (articleFor(); as article) {
+                <span class="article">{{ article }}</span>
+              }
+              {{ word.german }}
+            </div>
             <div class="translation">{{ word.translationsRaw }}</div>
             <button
               class="btn small repeat"

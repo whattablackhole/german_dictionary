@@ -88,6 +88,33 @@ An interactive German language learning application built with [Angular CLI](htt
   Optional **auto-microphone** mode arms the mic on every new card; `Space` reveals the
   answer / advances, `M` toggles the mic, `D` opens the mic debug panel (level meter,
   waveform and event log).
+
+  ### German articles
+
+  Nouns carry their definite article as a separate `article` field
+  (`'der' | 'die' | 'das'`), generated offline into `src/app/data/duo-articles.ts`.
+  Gender is lexical in German — it cannot be derived from the word itself
+  (`das Wasser` but `der Tee`) — so the values come from a one-off model pass
+  over the ~3,500 capitalised entries, cached into a reviewable file:
+
+  ```sh
+  npm run gen:duo-articles          # fills in whatever is missing (~1.5 cents)
+  npm run gen:duo-articles:refine   # second opinion on entries marked null
+  npm run gen:duo-words             # joins articles into duo-words.ts (offline)
+  ```
+
+  Words that are not nouns (verbs, adjectives, proper names, languages, months)
+  get `null` and carry no article, so the article toggle does nothing to them.
+  The map is keyed by exact spelling and can be edited by hand; re-running the
+  generator reuses whatever is already there.
+
+  The **«Требовать артикль»** toggle then makes nouns be spoken, shown and
+  pronounced together with their article (`der Kaffee`, not `Kaffee`). In this
+  mode the judge also requires it, via a separate prompt that receives the
+  expected article. The local fast path never fails an answer *because of* an
+  article: `der` and `die` are near-homophones that speech recognition
+  confuses regularly, so a wrong or missing article is escalated to the AI
+  judge rather than being reported locally as incorrect.
 - **Word Matching Game** — Match German words with their translations in a timed game
 - **Duolingo Import** — Import vocabulary from a Duolingo export file
 - **Backup & Export** — Export/import all app data (vocabulary, stories, diary, grammar notes, sentence history) as a JSON backup

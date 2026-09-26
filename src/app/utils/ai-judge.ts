@@ -11,7 +11,7 @@
  * он решает ответ локально за микросекунды, и только спорные случаи
  * отправляются в сеть (см. `AiService.judgeSpokenTranslation`).
  */
-import { JudgeVerdict } from '../models/flashcards';
+import { Article, JudgeVerdict } from '../models/flashcards';
 
 /** Decisions endpoint (alpha) — единственный для Jev. */
 export const DECISIONS_URL = 'https://openrouter.ai/api/alpha/decisions';
@@ -22,8 +22,14 @@ export const JUDGE_MODEL = '~typesafe/jev-latest';
 /** Закреплённая версия — fallback, если алиас не резолвится на decisions. */
 export const JUDGE_MODEL_PINNED = 'typesafe/jev-1.13';
 
-/** Инструкции судьи (поле instructions вопроса). */
-export const JUDGE_INSTRUCTIONS =
+/**
+ * Инструкции судьи (поле instructions вопроса).
+ *
+ * Раньше здесь был один текст с припиской «Judge the WORD, not grammar or
+ * articles». Теперь режимов два: когда игрок включил требование артикля,
+ * артикль становится частью ответа, и судья обязан его проверять.
+ */
+const JUDGE_INSTRUCTIONS_BASE =
   'You are judging a spoken answer in a German vocabulary flashcard game. ' +
   'The card shows a Russian word; the user answered by SPEAKING German; ' +
   'speech recognition may be imperfect. Decide: can the spoken text be a ' +
@@ -33,7 +39,34 @@ export const JUDGE_INSTRUCTIONS =
   'words, plural/singular, other translations from the list). Tolerate ' +
   'minor speech-recognition artifacts if the intended word is clear (wrong ' +
   'umlauts, "sh" for "sch"). Reject unrelated words even if they are valid ' +
-  'German. Judge the WORD, not grammar or articles.';
+  'German. ';
+
+/** Свободный режим: артикль не нужен, слово засчитывается само по себе. */
+export const JUDGE_INSTRUCTIONS =
+  JUDGE_INSTRUCTIONS_BASE + 'Judge the WORD, not grammar or articles.';
+
+/**
+ * Строгий режим: кроме слова нужно названное определённое артикль.
+ *
+ * Судья здесь — последний рубеж: локальная проверка отправляет к нему как раз
+ * спорные случаи (слово узнано, но артикль не совпал или отсутствует), иначе
+ * ошибка распознавания «der» в «die» обернулась бы ложным «неверно».
+ */
+export const JUDGE_INSTRUCTIONS_STRICT =
+  JUDGE_INSTRUCTIONS_BASE +
+  'This card is a noun with a definite article, and the user was REQUIRED to ' +
+  'say that article together with the word. The expected article is given ' +
+  'below. The answer counts as correct only if BOTH parts are right: the ' +
+  'correct noun AND the correct article. A missing article is incorrect. A ' +
+  'wrong article is incorrect. Still judge the MEANING of the word leniently ' +
+  '(synonyms and inflected forms count), and still tolerate speech-recognition ' +
+  'artifacts in the noun itself; but the article is checked strictly. If the ' +
+  'noun is right and the article is missing or different, answer incorrect.';
+
+/** Текст инструкции под текущий режим. */
+export function judgeInstructions(requireArticle: boolean): string {
+  return requireArticle ? JUDGE_INSTRUCTIONS_STRICT : JUDGE_INSTRUCTIONS;
+}
 
 // ---- Типы Decisions API (по официальной документации OpenRouter) ----
 
@@ -76,26 +109,44 @@ export function buildDecisionsPayload(config: {
   translationsRaw: string;
   expectedGerman: string;
   spokenText: string;
+  /** Требуемый артикль; вместе с requireArticle включает строгий режим. */
+  expectedArticle?: Article;
+  requireArticle?: boolean;
 }): DecisionsRequest {
+  // Строгий режим включается только когда артикль реально есть: у глаголов
+  // и имён собственных его не требовать, даже если игрок включил тумблер.
+  const strict = Boolean(config.requireArticle && config.expectedArticle);
+
   return {
     model: JUDGE_MODEL,
     questions: {
       verdict: {
         type: 'choice',
-        instructions: JUDGE_INSTRUCTIONS,
-        criteria: {
-          correct:
-            'The spoken text is a valid German translation of the Russian ' +
-            'word (any correct meaning of the word counts).',
-          incorrect:
-            'The spoken text is unrelated to the Russian word, or means ' + 'something different.',
-        },
+        instructions: judgeInstructions(strict),
+        criteria: strict
+          ? {
+              correct:
+                'The spoken text names the correct German noun AND uses the ' +
+                'expected definite article (der, die or das).',
+              incorrect:
+                'The spoken noun is wrong, or the expected article is missing, ' +
+                'or a different article was used.',
+            }
+          : {
+              correct:
+                'The spoken text is a valid German translation of the Russian ' +
+                'word (any correct meaning of the word counts).',
+              incorrect:
+                'The spoken text is unrelated to the Russian word, or means ' +
+                'something different.',
+            },
       },
     },
     state: {
       russian: config.russian,
       translations: config.translationsRaw,
       expected_german: config.expectedGerman,
+      ...(strict ? { expected_article: config.expectedArticle } : {}),
       spoken: config.spokenText,
     },
   };
@@ -130,11 +181,16 @@ function confidenceReason(confidence?: number): string {
 
 // ── Локальная проверка ответа (без сети) ──────────────────────────────────────
 
-/** Немецкие артикли: в произнесённой фразе они не несут смысла. */
+/**
+ * Немецкие артикли и их падежные формы.
+ *
+ * Раньше это был просто STOP_WORDS: артикли выбрасывались перед сравнением,
+ * потому что режим был один. Теперь в строгом режиме артикль — часть
+ * ответа, поэтому его надо уметь и опознать, и потребовать.
+ */
+const ARTICLES = new Set(['der', 'die', 'das']);
 const STOP_WORDS = new Set([
-  'der',
-  'die',
-  'das',
+  ...ARTICLES,
   'den',
   'dem',
   'des',
@@ -144,6 +200,20 @@ const STOP_WORDS = new Set([
   'einem',
   'eines',
 ]);
+
+/** Назван ли в ответе именно этот артикль (в любом падеже формы не важны). */
+export function mentionsArticle(text: string, article: Article): boolean {
+  return normalizeGerman(text)
+    .split(' ')
+    .some((word) => ARTICLES.has(word) && word === article);
+}
+
+/** Назван ли в ответе какой-либо артикль — чтобы отличить «забыл» от «неверный». */
+export function mentionsAnyArticle(text: string): boolean {
+  return normalizeGerman(text)
+    .split(' ')
+    .some((word) => ARTICLES.has(word));
+}
 
 /** Убираем пунктуацию и лишние пробелы, приводим к нижнему регистру. */
 export function normalizeGerman(text: string): string {
@@ -252,10 +322,29 @@ function candidateForms(config: { expectedGerman: string; translationsRaw?: stri
  * большинстве карточек. `null` означает «нужно спросить судью»: так мы
  * никогда не занижаем оценку сомнительному ответу.
  */
+/**
+ * Пытается решить задачу локально, без обращения к AI-судье.
+ *
+ * Возвращает вердикт, только когда ответ однозначен (совпадение с
+ * ожидаемым словом или его формой, с прощённой опечаткой или после
+ * фонетической нормализации) — это экономит сетевой запрос на
+ * большинстве карточек. `null` означает «нужно спросить судью»: так мы
+ * никогда не занижаем оценку сомнительному ответу.
+ *
+ * Про артикли: локально мы **никогда** не ставим «неверно» из-за артикля.
+ * «der» и «die» звучат почти одинаково, и Whisper регулярно их путает —
+ * объявить карточку ошибкой по такому поводу значит научить игрока неверно.
+ * Поэтому несовпадение артикля уходит судье, у которого есть и текст
+ * ответа, и контекст карточки.
+ */
 export function judgeLocally(config: {
   expectedGerman: string;
   translationsRaw?: string;
   spokenText: string;
+  /** Требуемый артикль (только для существительных). */
+  expectedArticle?: Article;
+  /** Включён ли тумблер «произносить с артиклем». */
+  requireArticle?: boolean;
 }): JudgeVerdict | null {
   const spoken = contentWords(config.spokenText);
   if (spoken.length === 0) return null;
@@ -263,21 +352,41 @@ export function judgeLocally(config: {
   const forms = candidateForms(config);
   if (forms.length === 0) return null;
 
+  // Ищем, названо ли нужное слово, и заодно запоминаем почему совпало.
+  let reason: string | null = null;
   for (const word of spoken) {
     for (const form of forms) {
-      if (word === form) return { correct: true, reason: 'точное совпадение' };
-
+      if (word === form) {
+        reason = 'точное совпадение';
+        break;
+      }
       // Прощаем опечатки в том же слове: «Kafee» → «Kaffee».
       const tolerance = recognitionTolerance(form);
       if (editDistance(word, form, tolerance) <= tolerance) {
-        return { correct: true, reason: 'совпадение с опечаткой' };
+        reason = 'совпадение с опечаткой';
+        break;
       }
-
       // Прощаем систематические ошибки распознавания: «ш»/«сх», «с»/«з».
       if (soundsLike(word) === soundsLike(form)) {
-        return { correct: true, reason: 'совпадение после нормализации' };
+        reason = 'совпадение после нормализации';
+        break;
       }
     }
+    if (reason) break;
   }
+
+  // Слово не узнано — без сети не разберёмся (в том числе из-за артикля).
+  if (!reason) return null;
+
+  const strict = Boolean(config.requireArticle && config.expectedArticle);
+  if (!strict) return { correct: true, reason };
+
+  // Слово верное. Если нужный артикль прозвучал — всё ясно, отвечаем сразу.
+  if (mentionsArticle(config.spokenText, config.expectedArticle as Article)) {
+    return { correct: true, reason: `${reason}, артикль назван` };
+  }
+
+  // Слово верное, но артикля нет или он другой. Решать здесь опасно:
+  // это одинаково выглядит и как ошибка игрока, и как огрех распознавания.
   return null;
 }

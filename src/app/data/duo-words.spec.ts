@@ -1,9 +1,5 @@
 import { DUO_UNITS, DUO_WORDS } from './duo-words';
-import {
-  DuoWordsService,
-  altTranslations,
-  shuffled,
-} from '../services/duo-words.service';
+import { DuoWordsService, altTranslations, shuffled } from '../services/duo-words.service';
 
 describe('duo-words data (сгенерировано из duo-words.txt)', () => {
   it('содержит большой словарь', () => {
@@ -41,6 +37,62 @@ describe('duo-words data (сгенерировано из duo-words.txt)', () =>
     expect(DUO_UNITS[0].name).toBe('CoffeeShop');
     const firstUnitWords = DUO_WORDS.filter((w) => w.unit === 1);
     expect(firstUnitWords.map((w) => w.german)).toContain('Kaffee');
+  });
+});
+
+describe('duo-words: артикли (сгенерировано в duo-articles.ts)', () => {
+  const valid = new Set(['der', 'die', 'das']);
+
+  it('у каждого слова article — либо корректный артикль, либо его нет', () => {
+    for (const w of DUO_WORDS) {
+      if (w.article !== undefined) expect(valid.has(w.article)).toBe(true);
+    }
+  });
+
+  it('артикли есть у большинства существительных', () => {
+    const capitalized = DUO_WORDS.filter((w) => /^\p{Lu}/u.test(w.german));
+    const withArticle = capitalized.filter((w) => w.article);
+    // Не 100%: у части слов род определить не удалось (имена собственные,
+    // языки, месяцы, безартиклевые массовые nouns). Но меньше половины —
+    // значит, словарь развалился.
+    expect(withArticle.length / capitalized.length).toBeGreaterThan(0.5);
+  });
+
+  it('нижний регистр (глаголы, прилагательные) никогда не получает артикль', () => {
+    for (const w of DUO_WORDS) {
+      if (!/^\p{Lu}/u.test(w.german)) expect(w.article).toBeUndefined();
+    }
+  });
+
+  it('одно и то же слово всегда имеет один и тот же артикль', () => {
+    const seen = new Map<string, string | undefined>();
+    for (const w of DUO_WORDS) {
+      const key = w.german;
+      if (!seen.has(key)) seen.set(key, w.article);
+      else expect(w.article).toBe(seen.get(key));
+    }
+  });
+
+  it('известные слова имеют ожидаемый артикль', () => {
+    // Род здесь лексический: его нельзя вывести из слова, значения зафиксированы.
+    const expected: Record<string, string> = {
+      Kaffee: 'der',
+      Milch: 'die',
+      Wasser: 'das',
+      Brot: 'das',
+      Käse: 'der',
+      Kekse: 'die',
+    };
+    for (const [german, article] of Object.entries(expected)) {
+      const word = DUO_WORDS.find((w) => w.german === german);
+      expect(word?.article, german).toBe(article);
+    }
+  });
+
+  it('имена собственные остаются без артикля', () => {
+    for (const name of ['Berlin', 'Anna', 'Paris']) {
+      expect(DUO_WORDS.find((w) => w.german === name)?.article).toBeUndefined();
+    }
   });
 });
 
@@ -101,15 +153,13 @@ describe('altTranslations (дополнительные переводы кар�
   });
 
   it('отдаёт всё, кроме основного перевода', () => {
-    expect(altTranslations(word('кофе', 'кофе, кофейный напиток'))).toEqual([
-      'кофейный напиток',
-    ]);
+    expect(altTranslations(word('кофе', 'кофе, кофейный напиток'))).toEqual(['кофейный напиток']);
   });
 
   it('убирает дубликаты (без учёта регистра) и пустые значения', () => {
-    expect(
-      altTranslations(word('печенье', 'печенье, Печенье, печеньями, , печеньями '))
-    ).toEqual(['печеньями']);
+    expect(altTranslations(word('печенье', 'печенье, Печенье, печеньями, , печеньями '))).toEqual([
+      'печеньями',
+    ]);
   });
 
   it('без дополнительных переводов возвращает пустой массив', () => {
@@ -120,9 +170,7 @@ describe('altTranslations (дополнительные переводы кар�
     for (const w of DUO_WORDS) {
       const alts = altTranslations(w);
       // Основной перевод не попадает в альтернативы
-      expect(alts.some((a) => a.toLowerCase() === w.russian.toLowerCase())).toBe(
-        false
-      );
+      expect(alts.some((a) => a.toLowerCase() === w.russian.toLowerCase())).toBe(false);
       // Каждая альтернатива присутствует в исходной строке переводов
       for (const alt of alts) {
         expect(w.translationsRaw).toContain(alt);

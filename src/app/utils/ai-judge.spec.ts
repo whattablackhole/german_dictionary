@@ -1,11 +1,14 @@
 ﻿import {
   DECISIONS_URL,
+  JUDGE_INSTRUCTIONS,
   JUDGE_MODEL,
   JUDGE_MODEL_PINNED,
   buildDecisionsPayload,
   contentWords,
   editDistance,
   judgeLocally,
+  mentionsAnyArticle,
+  mentionsArticle,
   normalizeGerman,
   parseDecisionsResponse,
   recognitionTolerance,
@@ -192,6 +195,117 @@ describe('ai-judge (Decisions API)', () => {
     it('русские переводы из списка кандидатами не становятся', () => {
       // «кофе» — русское слово, оно не должно превратиться в кандидата.
       expect(judgeLocally({ expectedGerman: 'Kaffee', spokenText: 'кофе' })).toBeNull();
+    });
+
+    // ── Требование артикля (строгий режим) ───────────────────────────────────
+
+    it('артикль выключен: слово засчитывается без него, как раньше', () => {
+      expect(
+        judgeLocally({
+          expectedGerman: 'Kaffee',
+          expectedArticle: 'der',
+          requireArticle: false,
+          spokenText: 'Kaffee',
+        })?.correct,
+      ).toBe(true);
+    });
+
+    it('артикль выключен: requireArticle без expectedArticle не ломает проверку', () => {
+      // Тумблер включён, но слово — не существительное: строгий режим не включаем.
+      expect(
+        judgeLocally({ expectedGerman: 'gehen', requireArticle: true, spokenText: 'gehen' })
+          ?.correct,
+      ).toBe(true);
+    });
+
+    it('строгий режим: слово с нужным артиклем засчитывается локально', () => {
+      const verdict = judgeLocally({
+        expectedGerman: 'Kaffee',
+        expectedArticle: 'der',
+        requireArticle: true,
+        spokenText: 'der Kaffee',
+      });
+      expect(verdict?.correct).toBe(true);
+      expect(verdict?.reason).toContain('артикль назван');
+    });
+
+    it('строгий режим: без артикля уходим к судье, а не ставим «неверно»', () => {
+      // Локально решить нельзя: «der» и «die» Whisper путает регулярно,
+      // и ложное «неверно» научило бы игрока неправильно.
+      expect(
+        judgeLocally({
+          expectedGerman: 'Kaffee',
+          expectedArticle: 'der',
+          requireArticle: true,
+          spokenText: 'Kaffee',
+        }),
+      ).toBeNull();
+    });
+
+    it('строгий режим: чужой артикль тоже уходит к судье', () => {
+      expect(
+        judgeLocally({
+          expectedGerman: 'Kaffee',
+          expectedArticle: 'der',
+          requireArticle: true,
+          spokenText: 'die Kaffee',
+        }),
+      ).toBeNull();
+    });
+
+    it('строгий режим: неузнанное слово уходит к судье', () => {
+      expect(
+        judgeLocally({
+          expectedGerman: 'Kaffee',
+          expectedArticle: 'der',
+          requireArticle: true,
+          spokenText: 'der Apfel',
+        }),
+      ).toBeNull();
+    });
+
+    it('строгий режим: опечатка в слове не мешает засчитать артикль', () => {
+      expect(
+        judgeLocally({
+          expectedGerman: 'Kaffee',
+          expectedArticle: 'der',
+          requireArticle: true,
+          spokenText: 'der Kafee',
+        })?.correct,
+      ).toBe(true);
+    });
+
+    it('mentionsArticle узнаёт артикль в любом регистре и с мусором вокруг', () => {
+      expect(mentionsArticle('der Kaffee', 'der')).toBe(true);
+      expect(mentionsArticle('Der Kaffee, bitte', 'der')).toBe(true);
+      expect(mentionsArticle('die Milch', 'der')).toBe(false);
+      expect(mentionsAnyArticle('die Milch')).toBe(true);
+      expect(mentionsAnyArticle('Milch')).toBe(false);
+    });
+
+    it('buildDecisionsPayload в строгом режиме просит артикль и передаёт его', () => {
+      const payload = buildDecisionsPayload({
+        russian: 'кофе',
+        translationsRaw: 'кофе',
+        expectedGerman: 'Kaffee',
+        spokenText: 'Kaffee',
+        expectedArticle: 'der',
+        requireArticle: true,
+      });
+      expect(payload.questions['verdict'].instructions).toContain('article');
+      expect(payload.state).toMatchObject({ expected_article: 'der' });
+    });
+
+    it('buildDecisionsPayload без артикля остаётся в свободном режиме', () => {
+      const payload = buildDecisionsPayload({
+        russian: 'пожалуйста',
+        translationsRaw: 'пожалуйста',
+        expectedGerman: 'bitte',
+        spokenText: 'bitte',
+        requireArticle: true,
+      });
+      expect(payload.questions['verdict'].instructions).toBe(JUDGE_INSTRUCTIONS);
+      expect(payload.state).not.toHaveProperty('expected_article');
     });
   });
 });
