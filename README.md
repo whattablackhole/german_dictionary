@@ -67,6 +67,7 @@ An interactive German language learning application built with [Angular CLI](htt
   | `Xenova/whisper-base` (default) | browser, ONNX/WASM | ~73 MB (q8), once | Fast; handles most vocabulary words |
   | `onnx-community/whisper-large-v3-turbo-german-ONNX` | browser, ONNX/WASM | ~724 MB (q4), once | German-finetuned, ~2.6% WER: far more accurate but markedly slower |
   | `openai/whisper-large-v3-turbo` | OpenRouter STT | ~$0.0001 per word | No download, starts instantly, best accuracy |
+  | `openai/whisper-large-v3` | OpenRouter STT | ~$0.0003 per word | Full (non-turbo) model: slower and pricier, marginally more accurate |
 
   Local models are lazy-loaded from `@huggingface/transformers` and cached by the browser;
   the cloud model instead calls `POST /api/v1/audio/transcriptions` with the trimmed phrase

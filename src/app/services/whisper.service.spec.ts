@@ -19,6 +19,8 @@ import { CloudSttService } from './cloud-stt.service';
 const LARGE_MODEL = 'onnx-community/whisper-large-v3-turbo-german-ONNX';
 /** id облачной модели — обычный id OpenRouter, без локальных весов. */
 const CLOUD_MODEL = 'openai/whisper-large-v3-turbo';
+/** Полная (не turbo) облачная модель — медленнее и дороже, но точнее. */
+const CLOUD_MODEL_FULL = 'openai/whisper-large-v3';
 
 /**
  * Заглушка облачного распознавания: считаем вызовы, сеть не трогаем.
@@ -443,19 +445,23 @@ describe('WhisperService — захват микрофона и распозна
     expect((mocks.pipeline.mock.calls[1][2] as { dtype: string }).dtype).toBe('q4');
   });
 
-  it('модели в списке — с ONNX-весами локально и облачная для OpenRouter', () => {
+  it('модели в списке — с ONNX-весами локально и облачные для OpenRouter', () => {
     expect(WHISPER_MODELS.map((model) => model.id)).toEqual([
       'Xenova/whisper-base',
       // Не primeline/…: там только PyTorch safetensors, в браузере не грузится.
       'onnx-community/whisper-large-v3-turbo-german-ONNX',
       CLOUD_MODEL,
+      CLOUD_MODEL_FULL,
     ]);
     // Локальные модели обязаны объявлять квантизацию, облачным она не нужна.
     expect(WHISPER_MODELS.filter((m) => m.backend === 'local').map((m) => m.dtype)).toEqual([
       'q8',
       'q4',
     ]);
-    expect(WHISPER_MODELS.find((m) => m.backend === 'cloud')?.dtype).toBeUndefined();
+    expect(WHISPER_MODELS.filter((m) => m.backend === 'cloud').map((m) => m.dtype)).toEqual([
+      undefined,
+      undefined,
+    ]);
     // Для неизвестной модели не падаем, а берём безопасное значение.
     expect(modelDtype('что-то-неизвестное')).toBe('q8');
     expect(modelDtype('Xenova/whisper-base')).toBe('q8');

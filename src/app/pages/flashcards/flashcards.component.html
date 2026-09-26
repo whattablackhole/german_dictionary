@@ -285,7 +285,14 @@
             (ngModelChange)="typedAnswer.set($event)"
             [ngModelOptions]="{ standalone: true }"
           />
-          <button class="btn" type="submit" [disabled]="judging() || reveal()">Ответить</button>
+          <button
+            class="btn"
+            type="submit"
+            [disabled]="judging() || reveal()"
+            [title]="typedAnswer().trim() ? 'Ответить' : 'Пустой ответ будет засчитан как ошибка'"
+          >
+            Ответить
+          </button>
         </form>
       </div>
 

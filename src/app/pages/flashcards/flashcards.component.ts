@@ -40,12 +40,14 @@ interface DebugEvent {
   detail: string;
 }
 
-/** Настройки, которые запоминаем между сессиями. */
+/** Настройки, которые помним между сессиями. */
 interface StoredSettings {
   unit?: number;
   size?: number;
   autoListen?: boolean;
   model?: string;
+  /** Показывать ли все переводы на карточке (переключатель «ещё переводов»). */
+  showAlts?: boolean;
 }
 
 const SETTINGS_KEY = 'flashcards.settings';
@@ -106,7 +108,13 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
     const word = this.currentWord();
     return word ? altTranslations(word) : [];
   });
-  readonly showAlts = signal(false);
+  /**
+   * Показывать все переводы на карточке. Состояние «липкое»: если игрок открыл
+   * панель один раз, она остаётся открытой на следующих карточках и в следующих
+   * сессиях — иначе пришлось бы нажимать заново на каждом слове. Выключается
+   * тем же переключателем, и выключенное состояние тоже запоминается.
+   */
+  readonly showAlts = signal(this.stored.showAlts ?? false);
   readonly mistakes = signal<DuoWord[]>([]);
   readonly summary = signal<FlashcardsSessionResult | null>(null);
 
@@ -129,7 +137,9 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
    */
   readonly cloudAvailable = computed(() => this.ai.hasApiKey());
   readonly models = computed<WhisperModelInfo[]>(() =>
-    this.cloudAvailable() ? [...WHISPER_MODELS] : WHISPER_MODELS.filter((m) => m.backend === 'local'),
+    this.cloudAvailable()
+      ? [...WHISPER_MODELS]
+      : WHISPER_MODELS.filter((m) => m.backend === 'local'),
   );
   /** Выбрана облачная модель — предупреждаем, что запись покидает устройство. */
   readonly isCloudModel = computed(
@@ -343,7 +353,7 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
     this.micHint.set('');
     this.judging.set(false);
     this.retryable.set(false);
-    this.showAlts.set(false);
+    // showAlts НЕ сбрасываем: это липкая настройка, а не состояние карточки.
     this.voice.stop();
     // Греем озвучку следующей карточки, пока игрок читает текущую.
     this.prefetchNextPronunciation();
@@ -359,8 +369,15 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
     if (this.verdict()) this.advance();
   }
 
+  /** Переключатель «ещё переводов». Состояние липкое — запоминаем его сразу. */
   toggleAlts(): void {
     this.showAlts.update((visible) => !visible);
+    this.stored.showAlts = this.showAlts();
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.stored));
+    } catch {
+      // Приватный режим — переключатель всё равно работает в текущей сессии.
+    }
   }
 
   revealNow(): void {
@@ -632,9 +649,17 @@ export class FlashcardsComponent implements OnInit, OnDestroy {
 
   /** Ответ текстом — работает всегда, даже если микрофон недоступен. */
   submitTyped(): void {
+    if (this.judging() || this.reveal()) return;
     const text = this.typedAnswer().trim();
-    if (!text || this.judging() || this.reveal()) return;
     this.typedAnswer.set('');
+
+    // Пустой ответ — тоже ответ: считаем ошибкой и показываем слово.
+    // Судью при этом не зовём — случай тривиальный, а запрос стоит денег
+    // и задержки (см. замечание про «не раздувать API-запросы»).
+    if (!text) {
+      this.applyVerdict({ correct: false, reason: 'Ответ не указан' });
+      return;
+    }
     void this.judgeAnswer(text);
   }
 

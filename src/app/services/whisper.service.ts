@@ -107,11 +107,11 @@ export interface WhisperModelInfo {
 }
 
 /**
- * Доступные модели — ровно две, обе кэшируются браузером, поэтому платим
- * за скачивание один раз.
+ * Доступные модели. Локальные кэшируются браузером (платим за скачивание
+ * один раз), облачные считает OpenRouter (платим за каждый ответ).
  *
- * Важно: id — это всегда репозиторий **с ONNX-весами**. Оригинал
- * `primeline/whisper-large-v3-turbo-german` содержит только PyTorch
+ * Важно: id локальной модели — это всегда репозиторий **с ONNX-весами**.
+ * Оригинал `primeline/whisper-large-v3-turbo-german` содержит только PyTorch
  * `model.safetensors` (1.6 ГБ) и в браузере не запускается; ONNX-конверсия
  * той же модели лежит в `onnx-community/…` (её `base_model` — ровно
  * `primeline/whisper-large-v3-turbo-german`).
@@ -135,6 +135,12 @@ export const WHISPER_MODELS: readonly WhisperModelInfo[] = [
     id: 'openai/whisper-large-v3-turbo',
     label: 'whisper-large-v3-turbo — в облаке',
     hint: 'мгновенный старт, ~$0.0001 за слово, запись уходит на OpenRouter',
+    backend: 'cloud',
+  },
+  {
+    id: 'openai/whisper-large-v3',
+    label: 'whisper-large-v3 — в облаке, точнее',
+    hint: 'мгновенный старт, ~$0.0003 за слово, запись уходит на OpenRouter',
     backend: 'cloud',
   },
 ];
