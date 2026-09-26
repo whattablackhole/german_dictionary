@@ -9,7 +9,7 @@ import { WordService } from '../../services/word.service';
 import { AiService, AiSuggestion } from '../../services/ai.service';
 import { TranslationService } from '../../services/translation.service';
 import { SettingsService } from '../../services/settings.service';
-import { SpeechService } from '../../services/speech.service';
+import { PronunciationService } from '../../services/pronunciation.service';
 import { Word, PartOfSpeech } from '../../models/word';
 
 function normalize(text: string): string {
@@ -35,7 +35,8 @@ export class WordLookupComponent {
   private readonly aiService = inject(AiService);
   private readonly translationService = inject(TranslationService);
   readonly settingsService = inject(SettingsService);
-  private readonly speechService = inject(SpeechService);
+  // Тот же голос, что и в карточках: API с кэшем, при отказе — браузер.
+  private readonly pronunciation = inject(PronunciationService);
 
   // ── UI state ──
   readonly open = signal(false);
@@ -64,11 +65,7 @@ export class WordLookupComponent {
   readonly isSelectedPriority = computed<boolean>(() => {
     const word = this.selectedWord();
     if (!word) return false;
-    return (
-      this.wordService
-        .words()
-        .find((w) => w.id === word.id)?.priority === true
-    );
+    return this.wordService.words().find((w) => w.id === word.id)?.priority === true;
   });
 
   /** Toggles the priority flag on the currently selected vocabulary word. */
@@ -90,7 +87,7 @@ export class WordLookupComponent {
     const words = this.wordService.getWords();
     return this.sortMatches(
       words.filter((w) => this.wordMatchesQuery(w, query)),
-      query
+      query,
     ).slice(0, 8);
   });
 
@@ -122,7 +119,7 @@ export class WordLookupComponent {
     this.hintLoading.set(false);
     this.hintError.set('');
     this.addedFeedback.set(false);
-    this.speechService.stop();
+    this.pronunciation.stop();
   }
 
   /** Called when the user edits the search input — clears previous results. */
@@ -147,9 +144,7 @@ export class WordLookupComponent {
     this.onInputChange();
 
     // First, try exact match on the base form
-    const exactBase = this.wordService
-      .getWords()
-      .find((w) => normalize(w.german) === query);
+    const exactBase = this.wordService.getWords().find((w) => normalize(w.german) === query);
     if (exactBase) {
       this.selectedWord.set(exactBase);
       this.searching.set(false);
@@ -157,9 +152,7 @@ export class WordLookupComponent {
     }
 
     // Then try exact match on any inflected form
-    const exactForm = this.wordService
-      .getWords()
-      .find((w) => this.wordHasExactForm(w, query));
+    const exactForm = this.wordService.getWords().find((w) => this.wordHasExactForm(w, query));
     if (exactForm) {
       this.selectedWord.set(exactForm);
       this.searching.set(false);
@@ -169,7 +162,7 @@ export class WordLookupComponent {
     // Partial matches? (relevance-sorted so exact/prefix hits come first)
     const matches = this.sortMatches(
       this.wordService.getWords().filter((w) => this.wordMatchesQuery(w, query)),
-      query
+      query,
     );
     if (matches.length > 0) {
       // If there's only one match, show it directly
@@ -233,9 +226,7 @@ export class WordLookupComponent {
       if (this.getAllForms(w).some((f) => normalize(f).startsWith(q))) return 3;
       return 4;
     };
-    return [...words].sort(
-      (a, b) => rank(a) - rank(b) || a.german.localeCompare(b.german)
-    );
+    return [...words].sort((a, b) => rank(a) - rank(b) || a.german.localeCompare(b.german));
   }
 
   private wordHasExactForm(word: Word, query: string): boolean {
@@ -274,9 +265,7 @@ export class WordLookupComponent {
       this.aiSuggestion.set(suggestion.value);
     } else {
       this.aiError.set(
-        suggestion.reason instanceof Error
-          ? suggestion.reason.message
-          : 'AI analysis failed.'
+        suggestion.reason instanceof Error ? suggestion.reason.message : 'AI analysis failed.',
       );
     }
 
@@ -311,9 +300,7 @@ export class WordLookupComponent {
       this.aiSuggestion.set(suggestion);
       this.hintInput.set('');
     } catch (err) {
-      this.hintError.set(
-        err instanceof Error ? err.message : 'Re-analysis failed.'
-      );
+      this.hintError.set(err instanceof Error ? err.message : 'Re-analysis failed.');
     } finally {
       this.hintLoading.set(false);
     }
@@ -351,9 +338,7 @@ export class WordLookupComponent {
       simplePast: isVerb ? suggestion.simplePast : undefined,
       pastParticiple: isVerb ? suggestion.pastParticiple : undefined,
       pluralForm: isNoun ? suggestion.pluralForm : undefined,
-      pluralFormation: isNoun
-        ? (suggestion.pluralFormation as Word['pluralFormation'])
-        : undefined,
+      pluralFormation: isNoun ? (suggestion.pluralFormation as Word['pluralFormation']) : undefined,
     });
 
     this.addedFeedback.set(true);
@@ -377,11 +362,11 @@ export class WordLookupComponent {
     }
   }
 
-  // ── Audio (browser speech synthesis) ──
+  // ── Audio (PronunciationService: API-голос с кэшем → голос браузера) ──
 
   playAudio(text: string): void {
     if (!text) return;
-    this.speechService.speak(text);
+    this.pronunciation.speak(text);
   }
 
   // ── Display helpers ──

@@ -52,6 +52,41 @@ An interactive German language learning application built with [Angular CLI](htt
   - Attempt history per verb stored in localStorage (basis for future weak-point analysis)
 - **Word Practice** — Practice words with cloze-style sentence completion (optionally forced to selected words)
 - **Review** — Flashcard-style review of learned words with mastery tracking
+- **Flashcards (RU → DE voice)** — Duolingo-style mobile word review: pick the unit you are
+  currently in, and the deck is built from all vocabulary up to that unit
+  (`src/app/data/duo-words.ts`). A Russian word is shown, you say the German translation
+  into the microphone — or type it — and an AI judge (OpenRouter *decisions* model) decides
+  whether your answer is a valid translation, accepting alternative meanings and homonyms.
+  Speech is recognised by `WhisperService`: it captures the mic through an **AudioWorklet**
+  (no deprecated `ScriptProcessorNode`), cuts the utterance on silence (adaptive RMS
+  voice-activity detection) and resamples to 16 kHz. The model decides where the audio is
+  processed — locally in the browser or in the cloud:
+
+  | Model | Where | Size / cost | Notes |
+  | --- | --- | --- | --- |
+  | `Xenova/whisper-base` (default) | browser, ONNX/WASM | ~73 MB (q8), once | Fast; handles most vocabulary words |
+  | `onnx-community/whisper-large-v3-turbo-german-ONNX` | browser, ONNX/WASM | ~724 MB (q4), once | German-finetuned, ~2.6% WER: far more accurate but markedly slower |
+  | `openai/whisper-large-v3-turbo` | OpenRouter STT | ~$0.0001 per word | No download, starts instantly, best accuracy |
+
+  Local models are lazy-loaded from `@huggingface/transformers` and cached by the browser;
+  the cloud model instead calls `POST /api/v1/audio/transcriptions` with the trimmed phrase
+  as base64 WAV. Cloud options only appear when an OpenRouter key is configured, and the UI
+  says plainly that the recording leaves the device.
+
+  Note the second id: the original `primeline/whisper-large-v3-turbo-german` ships
+  only PyTorch `safetensors` and cannot run in a browser; the `onnx-community` repo is
+  the ONNX conversion of that exact checkpoint (its `base_model` points back to it).
+  Quantisation is per-model: `q8` for the 73 MB model, `q4` for the large one (its q8
+  would be a full gigabyte).
+  Only the single trimmed phrase is ever sent: silence and clicks are cut before the
+  request, one request is in flight at a time, and an in-flight request is aborted when
+  the card changes.
+
+  the microphone is released as soon as the phrase is recognised, so the answer playback
+  (free Fish Audio TTS via OpenRouter, cached, with browser-TTS fallback) is never recorded.
+  Optional **auto-microphone** mode arms the mic on every new card; `Space` reveals the
+  answer / advances, `M` toggles the mic, `D` opens the mic debug panel (level meter,
+  waveform and event log).
 - **Word Matching Game** — Match German words with their translations in a timed game
 - **Duolingo Import** — Import vocabulary from a Duolingo export file
 - **Backup & Export** — Export/import all app data (vocabulary, stories, diary, grammar notes, sentence history) as a JSON backup
@@ -171,6 +206,20 @@ under `tools/.cache`):
 node tools/download-german-verbs.mjs
 ```
 
+## Duolingo Vocabulary (Data)
+
+The **Flashcards** page builds its deck from `src/app/data/duo-words.ts` — a generated
+snapshot of the Duolingo German course vocabulary grouped into course units
+(310 units / ~6 800 words, including the native Duolingo TTS audio URLs).
+
+The source of truth is the plain-text `duo-words.txt` in the project root
+(unit headers `1 CoffeeShop Тема`, then `Kaffee - кофе` lines). After editing it, regenerate
+the TypeScript module:
+
+```bash
+npm run gen:duo-words
+```
+
 ## Project Structure
 
 ```
@@ -179,6 +228,7 @@ src/
 │   ├── models/           # Data models (Word, Story, GrammarNote, SentencePattern, PrepositionRule, CaseDeclension, Diary, Captions)
 │   ├── pages/            # Page components
 │   │   ├── review/             # Flashcard review with mastery tracking
+│   │   ├── flashcards/         # Duolingo-style RU → DE voice word review (units up to N)
 │   │   ├── game/               # Word matching game
 │   │   ├── exercise/           # Fill-in-the-blank exercises
 │   │   ├── practice-word/      # Word practice with cloze sentences
@@ -204,6 +254,9 @@ src/
 │   │   ├── captions.service.ts      # Captions data management (IndexedDB)
 │   │   ├── grammar-notes.service.ts # Grammar notes management (localStorage)
 │   │   ├── verb-import.service.ts   # Lazy on-demand import of catalog verbs
+│   │   ├── duo-words.service.ts     # Duolingo vocabulary deck (units 1..N) + shuffling
+│   │   ├── whisper.service.ts       # Local speech-to-text (AudioWorklet + Whisper/WASM)
+│   │   ├── speech-recognition.service.ts # Speech-to-text (Web Speech API, de-DE; not used by the app yet)
 │   │   ├── verb-trainer.service.ts  # Verb-trainer attempt history (localStorage)
 │   │   ├── sentence-pattern.service.ts # Pattern history & mastery tracking
 │   │   ├── settings.service.ts      # User settings (language, TTS, article display)

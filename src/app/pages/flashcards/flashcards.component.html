@@ -1,0 +1,362 @@
+<!-- Экран настройки сессии -->
+@if (phase() === 'setup') {
+  <div class="setup">
+    <h1>🎴 Карточки: RU → DE голосом</h1>
+    <p class="hint">
+      Показываем русское слово — вы произносите немецкий перевод. Речь распознаётся локально в
+      браузере (Whisper), верность перевода проверяет AI-судья.
+    </p>
+
+    <div class="setup-grid">
+      <label>
+        Текущий юнит (включительно):
+        <select [ngModel]="selectedUnit()" (ngModelChange)="setUnit(+$event)">
+          @for (u of units; track u.order) {
+            <option [value]="u.order">{{ u.label }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Слов в сессии:
+        <input
+          type="number"
+          min="5"
+          max="200"
+          [ngModel]="sessionSize()"
+          (ngModelChange)="setSessionSize(+$event)"
+        />
+      </label>
+    </div>
+
+    <p class="hint">
+      В пуле: <b>{{ poolSize() }}</b> слов из юнитов 1–{{ selectedUnit() }}
+      (уникальные, юниты до выбранного включительно).
+    </p>
+
+    @if (canUseMic()) {
+      <label class="auto-listen">
+        <input type="checkbox" [ngModel]="autoListen()" (ngModelChange)="setAutoListen($event)" />
+        Включать микрофон автоматически на каждой карточке
+      </label>
+
+      <div class="model-row">
+        <label>
+          Модель распознавания:
+          <select [ngModel]="modelId()" (ngModelChange)="setModel($event)">
+            @for (m of models(); track m.id) {
+              <option [value]="m.id">{{ m.label }} — {{ m.hint }}</option>
+            }
+          </select>
+        </label>
+
+        <div class="model-status">
+          @switch (modelStatus()) {
+            @case ('loading') {
+              <span>Загружаю модель: {{ modelPercent() }}%</span>
+              <div class="model-bar">
+                <span [style.width.%]="modelProgress() * 100"></span>
+              </div>
+            }
+            @case ('ready') {
+              <span class="ok">✓ Модель загружена, можно отвечать голосом</span>
+            }
+            @case ('error') {
+              <span class="error">Модель не загрузилась: {{ modelError() }}</span>
+            }
+            @default {
+              <button class="btn small" type="button" (click)="prepareModel()">
+                Подготовить модель
+              </button>
+              @if (!isCloudModel()) {
+                <span class="hint">Модель скачается один раз и останется в кэше.</span>
+              }
+            }
+          }
+        </div>
+      </div>
+
+      @if (isCloudModel()) {
+        <p class="hint cloud">
+          ☁ Облачное распознавание: отправляется только нарезанная фраза (тишина и щелчки отсекаются
+          заранее) — примерно $0.0001 за слово. Звук покидает устройство.
+        </p>
+      } @else if (isHeavyModel()) {
+        <p class="hint warn">
+          ⚠️ Выбрана большая модель: скачивание ~724 МБ и заметно более медленное распознавание (32
+          слоя энкодера против 6 у base). Если base хватает — оставьте её, разница видна в основном
+          на длинных составных словах.
+        </p>
+      }
+
+      <div class="model-row">
+        <label>
+          Голос ответа:
+          <select
+            [ngModel]="voiceSource()"
+            (ngModelChange)="setVoiceSource($event)"
+            [disabled]="!voiceOptionsForApi().length"
+          >
+            @for (option of voiceOptionsForApi(); track option.id) {
+              <option [value]="option.id">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
+        <div class="model-status">
+          @if (!voice.apiAvailable() && voiceSource() !== 'browser') {
+            <span class="error">
+              Нет ключа OpenRouter — доступен только голос браузера. Добавьте ключ в настройках.
+            </span>
+          } @else {
+            <span class="hint">
+              API-озвучка кэшируется, поэтому повторное слово звучит мгновенно и без сети.
+            </span>
+          }
+        </div>
+      </div>
+
+      <p class="hint keys">
+        Горячие клавиши: <kbd>Space</kbd> — показать ответ / дальше, <kbd>M</kbd> — микрофон,
+        <kbd>D</kbd> — отладка.
+      </p>
+    } @else {
+      <p class="hint error">
+        Этот браузер не умеет записывать звук — отвечайте текстом. Для голосового режима используйте
+        Chrome.
+      </p>
+    }
+
+    <button class="btn primary big" [disabled]="!poolSize()" (click)="startSession()">
+      Начать сессию
+    </button>
+  </div>
+}
+
+<!-- Игровой экран -->
+@if (phase() === 'playing') {
+  <div class="play">
+    <div class="topbar">
+      <button class="btn small" (click)="backToSetup()">✕ Выйти</button>
+      <span class="progress">{{ progress() }}</span>
+      @if (canUseMic()) {
+        <label class="auto-listen compact" title="Включать микрофон автоматически">
+          <input type="checkbox" [ngModel]="autoListen()" (ngModelChange)="setAutoListen($event)" />
+          🎤 авто
+        </label>
+      }
+      <button class="btn small" (click)="skipCard()">Пропустить →</button>
+      <button class="btn small" [class.active]="debugEnabled()" (click)="toggleDebug()">
+        {{ debugEnabled() ? '✕ Скрыть отладку' : '🐛 Отладка' }}
+      </button>
+    </div>
+
+    @if (currentWord(); as word) {
+      <div
+        class="card"
+        [class.correct]="feedbackClass() === 'correct'"
+        [class.wrong]="feedbackClass() === 'wrong'"
+        [class.revealed]="reveal()"
+        (click)="onCardClick()"
+      >
+        <div class="card-face front">
+          <div class="russian">{{ word.russian }}</div>
+          @if (alts().length) {
+            <button
+              class="alt-hint"
+              type="button"
+              [attr.aria-expanded]="showAlts()"
+              title="Показать остальные переводы"
+              (click)="$event.stopPropagation(); toggleAlts()"
+            >
+              ещё переводов: {{ alts().length }}
+              <span class="chev">{{ showAlts() ? '▲' : '▼' }}</span>
+            </button>
+            @if (showAlts()) {
+              <div class="alts">
+                @for (alt of alts(); track alt) {
+                  <span class="alt">{{ alt }}</span>
+                }
+              </div>
+            }
+          }
+        </div>
+
+        @if (reveal()) {
+          <div class="card-face back">
+            <div class="german">{{ word.german }}</div>
+            <div class="translation">{{ word.translationsRaw }}</div>
+            <button
+              class="btn small repeat"
+              type="button"
+              title="Озвучить ещё раз"
+              (click)="$event.stopPropagation(); repeatWord()"
+            >
+              🔊 Ещё раз
+            </button>
+          </div>
+        }
+      </div>
+
+      <div class="answer-zone">
+        @if (canUseMic()) {
+          <button
+            class="mic"
+            [class.listening]="micState() === 'listening'"
+            [class.busy]="micState() === 'transcribing' || micState() === 'arming'"
+            [disabled]="judging() || reveal()"
+            [attr.aria-label]="micState() === 'idle' ? 'Сказать ответ' : 'Остановить микрофон'"
+            (click)="toggleMic()"
+          >
+            🎤
+          </button>
+
+          <div class="mic-status">
+            @switch (micState()) {
+              @case ('arming') {
+                <span>Готовлю распознавание… {{ modelPercent() }}%</span>
+              }
+              @case ('listening') {
+                <span class="live">● Слушаю — говорите</span>
+              }
+              @case ('transcribing') {
+                <span class="working">Распознаю речь…</span>
+              }
+              @default {
+                <span>
+                  {{
+                    autoListen()
+                      ? 'Микрофон включится на новой карточке'
+                      : 'Нажмите 🎤 и скажите перевод'
+                  }}
+                </span>
+              }
+            }
+          </div>
+
+          <div class="level-meter" [class.active]="micState() === 'listening'">
+            <span [style.width.%]="level() * 100" [class.speech]="speaking()"></span>
+          </div>
+        }
+
+        @if (transcript()) {
+          <div class="transcript">{{ transcript() }}</div>
+        }
+
+        @if (micHint()) {
+          <div class="mic-hint">{{ micHint() }}</div>
+        }
+
+        @if (errorMessage()) {
+          <div class="error">
+            {{ errorMessage() }}
+            @if (retryable()) {
+              <button class="btn small" type="button" (click)="retryJudge()">
+                Повторить проверку
+              </button>
+            }
+          </div>
+        }
+
+        @if (judging()) {
+          <div class="judging">Судья думает…</div>
+        }
+
+        @if (verdict(); as v) {
+          <div class="verdict" [class.ok]="v.correct" [class.bad]="!v.correct">
+            {{ v.correct ? '✓ Верно' : '✗ Неверно' }}
+            @if (v.reason) {
+              <span class="reason">— {{ v.reason }}</span>
+            }
+          </div>
+          <button class="btn primary next" (click)="advance()">
+            Далее →
+            @if (nextCountdown() > 0) {
+              <span class="countdown">{{ nextCountdown() }}</span>
+            }
+          </button>
+        }
+
+        <form (submit)="submitTyped(); $event.preventDefault()">
+          <input
+            type="text"
+            placeholder="…или введите перевод текстом"
+            [ngModel]="typedAnswer()"
+            (ngModelChange)="typedAnswer.set($event)"
+            [ngModelOptions]="{ standalone: true }"
+          />
+          <button class="btn" type="submit" [disabled]="judging() || reveal()">Ответить</button>
+        </form>
+      </div>
+
+      @if (debugEnabled()) {
+        <div class="debug-panel">
+          <div class="debug-header">
+            <b>🐛 Микрофон</b>
+            <span class="debug-level">
+              {{ (level() * 100).toFixed(0) }}% · {{ speaking() ? 'речь' : 'тишина' }} ·
+              {{ micState() }}
+            </span>
+          </div>
+
+          <div class="debug-transcript">
+            @if (rawTranscript()) {
+              <span class="dbg-transcript">{{ rawTranscript() }}</span>
+            } @else if (micState() === 'listening') {
+              <span class="dbg-transcript-pulse">● Слушаю…</span>
+            } @else {
+              <span class="dbg-transcript-idle">—</span>
+            }
+          </div>
+
+          <div class="debug-canvas-wrap">
+            <canvas #debugCanvas width="320" height="120" class="debug-canvas"></canvas>
+          </div>
+
+          <div class="debug-log">
+            <div class="dbg-title">последние события (сверху — свежие)</div>
+            @for (e of debugEventsDesc(); track $index) {
+              <div class="dbg-row">
+                <span class="dbg-time">{{ e.time }}</span>
+                <span class="dbg-event">{{ e.event }}</span>
+                <span class="dbg-detail">{{ e.detail }}</span>
+              </div>
+            } @empty {
+              <div class="dbg-empty">событий пока нет</div>
+            }
+          </div>
+        </div>
+      }
+    }
+  </div>
+}
+
+<!-- Итоги сессии -->
+@if (phase() === 'summary') {
+  <div class="summary">
+    <h2>Сессия завершена</h2>
+    @if (summary(); as s) {
+      <div class="score">
+        <span class="correct-num">{{ s.correct }}</span> / {{ s.total }}
+        @if (s.wrong > 0) {
+          <span class="wrong-num">({{ s.wrong }} ошибок)</span>
+        }
+      </div>
+
+      @if (s.mistakes.length) {
+        <h3>Ошибки:</h3>
+        <ul class="mistakes-list">
+          @for (w of s.mistakes; track w.german) {
+            <li>
+              <b>{{ w.german }}</b> — {{ w.translationsRaw }}
+            </li>
+          }
+        </ul>
+        <button class="btn primary" (click)="retryMistakes()">
+          Повторить ошибки ({{ s.mistakes.length }})
+        </button>
+      }
+    }
+    <button class="btn" (click)="backToSetup()">Новая сессия</button>
+  </div>
+}

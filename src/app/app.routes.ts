@@ -136,4 +136,11 @@ export const routes: Routes = [
         (m) => m.ReviewSessionComponent
       ),
   },
+  {
+    path: 'flashcards',
+    loadComponent: () =>
+      import('./pages/flashcards/flashcards.component').then(
+        (m) => m.FlashcardsComponent
+      ),
+  },
 ];

@@ -51,6 +51,7 @@ export class App {
   readonly navItems: NavItem[] = [
     { path: '/review', label: 'Review', icon: 'repeat' },
     { path: '/review-session', label: 'SRS Review', icon: 'psychology' },
+    { path: '/flashcards', label: 'Карточки RU→DE', icon: 'style' },
     { path: '/game', label: 'Gender Game', icon: 'sports_esports' },
     { path: '/exercise', label: 'Exercise', icon: 'edit_note' },
     { path: '/practice-word', label: 'Word Practice', icon: 'spellcheck' },

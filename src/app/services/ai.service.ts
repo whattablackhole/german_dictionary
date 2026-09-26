@@ -9,6 +9,16 @@ import {
 import { SentenceFeedback } from '../models/sentence-pattern';
 import { DiaryFeedback } from '../models/diary';
 import { StoryFormat, StorySpeaker } from '../models/story';
+import { JudgeVerdict } from '../models/flashcards';
+import {
+  DECISIONS_URL,
+  JUDGE_MODEL,
+  JUDGE_MODEL_PINNED,
+  buildDecisionsPayload,
+  parseDecisionsResponse,
+  judgeLocally,
+  DecisionsResponse,
+} from '../utils/ai-judge';
 import { SettingsService } from './settings.service';
 import {
   buildBlankSegments,
@@ -2829,6 +2839,64 @@ Example format:
    * Verify a user's answer to a declension exercise using AI.
    * Returns detailed feedback including whether the answer is correct and an explanation.
    */
+  /**
+   * AI-судья режима карточек: может ли сказанное пользователем быть переводом
+   * на немецкий заданного русского слова. Jev (~typesafe/jev-latest) —
+   * decisions-модель: работает ТОЛЬКО через POST /api/alpha/decisions
+   * (chat/completions возвращает 400), поэтому запрос идёт в decisions
+   * endpoint с вопросом-классификацией. Засчитываются любые валидные
+   * значения слова (омонимы, многозначность, синонимы).
+   *
+   * Сначала пробуем решить локально (judgeLocally): точный перевод или явно
+   * чужое слово не требуют сети — это экономит 1–2 с на каждой карточке.
+   * В сеть идём только спорные случаи.
+   */
+  async judgeSpokenTranslation(config: {
+    russian: string;
+    /** Все переводы (через запятую) — контекст допустимых значений. */
+    translationsRaw: string;
+    expectedGerman: string;
+    spokenText: string;
+  }): Promise<JudgeVerdict> {
+    const local = judgeLocally(config);
+    if (local) return local;
+
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('No API key set. Add your OpenRouter API key first.');
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    };
+
+    let payload = buildDecisionsPayload(config);
+    let response = await fetch(DECISIONS_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    // Алиас "~typesafe/jev-latest" может не резолвиться на decisions-endpoint:
+    // повторяем на закреплённую версию модели.
+    if (!response.ok && response.status === 400 && payload.model === JUDGE_MODEL) {
+      payload = { ...payload, model: JUDGE_MODEL_PINNED };
+      response = await fetch(DECISIONS_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+    }
+
+    if (!response.ok) {
+      this.handleError(response);
+    }
+
+    const data = (await response.json()) as DecisionsResponse;
+    return parseDecisionsResponse(data);
+  }
+
   async verifyDeclensionAnswer(
     userAnswer: string,
     correctAnswer: string,

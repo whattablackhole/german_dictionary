@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "gen:duo-words": "node tools/generate-duo-words.mjs"
   },
   "private": true,
   "packageManager": "npm@11.17.0",
@@ -19,6 +20,8 @@
     "@angular/material": "^22.1.1",
     "@angular/platform-browser": "^22.1.0",
     "@angular/router": "^22.1.0",
+    "@huggingface/transformers": "^4.3.0",
+    "browser-whisper": "^1.1.0",
     "marked": "^18.0.9",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"

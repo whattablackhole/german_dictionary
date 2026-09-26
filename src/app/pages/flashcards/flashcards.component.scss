@@ -1,0 +1,774 @@
+// Карточки: RU → DE голосом
+
+:host {
+  display: block;
+  // app.scss задаёт дочерним элементам .app-main max-width: 1400px,
+  // поэтому перебиваем его точечно (как делают другие страницы).
+  max-width: 660px !important;
+  margin: 0 auto;
+  padding: 20px;
+  border-radius: 16px;
+  // Панель-подложка: в тёмной теме страница лежит поверх фонового изображения,
+  // поэтому контенту нужен собственный непрозрачный фон (как .content-panel).
+  background: var(--mat-sys-surface);
+  backdrop-filter: blur(8px);
+  color: var(--mat-sys-on-surface);
+
+  // Палитра карточек: светлая тема (для тёмной переопределяется ниже)
+  --fc-green: #58cc02; // duolingo green
+  --fc-green-hover: #61dd00;
+  --fc-green-text: #46a302;
+  --fc-on-green: #ffffff;
+  --fc-blue: #1cb0f6;
+  --fc-red: #ea2b2b;
+  --fc-correct-bg: #d7ffb8;
+  --fc-correct-text: #3a7d00;
+  --fc-wrong-bg: #ffdfe0;
+  --fc-wrong-text: #c81e1e;
+}
+
+// ── Тёмная тема: приглушённые подложки и более светлый акцент ──
+:host-context(.dark-theme) {
+  background: rgba(26, 26, 26, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--mat-sys-outline-variant);
+
+  --fc-green: #7ede2e;
+  --fc-green-hover: #8fea44;
+  --fc-green-text: #9ee85f;
+  --fc-on-green: #14260a;
+  --fc-red: #ff6b6b;
+  --fc-correct-bg: rgba(88, 204, 2, 0.16);
+  --fc-correct-text: #bfe98f;
+  --fc-wrong-bg: rgba(234, 43, 43, 0.18);
+  --fc-wrong-text: #ffb1b1;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--mat-sys-on-surface);
+}
+
+.btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
+  cursor: pointer;
+  font-size: 15px;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-highest);
+  }
+
+  &.primary {
+    background: var(--fc-green);
+    border-color: var(--fc-green);
+    color: var(--fc-on-green);
+
+    &:hover {
+      background: var(--fc-green-hover);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+  }
+
+  &.big {
+    font-size: 18px;
+    padding: 14px 28px;
+  }
+
+  &.small {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  &.active {
+    border-color: var(--fc-blue);
+    color: var(--fc-blue);
+  }
+}
+
+// Тумблер «микрофон всегда включён» (экран настройки и игровой топбар)
+.auto-listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container-low);
+  color: var(--mat-sys-on-surface);
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+
+  input {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    accent-color: var(--fc-green);
+    cursor: pointer;
+  }
+
+  &.compact {
+    margin-top: 0;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+}
+
+.setup {
+  h1 {
+    font-size: 24px;
+    margin: 0 0 8px;
+  }
+
+  // Кнопка старта — отдельной строкой, с отступом от подсказки/тумблера
+  // (тумблер — inline-flex, поэтому без display: block кнопка встала бы с ним в ряд).
+  .btn.primary.big {
+    display: block;
+    margin-top: 20px;
+  }
+
+  .hint {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  // Предупреждение о тяжёлой модели распознавания: размер загрузки и скорость.
+  .hint.warn {
+    display: block;
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--mat-sys-tertiary) 45%, transparent);
+    background: color-mix(in srgb, var(--mat-sys-tertiary-container) 35%, transparent);
+    color: var(--mat-sys-on-surface);
+    line-height: 1.45;
+  }
+
+  // Заметка об облачном распознавании: то же самое, но про приватность и цену.
+  .hint.cloud {
+    display: block;
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 45%, transparent);
+    background: color-mix(in srgb, var(--mat-sys-primary-container) 30%, transparent);
+    color: var(--mat-sys-on-surface);
+    line-height: 1.45;
+  }
+
+  .error {
+    color: var(--mat-sys-error);
+  }
+
+  .setup-grid {
+    display: flex;
+    gap: 16px;
+    margin: 16px 0;
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 8px;
+      background: var(--mat-sys-surface-container-low);
+      color: var(--mat-sys-on-surface);
+      font: inherit;
+      box-sizing: border-box;
+    }
+  }
+
+  // Модель распознавания и её статус
+  .model-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 8px;
+      background: var(--mat-sys-surface-container-low);
+      color: var(--mat-sys-on-surface);
+      font: inherit;
+      box-sizing: border-box;
+    }
+  }
+
+  .model-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 14px;
+
+    .ok {
+      color: var(--fc-green-text);
+    }
+
+    .error {
+      color: var(--mat-sys-error);
+    }
+  }
+
+  .model-bar {
+    flex: 1 1 140px;
+    height: 8px;
+    min-width: 120px;
+    border-radius: 999px;
+    background: var(--mat-sys-surface-container-highest);
+    overflow: hidden;
+
+    span {
+      display: block;
+      height: 100%;
+      background: var(--fc-blue);
+      transition: width 0.2s linear;
+    }
+  }
+
+  .keys {
+    font-size: 13px;
+
+    kbd {
+      padding: 1px 6px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 6px;
+      background: var(--mat-sys-surface-container-high);
+      font-family: monospace;
+      font-size: 12px;
+    }
+  }
+}
+
+.play {
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 16px;
+
+    .progress {
+      font-weight: 600;
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  .card {
+    min-height: 220px;
+    border: 2px solid var(--mat-sys-outline-variant);
+    border-radius: 16px;
+    background: var(--mat-sys-surface-container-low);
+    color: var(--mat-sys-on-surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px;
+    cursor: pointer;
+    transition:
+      border-color 0.25s,
+      transform 0.25s,
+      background 0.25s;
+
+    .card-face {
+      text-align: center;
+    }
+
+    .russian {
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--mat-sys-on-surface);
+    }
+
+    // Ссылка-подсказка «ещё переводов» (клик раскрывает список синонимов)
+    .alt-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      padding: 4px 10px;
+      border: 1px dashed var(--mat-sys-outline-variant);
+      border-radius: 999px;
+      background: none;
+      color: var(--mat-sys-on-surface-variant);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+
+      &:hover {
+        border-color: var(--mat-sys-outline);
+        color: var(--mat-sys-on-surface);
+      }
+
+      .chev {
+        font-size: 10px;
+      }
+    }
+
+    // Раскрытые дополнительные переводы
+    .alts {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 8px;
+      max-width: 420px;
+
+      .alt {
+        padding: 2px 10px;
+        border-radius: 999px;
+        background: var(--mat-sys-surface-container-high);
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 14px;
+      }
+    }
+
+    .german {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--fc-green-text);
+    }
+
+    .translation {
+      color: var(--mat-sys-on-surface-variant);
+      margin-top: 6px;
+    }
+
+    // Кнопка «озвучить ещё раз» на обратной стороне карточки
+    .repeat {
+      margin-top: 12px;
+    }
+
+    &.correct {
+      border-color: var(--fc-green);
+      background: var(--fc-correct-bg);
+      animation: pop 0.35s ease;
+
+      .russian,
+      .german,
+      .translation,
+      .alt-hint,
+      .alts .alt {
+        color: var(--fc-correct-text);
+      }
+
+      .alt-hint,
+      .alts .alt {
+        border: 1px solid var(--fc-correct-text);
+        background: none;
+      }
+    }
+
+    &.wrong {
+      border-color: var(--fc-red);
+      background: var(--fc-wrong-bg);
+      animation: shake 0.4s ease;
+
+      .russian,
+      .german,
+      .translation,
+      .alt-hint,
+      .alts .alt {
+        color: var(--fc-wrong-text);
+      }
+
+      .alt-hint,
+      .alts .alt {
+        border: 1px solid var(--fc-wrong-text);
+        background: none;
+      }
+    }
+  }
+
+  .answer-zone {
+    margin-top: 20px;
+    text-align: center;
+
+    .mic {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 2px solid var(--fc-blue);
+      background: var(--mat-sys-surface-container-high);
+      color: var(--mat-sys-on-surface);
+      font-size: 30px;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover {
+        background: var(--mat-sys-surface-container-highest);
+      }
+
+      &.busy {
+        border-color: var(--mat-sys-outline);
+        color: var(--mat-sys-on-surface-variant);
+      }
+
+      &.listening {
+        background: var(--fc-blue);
+        animation: mic-pulse 1.2s infinite;
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+    }
+
+    // Текстовая строка состояния микрофона
+    .mic-status {
+      margin-top: 8px;
+      min-height: 20px;
+      color: var(--mat-sys-on-surface-variant);
+      font-size: 14px;
+
+      .live {
+        color: var(--fc-blue);
+        font-weight: 600;
+        animation: mic-pulse 1.2s infinite;
+      }
+
+      .working {
+        color: var(--fc-green-text);
+        font-weight: 600;
+      }
+    }
+
+    // Полоска уровня сигнала: видно, что микрофон действительно слышит
+    .level-meter {
+      width: 180px;
+      height: 6px;
+      margin: 8px auto 0;
+      border-radius: 999px;
+      background: var(--mat-sys-surface-container-highest);
+      overflow: hidden;
+      opacity: 0.45;
+      transition: opacity 0.2s;
+
+      &.active {
+        opacity: 1;
+      }
+
+      span {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 999px;
+        background: var(--fc-blue);
+        transition: width 0.08s linear;
+
+        &.speech {
+          background: var(--fc-green);
+        }
+      }
+    }
+
+    .mic-hint {
+      margin-top: 10px;
+      color: var(--mat-sys-on-surface-variant);
+      font-size: 14px;
+    }
+
+    // Индикатор всегда-включённого микрофона
+    .auto-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 999px;
+      background: var(--mat-sys-surface-container-low);
+      color: var(--mat-sys-on-surface-variant);
+      font-size: 14px;
+
+      .dot {
+        color: var(--mat-sys-outline);
+      }
+
+      &.active {
+        border-color: var(--fc-green);
+        color: var(--fc-green-text);
+        background: var(--fc-correct-bg);
+
+        .dot {
+          color: var(--fc-green);
+          animation: mic-pulse 1.2s infinite;
+        }
+      }
+    }
+
+    .transcript {
+      margin-top: 10px;
+      color: var(--mat-sys-on-surface);
+      min-height: 22px;
+
+      .pulse {
+        color: var(--fc-red);
+        animation: mic-pulse 1.2s infinite;
+      }
+    }
+
+    .error {
+      margin-top: 10px;
+      color: var(--mat-sys-error);
+      font-size: 14px;
+
+      .btn {
+        margin-left: 8px;
+      }
+    }
+
+    .judging {
+      margin-top: 8px;
+      color: var(--fc-blue);
+      font-style: italic;
+    }
+
+    .verdict {
+      margin-top: 10px;
+      font-weight: 700;
+
+      &.ok {
+        color: var(--fc-green-text);
+      }
+
+      &.bad {
+        color: var(--fc-red);
+      }
+
+      .reason {
+        font-weight: 400;
+        color: var(--mat-sys-on-surface-variant);
+      }
+    }
+
+    // Кнопка «Далее» с обратным отсчётом автоперехода
+    .btn.next {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+
+      .countdown {
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.18);
+        font-size: 13px;
+      }
+    }
+
+    form {
+      margin-top: 14px;
+      display: flex;
+      gap: 8px;
+
+      input {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid var(--mat-sys-outline-variant);
+        border-radius: 8px;
+        background: var(--mat-sys-surface-container-low);
+        color: var(--mat-sys-on-surface);
+        font: inherit;
+      }
+    }
+  }
+}
+
+.summary {
+  text-align: center;
+
+  .score {
+    font-size: 32px;
+    margin: 16px 0;
+
+    .correct-num {
+      color: var(--fc-green-text);
+      font-weight: 700;
+    }
+
+    .wrong-num {
+      color: var(--fc-red);
+      font-size: 18px;
+    }
+  }
+
+  .mistakes-list {
+    text-align: left;
+    max-width: 480px;
+    margin: 0 auto 16px;
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  75% {
+    transform: translateX(8px);
+  }
+}
+
+@keyframes mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(28, 176, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(28, 176, 246, 0);
+  }
+}
+
+.debug-panel {
+  position: fixed;
+  left: 10px;
+  top: 60px;
+  width: 340px;
+  max-height: calc(100vh - 160px);
+  background: rgba(20, 20, 20, 0.95);
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 10px;
+  z-index: 1000;
+  color: #ccc;
+  font-size: 12px;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+
+  .debug-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #444;
+    color: #fff;
+    font-size: 13px;
+
+    .debug-level {
+      color: #58cc02;
+      font-family: monospace;
+      font-size: 11px;
+    }
+  }
+
+  .debug-transcript {
+    min-height: 20px;
+    margin-bottom: 6px;
+    padding: 4px 6px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: #0a0a0a;
+    font-family: monospace;
+    font-size: 12px;
+    color: #58cc02;
+    word-break: break-word;
+
+    .dbg-transcript-pulse {
+      color: #1cb0f6;
+      animation: mic-pulse 1.2s infinite;
+    }
+
+    .dbg-transcript-idle {
+      color: #555;
+    }
+  }
+
+  .debug-canvas-wrap {
+    border: 1px solid #444;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 6px;
+    background: #0a0a0a;
+  }
+
+  .debug-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .debug-log {
+    max-height: 160px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 10px;
+    line-height: 1.4;
+    color: #aaa;
+
+    .dbg-title {
+      padding-bottom: 4px;
+      color: #666;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .dbg-empty {
+      color: #555;
+    }
+
+    .dbg-row {
+      padding: 1px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+
+      .dbg-time {
+        color: #666;
+      }
+      .dbg-event {
+        color: #1cb0f6;
+      }
+      .dbg-detail {
+        color: #58cc02;
+        word-break: break-all;
+      }
+    }
+  }
+}
